@@ -47,6 +47,7 @@ frappe.provide("whatsapp_next.hub");
 					</section>
 					<section class="wa-hub__detail" aria-live="polite"></section>
 				</div>`);
+			this.$layout = this.$body.find(".wa-hub__layout");
 			this.$rows = this.$body.find(".wa-hub__rows");
 			this.$detail = this.$body.find(".wa-hub__detail");
 			this.$body.find(".wa-hub__search").on(
@@ -56,7 +57,15 @@ frappe.provide("whatsapp_next.hub");
 					this.load();
 				}, 300)
 			);
-			this.$rows.on("click", "[data-entry]", (e) => this.show($(e.currentTarget).attr("data-entry")));
+			// on a narrow window the list and the details take turns: a pick opens the details, Back returns
+			this.$rows.on("click", "[data-entry]", (e) => {
+				this.$layout.addClass("is-detail");
+				this.show($(e.currentTarget).attr("data-entry"));
+			});
+			this.$detail.on("click", ".wa-hub__back", () => {
+				this.$layout.removeClass("is-detail");
+				this.$rows.find(".is-on").trigger("focus");
+			});
 			this.dialog.show();
 			this.load();
 		}
@@ -129,6 +138,7 @@ frappe.provide("whatsapp_next.hub");
 				.map(([k, v]) => `<div${Array.isArray(v) ? ' class="is-wide"' : ""}><dt>${esc((e.labels || {})[k] || k)}</dt><dd dir="auto">${value_html(v)}</dd></div>`)
 				.join("");
 			this.$detail.html(`
+				<button type="button" class="btn btn-xs btn-default wa-hub__back">${esc(__("Back"))}</button>
 				<header class="wa-hub__head">
 					<div>
 						<h3>${esc(e.hub_name)}</h3>

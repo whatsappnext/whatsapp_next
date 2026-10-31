@@ -1059,7 +1059,23 @@
 		overflow: auto;
 		white-space: pre;
 	}
-	@media (max-width: 719px) { .wa-hub__layout { grid-template-columns: minmax(0, 1fr); } }
+	.wa-hub__back { display: none; margin-block-end: 10px; }
+}
+
+// a narrow window (a phone, a small screen): the list and the details take turns, each full width
+.wa-hub { container-type: inline-size; }
+@container (max-width: 680px) {
+	.wa-hub {
+		.wa-hub__layout { grid-template-columns: minmax(0, 1fr); min-block-size: 0; }
+		.wa-hub__layout:not(.is-detail) .wa-hub__detail,
+		.wa-hub__layout.is-detail .wa-hub__list { display: none; }
+		.wa-hub__back { display: inline-flex; }
+		.wa-hub__rows, .wa-hub__detail { max-block-size: none; }
+		.wa-hub__detail { padding: 10px 12px; }
+		.wa-hub__head { flex-wrap: wrap; }
+		.wa-hub__facts, .wa-hub__fields { grid-template-columns: minmax(0, 1fr); }
+		.wa-hub__bubble { max-inline-size: 100%; }
+	}
 }
 
 // the hub's preview: the message as the recipient sees it on WhatsApp (owner, 2026-10-31)
