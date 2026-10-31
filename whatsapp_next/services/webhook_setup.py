@@ -28,6 +28,8 @@ DEFAULT_EVENTS = (
 	"message.held",
 	"message.received",
 	"message.reaction",
+	"message.edited",
+	"message.deleted",
 	"connection.connected",
 	"connection.disconnected",
 	"connection.logged_out",
@@ -208,6 +210,10 @@ def sync_status() -> EndpointSummary | None:
 	try:
 		for ep in registry.get_provider().list_webhook_endpoints():
 			if ep.endpoint_id == s.webhook_endpoint:
+				if ep.status == "Active" and not any(not e.startswith("connection.") for e in ep.events):
+					# only the device's connection events: the platform's seed, never a set-up this
+					# site chose — no message, receipt or reply would ever arrive (2026-11-01)
+					return ensure_endpoint(events=list(DEFAULT_EVENTS))
 				_mirror(ep)
 				if ep.status == "Locked" and s.webhook_status != "Locked":
 					frappe.log_error(
@@ -248,11 +254,14 @@ def available_events() -> list[dict[str, Any]]:
 	out = []
 	for row in registry.get_provider().list_available_webhook_events():
 		name = row.get("event_name")
+		# an event this app does nothing with (polls, for now) is shown, not offered: ticking it
+		# would only fill the log with events marked Ignored
+		handled = name in DEFAULT_EVENTS
 		out.append(
 			{
 				"event_name": name,
-				"enabled": bool(row.get("enabled", True)),
-				"disabled_reason": row.get("disabled_reason"),
+				"enabled": bool(row.get("enabled", True)) and handled,
+				"disabled_reason": row.get("disabled_reason") or ("" if handled else _("This app does not use this event yet.")),
 				"subscribed": name in subscribed,
 			}
 		)

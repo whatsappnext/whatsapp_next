@@ -149,6 +149,17 @@ class TestPlatformOps(IntegrationTestCase):
 			self.assertEqual(webhook_setup.set_status("Active").status, "Active")
 			self.assertTrue(webhook_setup.rotate_secret())
 			self.assertEqual(provider.secret_calls, 2)
+			# an endpoint the platform seeded with the connection events only is given this site's
+			# events on the next sync: otherwise no message or receipt would ever arrive
+			provider.store[summary.endpoint_id] = WebhookEndpointState(
+				endpoint_id=summary.endpoint_id,
+				url=summary.url,
+				status="Active",
+				events=("connection.connected", "connection.disconnected", "connection.logged_out"),
+				max_retries=3,
+			)
+			self.assertEqual(set(webhook_setup.sync_status().events), set(webhook_setup.DEFAULT_EVENTS))
+			self.assertEqual(set(provider.store[summary.endpoint_id].events), set(webhook_setup.DEFAULT_EVENTS))
 			# endpoint vanished on the platform → Revoked
 			provider.store.clear()
 			self.assertEqual(webhook_setup.sync_status().status, "Revoked")

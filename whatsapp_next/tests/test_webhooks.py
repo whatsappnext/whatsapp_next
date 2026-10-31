@@ -303,6 +303,20 @@ class TestWebhooks(IntegrationTestCase):
 			self.assertFalse(self._event(out.event).inbound_message)
 		self.assertFalse(frappe.db.exists("WhatsApp Inbound Message", {"provider_message_id": "status-story-1"}))
 
+	def test_a_group_event_names_the_group_not_the_device(self):
+		"""The engine's `jid` on a group event is the device's own number; the group is
+		`group_id` / `group_jid`, and its new name is taken from it (2026-11-01)."""
+		from whatsapp_next.providers.schemas import WebhookEvent
+		from whatsapp_next.services import numbers_materializer
+
+		raw = {"jid": "966500000001@s.whatsapp.net", "group_jid": "120363000000000009@g.us", "group_name": "Sales team"}
+		with patch.object(numbers_materializer, "refresh_group_name") as refresh:
+			status, _ = handlers.handle_event(
+				WebhookEvent(event_id="grp-1", event_name="group.updated", raw=raw), webhook_event_name="x", device=None
+			)
+		self.assertEqual(status, "Processed")
+		refresh.assert_called_once_with("120363000000000009@g.us", "Sales team")
+
 	def test_status_events_apply_to_outbound(self):
 		out_name = dispatch.create_outbound(
 			OutboundSpec(device=self.device, phone="+966500000002", body="webhook-test hi", source_type="API")

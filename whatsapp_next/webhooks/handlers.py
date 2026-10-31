@@ -110,10 +110,13 @@ def handle_event(
 	if name in ("group.updated", "group.participants.updated"):
 		from whatsapp_next.services import numbers_materializer
 
+		# the group: `group_id` (the platform's), `group_jid` (the engine's); `jid` last, as the
+		# engine's `jid` is the device's own number
 		jid = (
 			(event.raw or {}).get("group_id")
-			or (event.raw or {}).get("jid")
+			or (event.raw or {}).get("group_jid")
 			or (event.raw or {}).get("chat_jid")
+			or (event.raw or {}).get("jid")
 		)
 		group_name = (
 			(event.raw or {}).get("subject")

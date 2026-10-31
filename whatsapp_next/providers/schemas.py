@@ -33,6 +33,8 @@ CANONICAL_EVENTS: tuple[str, ...] = (
 	"message.failed",
 	"message.held",
 	"message.reaction",
+	"message.edited",
+	"message.deleted",
 	"connection.connected",
 	"connection.disconnected",
 	"connection.logged_out",
