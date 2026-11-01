@@ -8,7 +8,7 @@ requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
-    # "frappe~=16.0.0" # Installed and managed by bench.
+    # "frappe~=15.0.0" # Installed and managed by bench.
     # phonenumbers, requests: provided by frappe.
     "openpyxl>=3.1",   # ContactPicker source 4 (Excel)
     "vobject>=0.9.7",  # ContactPicker source 5 (vCard)
@@ -78,4 +78,4 @@ indent-style = "tab"
 docstring-code-format = true
 
 [tool.bench.frappe-dependencies]
-frappe = ">=16.0.0,<17.0.0"
+frappe = ">=15.0.0,<16.0.0"
