@@ -2207,8 +2207,15 @@ frappe.provide("whatsapp_next.onboarding");
 	// measured instead (`--wa-onb-h`, read in `_onboarding.scss` and `_shell.scss`), kept on resize,
 	// and every show starts at the top.
 	function fit_to_scroller(wrapper) {
-		const scroller = $(wrapper).closest(".main-section")[0] || document.scrollingElement;
-		const set = () => wrapper.style.setProperty("--wa-onb-h", `${scroller.clientHeight}px`);
+		const section = $(wrapper).closest(".main-section")[0];
+		// Frappe 15's section does not scroll: it grows with this page, and measuring it made the
+		// page taller without end. There the window scrolls, under the navbar.
+		const bounded = section && ["auto", "scroll"].includes(getComputedStyle(section).overflowY);
+		const scroller = bounded ? section : document.scrollingElement;
+		const set = () => {
+			const top = bounded ? 0 : $(".navbar").outerHeight() || 0;
+			wrapper.style.setProperty("--wa-onb-h", `${scroller.clientHeight - top}px`);
+		};
 		set();
 		scroller.scrollTop = 0;
 		if (!wrapper._wa_fit && typeof ResizeObserver === "function") {

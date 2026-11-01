@@ -299,3 +299,10 @@ body[data-route^="Form/WhatsApp "] {
 #{$wa-list-pages} {
 	.layout-main-section { padding-block-end: 0; }
 }
+
+// the small "Use in a message" under a template's name: Frappe 15's `btn-xs` is body-sized and ran
+// into the name above it
+.wa-template-use {
+	font-size: 12px;
+	line-height: 1.3;
+}

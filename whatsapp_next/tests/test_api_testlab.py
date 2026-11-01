@@ -455,7 +455,10 @@ class TestApiTestLab(IntegrationTestCase):
 			status = api.get_status(run=run["id"])
 		self.assertEqual(status["steps"][0]["state"], "delivered")
 		message = status["steps"][0]["messages"][0]
-		self.assertEqual((message["status"], message["send_seconds"], message["deliver_seconds"]), ("Delivered", 2.0, 5.0))
+		self.assertEqual(message["status"], "Delivered")
+		# measured from when the row was written, a moment before `now` on a slow machine
+		self.assertAlmostEqual(message["send_seconds"], 2.0, delta=0.5)
+		self.assertAlmostEqual(message["deliver_seconds"], 5.0, delta=0.5)
 		self.assertEqual((status["summary"]["passed"], status["summary"]["failed"], status["summary"]["messages"]), (1, 0, 1))
 		self.assertEqual((status["receipts"]["sent"], status["receipts"]["delivered"]), (1, 1))
 		self.assertTrue(status["finished"])

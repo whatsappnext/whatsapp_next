@@ -282,6 +282,8 @@ EXPECTED: dict[str, dict[str, str | tuple[str, str]]] = {
 		"disabled": "Check",
 		"use_count": "Int",
 		"last_used_at": "Datetime",
+		"hub_entry": "Data",
+		"hub_checksum": "Data",
 	},
 	"WhatsApp Number": {
 		"link_status": ("Select", "Linked\nNot Linked"),
