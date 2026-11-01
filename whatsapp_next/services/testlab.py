@@ -324,7 +324,8 @@ def _webhook_traffic_check(settings) -> dict[str, Any]:
 	at = settings.webhook_last_event_at
 	if not at:
 		return _check("webhook_traffic", title, "warn", _("No event has ever arrived from the platform."), _("Send one test message below: its delivery receipt is the proof that the way back works."))
-	hours = time_diff_in_seconds(now_datetime(), get_datetime(at)) / 3600
+	at = get_datetime(at)
+	hours = time_diff_in_seconds(now_datetime(), at) / 3600
 	when = frappe.utils.pretty_date(at)
 	if hours > STALE_WEBHOOK_HOURS:
 		return _check("webhook_traffic", title, "warn", _("The last event arrived {0}.").format(when), _("Nothing was heard for more than a day. Send one test message below and watch for its delivery receipt."))

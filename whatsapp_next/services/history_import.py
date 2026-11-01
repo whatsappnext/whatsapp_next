@@ -67,7 +67,8 @@ def _release(device: str) -> None:
 
 def is_running(device: str) -> bool:
 	"""True while a history import of `device` holds its lock."""
-	return bool(frappe.cache.exists(_lock_key(device)))
+	# `get`, not `exists`: Frappe's `exists` makes the key again, so it always answered no
+	return frappe.cache.get(_lock_key(device)) is not None
 
 
 def allowed() -> bool:

@@ -176,6 +176,7 @@ ignore_links_on_delete = [
 	"WhatsApp Log",
 	"WhatsApp Inbound Message",
 	"WhatsApp Number",
+	"WhatsApp Number Check",
 ]
 
 # Scheduler events are added in phase 4 (B-17) together with the services they call.
