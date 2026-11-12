@@ -81,6 +81,7 @@ class SampleDoc(frappe._dict):
 	(`items`, the usual child table) is the field, not the dict method (see `_message_jenv`)."""
 
 	def get_formatted(self, fieldname, *args, **kwargs):
+		"""The sample value as text, empty when the sample has none."""
 		value = self.get(fieldname)
 		return "" if value is None else cstr(value)
 
@@ -109,12 +110,13 @@ def _message_jenv():
 
 	class MessageEnvironment(type(base)):
 		def is_safe_attribute(self, obj, attr, value):
+			"""A record's methods are closed to a message, except the read methods in `_DOC_READ_METHODS`."""
 			if isinstance(obj, Document) and callable(value) and attr not in _DOC_READ_METHODS:
 				return False
 			return super().is_safe_attribute(obj, attr, value)
 
 		def getattr(self, obj, attribute):
-			# a sample's `doc.items` is its child table (empty without sample rows), never dict.items
+			"""A sample's `doc.items` is its child table (empty without sample rows), never dict.items."""
 			if isinstance(obj, SampleDoc) and attribute in _FIELD_NOT_METHOD:
 				return obj.get(attribute) or []
 			return super().getattr(obj, attribute)

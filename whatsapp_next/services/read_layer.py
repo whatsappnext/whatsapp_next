@@ -311,7 +311,9 @@ def _apply_filters(query, table, timestamp_column, key_condition, filters: dict[
 	if filters.get("device"):
 		devices = filters["device"]
 		query = query.where(
-			table.device.isin(list(devices)) if isinstance(devices, list | tuple | set) else table.device == devices
+			table.device.isin(list(devices))
+			if isinstance(devices, list | tuple | set)
+			else table.device == devices
 		)
 	if filters.get("contact"):
 		query = query.where(table.contact == filters["contact"])
@@ -325,7 +327,10 @@ def _apply_filters(query, table, timestamp_column, key_condition, filters: dict[
 	if before:
 		before_timestamp, before_name = before
 		if before_name:
-			query = query.where((timestamp_column < before_timestamp) | ((timestamp_column == before_timestamp) & (table.name < before_name)))
+			query = query.where(
+				(timestamp_column < before_timestamp)
+				| ((timestamp_column == before_timestamp) & (table.name < before_name))
+			)
 		else:
 			query = query.where(timestamp_column < before_timestamp)
 	return query

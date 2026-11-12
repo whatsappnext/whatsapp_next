@@ -76,6 +76,7 @@ class Preview:
 	known_count: int = 0
 
 	def as_dict(self) -> dict[str, Any]:
+		"""The preview as a plain dict for the API answer."""
 		return dict(self.__dict__)
 
 

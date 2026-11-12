@@ -95,7 +95,10 @@ class TestApiNumbers(IntegrationTestCase):
 			self.assertEqual(len(res["rows"]), 1)
 			self.assertGreaterEqual(res["total"], 2)
 			self.assertEqual(set(res["rows"][0]), set(api.SEARCH_FIELDS))
-			not_linked = {r["name"] for r in api.search_numbers(txt="+96777", link_status="Not Linked", page_length="500")["rows"]}
+			not_linked = {
+				r["name"]
+				for r in api.search_numbers(txt="+96777", link_status="Not Linked", page_length="500")["rows"]
+			}
 			self.assertEqual(not_linked & {N1, N2, N3}, {N2, N3})
 			self.assertEqual(api.search_numbers(txt="ApiTest Group")["rows"][0]["name"], GROUP)
 			# typed the local way, the number still finds its E.164 key

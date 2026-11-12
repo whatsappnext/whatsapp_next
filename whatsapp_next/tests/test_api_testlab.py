@@ -263,7 +263,15 @@ class TestApiTestLab(IntegrationTestCase):
 				self._start_test_run(targets=[])
 			with self.assertRaises(WAValidationError):
 				self._start_test_run(
-					targets=["+967784499996", "+967777667663", "+967777999579", "+967775040850", "+967775675566", "+967782309999", "+967779972929"][: testlab.MAX_TARGETS + 1]
+					targets=[
+						"+967784499996",
+						"+967777667663",
+						"+967777999579",
+						"+967775040850",
+						"+967775675566",
+						"+967782309999",
+						"+967779972929",
+					][: testlab.MAX_TARGETS + 1]
 				)
 			with self.assertRaises(WAValidationError):
 				self._start_test_run(cap=testlab.CAP_MAX + 1)

@@ -318,6 +318,7 @@ class WebhookEvent:
 
 	@property
 	def is_known(self) -> bool:
+		"""True when the event is one of the canonical events this app handles."""
 		return self.event_name in CANONICAL_EVENTS
 
 

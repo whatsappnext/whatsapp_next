@@ -186,7 +186,9 @@ class TestApiCommands(IntegrationTestCase):
 		name = self._command(status="Active")
 		before = frappe.db.count("WhatsApp Log")
 		with as_user("WhatsApp Manager"):
-			out = api.test_command(text=f"#{CODE} hello there", sender_phone="+967784499996", device=self.device)
+			out = api.test_command(
+				text=f"#{CODE} hello there", sender_phone="+967784499996", device=self.device
+			)
 			self.assertEqual(
 				(out["matched"], out["status"], out["command"], out["args"]["text"]),
 				(True, "Executed", name, "hello there"),

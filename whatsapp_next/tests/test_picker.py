@@ -220,7 +220,8 @@ class TestPicker(IntegrationTestCase):
 			1,
 		)
 		self.assertEqual(
-			picker.commit_remove("WhatsApp Contact Group", GROUP, phone_e164s=["+967777667663"]), {"removed": 1}
+			picker.commit_remove("WhatsApp Contact Group", GROUP, phone_e164s=["+967777667663"]),
+			{"removed": 1},
 		)
 		self.assertEqual(
 			[m.phone_e164 for m in frappe.get_doc("WhatsApp Contact Group", GROUP).members], [P2]

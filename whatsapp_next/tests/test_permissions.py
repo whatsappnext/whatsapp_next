@@ -232,7 +232,9 @@ class TestPermissions(IntegrationTestCase):
 			)
 			self.assertEqual(row_a["phone_nos"][0]["wa_phone_e164"], PHONE_1)
 			# phone search hits through Contact Phone
-			self.assertEqual({r["name"] for r in permissions.list_contacts(search="+967777667663")["rows"]}, {b})
+			self.assertEqual(
+				{r["name"] for r in permissions.list_contacts(search="+967777667663")["rows"]}, {b}
+			)
 			# has_whatsapp filter is applied in the query
 			self.assertEqual(
 				{r["name"] for r in permissions.list_contacts(search=PREFIX, has_whatsapp=True)["rows"]}, {a}
