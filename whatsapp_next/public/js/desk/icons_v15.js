@@ -46,11 +46,11 @@ const SYMBOLS = [
 ];
 
 function add_missing_icons() {
-	if (document.getElementById("wa-icons-v15")) return;
+	if (document.getElementById("whatsapp-icons-v15")) return;
 	const missing = SYMBOLS.filter((symbol) => !document.getElementById(/id="([^"]+)"/.exec(symbol)[1]));
 	if (!missing.length) return;
 	const holder = document.createElement("div");
-	holder.innerHTML = `<svg id="wa-icons-v15" aria-hidden="true" style="display: none;" class="icon" xmlns="http://www.w3.org/2000/svg">${missing.join("")}</svg>`;
+	holder.innerHTML = `<svg id="whatsapp-icons-v15" aria-hidden="true" style="display: none;" class="icon" xmlns="http://www.w3.org/2000/svg">${missing.join("")}</svg>`;
 	document.body.appendChild(holder.firstChild);
 }
 

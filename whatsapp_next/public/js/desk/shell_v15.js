@@ -38,7 +38,7 @@ import SIDEBAR from "../../../workspace_sidebar/whatsapp.json";
 	const OPEN_SECTIONS = "wa_nav15_closed";
 
 	const icon = (name) =>
-		`<svg class="wa-nav15__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+		`<svg class="whatsapp-nav15__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 
 	function allowed(item) {
 		if (item.link_type === "Page") return !!(frappe.boot.page_info || {})[item.link_to];
@@ -77,34 +77,34 @@ import SIDEBAR from "../../../workspace_sidebar/whatsapp.json";
 
 	function draw() {
 		const shut = closed();
-		const row = (item) => `<a class="wa-nav15__item" href="${href(item)}" data-link="${frappe.utils.escape_html(item.link_to)}">
+		const row = (item) => `<a class="whatsapp-nav15__item" href="${href(item)}" data-link="${frappe.utils.escape_html(item.link_to)}">
 			${icon(item.icon)}<span>${frappe.utils.escape_html(__(item.label))}</span>
 		</a>`;
 		const body = sections()
 			.map((section) => {
 				if (!section.label) return section.items.map(row).join("");
 				const open = !shut.includes(section.label);
-				return `<div class="wa-nav15__section${open ? "" : " is-shut"}" data-section="${frappe.utils.escape_html(section.label)}">
-					<button type="button" class="wa-nav15__head" aria-expanded="${open}">
+				return `<div class="whatsapp-nav15__section${open ? "" : " is-shut"}" data-section="${frappe.utils.escape_html(section.label)}">
+					<button type="button" class="whatsapp-nav15__head" aria-expanded="${open}">
 						<span>${frappe.utils.escape_html(__(section.label))}</span>${icon("chevron-down")}
 					</button>
-					<div class="wa-nav15__items">${section.items.map(row).join("")}</div>
+					<div class="whatsapp-nav15__items">${section.items.map(row).join("")}</div>
 				</div>`;
 			})
 			.join("");
-		const $nav = $(`<aside class="wa-nav15" aria-label="${frappe.utils.escape_html(__("WhatsApp"))}">
-			<a class="wa-nav15__brand" href="/app/whatsapp">
+		const $nav = $(`<aside class="whatsapp-nav15" aria-label="${frappe.utils.escape_html(__("WhatsApp"))}">
+			<a class="whatsapp-nav15__brand" href="/app/whatsapp">
 				<img src="/assets/whatsapp_next/images/whatsapp-next-icon.svg" alt="">
 				<span>${frappe.utils.escape_html(__("WhatsApp"))}</span>
 			</a>
-			<nav class="wa-nav15__body">${body}</nav>
+			<nav class="whatsapp-nav15__body">${body}</nav>
 		</aside>`).appendTo(document.body);
-		$('<div class="wa-nav15__scrim" aria-hidden="true"></div>').appendTo(document.body).on("click", () => toggle(false));
-		$(`<button type="button" class="wa-nav15__toggle" aria-label="${frappe.utils.escape_html(__("Menu"))}">${icon("menu")}</button>`)
+		$('<div class="whatsapp-nav15__scrim" aria-hidden="true"></div>').appendTo(document.body).on("click", () => toggle(false));
+		$(`<button type="button" class="whatsapp-nav15__toggle" aria-label="${frappe.utils.escape_html(__("Menu"))}">${icon("menu")}</button>`)
 			.insertAfter(".navbar .navbar-home")
-			.on("click", () => toggle(!$("body").hasClass("wa-nav15-open")));
-		$nav.on("click", ".wa-nav15__head", (e) => {
-			const $section = $(e.currentTarget).closest(".wa-nav15__section");
+			.on("click", () => toggle(!$("body").hasClass("whatsapp-nav15-open")));
+		$nav.on("click", ".whatsapp-nav15__head", (e) => {
+			const $section = $(e.currentTarget).closest(".whatsapp-nav15__section");
 			const shutNow = $section.toggleClass("is-shut").hasClass("is-shut");
 			$(e.currentTarget).attr("aria-expanded", String(!shutNow));
 			const name = $section.attr("data-section");
@@ -120,7 +120,7 @@ import SIDEBAR from "../../../workspace_sidebar/whatsapp.json";
 	}
 
 	function toggle(open) {
-		$("body").toggleClass("wa-nav15-open", open);
+		$("body").toggleClass("whatsapp-nav15-open", open);
 	}
 
 	/** The route's DocType or Page when it is one of this product's, else nothing. */
@@ -138,17 +138,17 @@ import SIDEBAR from "../../../workspace_sidebar/whatsapp.json";
 
 	function update() {
 		const here = current();
-		$("body").toggleClass("wa-shell15", !!here);
+		$("body").toggleClass("whatsapp-shell15", !!here);
 		if (!here) return toggle(false);
 		$nav = $nav || draw();
-		$nav.find(".wa-nav15__item").each((_, el) => {
+		$nav.find(".whatsapp-nav15__item").each((_, el) => {
 			const on = el.getAttribute("data-link") === here;
 			el.classList.toggle("is-on", on);
 			if (on) el.setAttribute("aria-current", "page");
 			else el.removeAttribute("aria-current");
 		});
-		const $on = $nav.find(".wa-nav15__item.is-on").closest(".wa-nav15__section");
-		if ($on.hasClass("is-shut")) $on.removeClass("is-shut").find(".wa-nav15__head").attr("aria-expanded", "true");
+		const $on = $nav.find(".whatsapp-nav15__item.is-on").closest(".whatsapp-nav15__section");
+		if ($on.hasClass("is-shut")) $on.removeClass("is-shut").find(".whatsapp-nav15__head").attr("aria-expanded", "true");
 	}
 
 	$(document).on("page-change", update);

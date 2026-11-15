@@ -1,12 +1,12 @@
 // Frappe 15 only: the product's navigation (`desk/shell_v15.js`) and what Frappe 16 gives this
-// product's screens and 15 does not. `body.wa-shell15` is set on this product's routes alone.
+// product's screens and 15 does not. `body.whatsapp-shell15` is set on this product's routes alone.
 
 $wa-nav15-w: 224px;
 
-.wa-nav15, .wa-nav15__scrim, .wa-nav15__toggle { display: none; }
+.whatsapp-nav15, .whatsapp-nav15__scrim, .whatsapp-nav15__toggle { display: none; }
 
-body.wa-shell15 {
-	.wa-nav15 {
+body.whatsapp-shell15 {
+	.whatsapp-nav15 {
 		position: fixed;
 		inset-block: var(--navbar-height, 48px) 0;
 		inset-inline-start: 0;
@@ -14,8 +14,8 @@ body.wa-shell15 {
 		display: flex;
 		flex-direction: column;
 		inline-size: $wa-nav15-w;
-		background: var(--wa-surface);
-		border-inline-end: 1px solid var(--wa-border);
+		background: var(--whatsapp-surface);
+		border-inline-end: 1px solid var(--whatsapp-border);
 		overflow: hidden;
 	}
 
@@ -30,28 +30,28 @@ body.wa-shell15 {
 	// Desk 15 caps a page's title at a quarter of the screen: «قالب وا…» on a phone
 	.page-title .title-area .title-text { max-inline-size: 100%; }
 
-	--wa-viewport-offset: calc(var(--navbar-height, 48px) + 8px);
+	--whatsapp-viewport-offset: calc(var(--navbar-height, 48px) + 8px);
 }
 
-.wa-nav15__brand {
+.whatsapp-nav15__brand {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	padding: 12px;
 	font-size: 14px;
 	font-weight: 600;
-	color: var(--wa-ink);
-	&:hover { color: var(--wa-ink); text-decoration: none; }
+	color: var(--whatsapp-ink);
+	&:hover { color: var(--whatsapp-ink); text-decoration: none; }
 	img { inline-size: 24px; block-size: 24px; border-radius: 6px; }
 }
 
-.wa-nav15__body {
+.whatsapp-nav15__body {
 	flex: 1;
 	padding: 0 8px 16px;
 	overflow-y: auto;
 }
 
-.wa-nav15__item {
+.whatsapp-nav15__item {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -59,21 +59,21 @@ body.wa-shell15 {
 	padding: 4px 8px;
 	border-radius: 8px;
 	font-size: 14px;
-	color: var(--wa-ink-2);
-	&:hover { background: var(--wa-bg); color: var(--wa-ink); text-decoration: none; }
-	&:focus-visible { outline: 2px solid var(--wa-pri); outline-offset: -2px; }
-	&.is-on { background: var(--wa-bg); color: var(--wa-ink); font-weight: 600; }
+	color: var(--whatsapp-ink-2);
+	&:hover { background: var(--whatsapp-background); color: var(--whatsapp-ink); text-decoration: none; }
+	&:focus-visible { outline: 2px solid var(--whatsapp-primary); outline-offset: -2px; }
+	&.is-on { background: var(--whatsapp-background); color: var(--whatsapp-ink); font-weight: 600; }
 }
 
-.wa-nav15__icon {
+.whatsapp-nav15__icon {
 	flex: none;
 	inline-size: 16px;
 	block-size: 16px;
 }
 
-.wa-nav15__section { margin-block-start: 12px; }
+.whatsapp-nav15__section { margin-block-start: 12px; }
 
-.wa-nav15__head {
+.whatsapp-nav15__head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -83,39 +83,39 @@ body.wa-shell15 {
 	border: 0;
 	background: none;
 	font-size: 12px;
-	color: var(--wa-ink-4);
+	color: var(--whatsapp-ink-4);
 	cursor: pointer;
-	.wa-nav15__icon { inline-size: 12px; block-size: 12px; transition: transform 120ms ease; }
-	&:focus-visible { outline: 2px solid var(--wa-pri); outline-offset: -2px; border-radius: 6px; }
+	.whatsapp-nav15__icon { inline-size: 12px; block-size: 12px; transition: transform 120ms ease; }
+	&:focus-visible { outline: 2px solid var(--whatsapp-primary); outline-offset: -2px; border-radius: 6px; }
 }
 
-.wa-nav15__section.is-shut {
-	.wa-nav15__items { display: none; }
-	.wa-nav15__head .wa-nav15__icon { transform: rotate(90deg); }
+.whatsapp-nav15__section.is-shut {
+	.whatsapp-nav15__items { display: none; }
+	.whatsapp-nav15__head .whatsapp-nav15__icon { transform: rotate(90deg); }
 }
 
 // a list is the kit's card on the page, as on Frappe 16: Desk 15 framed it again in a bordered white box
-body.wa-shell15[data-route^="List/"] .layout-main-section {
+body.whatsapp-shell15[data-route^="List/"] .layout-main-section {
 	border: 0;
 	background: transparent;
 }
 
 // the page-size buttons are Desk 15's own, painted `--gray-50` in both themes (white on white in
 // the dark one); Frappe 16 draws the ones not chosen plain
-body.wa-shell15 .list-paging-area .btn-paging:not(.btn-info) {
+body.whatsapp-shell15 .list-paging-area .btn-paging:not(.btn-info) {
 	background: transparent;
 	color: var(--ink-gray-5);
 }
 
 // Desk 15 fills its solid icons with the ink colour, so the date filter's calendar was a black
 // square; Frappe 16 gives it the button's colour
-body.wa-shell15 .sanad-datefilter__icon svg {
+body.whatsapp-shell15 .whatsapp-kit-datefilter__icon svg {
 	--icon-stroke: currentColor;
 }
 
 // the workspace as Frappe 16 draws it: no column around it, the shortcuts as boxes, the groups of
 // links plain on the canvas
-body.wa-shell15[data-route="Workspaces/WhatsApp"] {
+body.whatsapp-shell15[data-route="Workspaces/WhatsApp"] {
 	#page-Workspaces .layout-main-section {
 		border: 0;
 		padding-block: 8px;
@@ -125,16 +125,16 @@ body.wa-shell15[data-route="Workspaces/WhatsApp"] {
 	.widget.shortcut-widget-box {
 		min-block-size: 43px;
 		padding: 10px 12px;
-		border: 1px solid var(--wa-border);
+		border: 1px solid var(--whatsapp-border);
 		border-radius: 12px;
-		background: var(--wa-surface);
+		background: var(--whatsapp-surface);
 		.widget-title { font-size: 16px; font-weight: 500; }
 	}
 	.widget.links-widget-box {
 		padding: 16px 8px 0;
 		background: transparent;
 		.widget-title { font-size: 13px; font-weight: 500; }
-		.link-item { padding-block: 3px; padding-inline: 0; font-size: 13px; color: var(--wa-ink-3); }
+		.link-item { padding-block: 3px; padding-inline: 0; font-size: 13px; color: var(--whatsapp-ink-3); }
 		.link-item svg { display: none; }
 	}
 	.widget.spacer { padding: 0; block-size: 8px; }
@@ -142,16 +142,16 @@ body.wa-shell15[data-route="Workspaces/WhatsApp"] {
 
 // a narrow screen: the menu slides over the page, from a button in the navbar
 @media (max-width: 991px) {
-	body.wa-shell15 {
+	body.whatsapp-shell15 {
 		#body { padding-inline-start: 0; }
-		.wa-nav15 {
+		.whatsapp-nav15 {
 			inline-size: min(280px, 82vw);
 			z-index: 1045;
-			box-shadow: var(--wa-shadow-sm);
+			box-shadow: var(--whatsapp-shadow-sm);
 			transform: translateX(-110%); // the RTL build flips this one itself
 			transition: transform 160ms ease;
 		}
-		.wa-nav15__toggle {
+		.whatsapp-nav15__toggle {
 			display: inline-flex;
 			align-items: center;
 			justify-content: center;
@@ -161,18 +161,18 @@ body.wa-shell15[data-route="Workspaces/WhatsApp"] {
 			border: 0;
 			border-radius: 8px;
 			background: none;
-			color: var(--wa-ink-2);
+			color: var(--whatsapp-ink-2);
 		}
-		--wa-viewport-offset: calc(var(--navbar-height, 48px) + 8px);
+		--whatsapp-viewport-offset: calc(var(--navbar-height, 48px) + 8px);
 	}
-	body.wa-shell15.wa-nav15-open {
-		.wa-nav15 { transform: none; }
-		.wa-nav15__scrim {
+	body.whatsapp-shell15.whatsapp-nav15-open {
+		.whatsapp-nav15 { transform: none; }
+		.whatsapp-nav15__scrim {
 			display: block;
 			position: fixed;
 			inset: 0;
 			z-index: 1040;
-			background: var(--wa-status-scrim);
+			background: var(--whatsapp-status-scrim);
 		}
 	}
 }
