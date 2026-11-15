@@ -85,7 +85,10 @@ class TestFunctionRunner(IntegrationTestCase):
 		params, _missing = fr.prepare_command_params(_command("_test_span", {"language": "ar"}), sender)
 		self.assertEqual((params["language"], params["msg_result"]), ("ar", "رصيد {{ party }} {{ span }}"))
 		self.assertEqual(fr.run_language(_command("_test_span", {"language": "ar"})), "ar")
-		self.assertEqual(fr.run_language(_command("_test_span")), "en")  # the reply language
+		# no override: the site's reply language, whatever the site set it to
+		from whatsapp_next.services.command_router import reply_language
+
+		self.assertEqual(fr.run_language(_command("_test_span")), reply_language())
 		self.assertEqual(
 			fr.disabled_replies(frappe._dict(disabled_replies="statement\n\n x ")), {"statement", "x"}
 		)
