@@ -543,6 +543,19 @@
 			> .whatsapp-kit-filterbar__end { flex: 1 0 100%; }
 		}
 		&__main { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; }
+		// a filter chip (a filter set from outside the bar, such as the outbound list's date range) does
+		// not fit beside search · Filters either: at its full width it pushed the page sideways on
+		// Frappe 15 (which does not clip the section) and slid under the icons on 16. The chips take
+		// the next line, each as wide as the screen lets it, the value elided.
+		// (the chips sit in `__extra`, which is `display: contents`: they are the group's items)
+		&__main:has(> .whatsapp-kit-filterbar__extra > .whatsapp-kit-filterbar__chip-filter) {
+			flex-wrap: wrap;
+			// the first line stays search · Filters (a field takes a line of its own once wrapping is on)
+			> .whatsapp-kit-filterbar__field--search { flex: 1 1 0; }
+		}
+		// the date icon stays beside the first line, not between the two
+		&__row--toolbar:has(.whatsapp-kit-filterbar__chip-filter) { align-items: flex-start; }
+		&__chip-filter { flex: 0 1 auto; min-width: 0; max-width: 100%; order: 1; }
 		&__field, &__field--range { flex: 1 0 100%; max-width: none; }
 		&__field--search { flex: 1 1 auto; min-width: 80px; max-width: none; }
 		&__dropdown:not(&__dropdown--group) { display: none; }
