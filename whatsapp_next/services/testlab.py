@@ -27,6 +27,7 @@ from frappe.utils import (
 	cint,
 	date_diff,
 	get_datetime,
+	getdate,
 	now_datetime,
 	nowdate,
 	time_diff_in_seconds,
@@ -337,9 +338,12 @@ def _subscription_check(settings) -> dict[str, Any]:
 	facts = [plan]
 	if limit:
 		facts.append(_("{0} of {1} messages left").format(cint(remaining), limit))
-	days = date_diff(settings.subscription_end, nowdate()) if settings.subscription_end else None
-	if settings.subscription_end:
-		facts.append(_("ends {0}").format(frappe.format(settings.subscription_end, {"fieldtype": "Date"})))
+	# a date Frappe cannot read is no end date: Frappe 15 reads 0001-01-01 (an empty date in the
+	# database) as None, and subtracting from it failed the whole health page
+	end = getdate(settings.subscription_end) if settings.subscription_end else None
+	days = date_diff(end, nowdate()) if end else None
+	if end:
+		facts.append(_("ends {0}").format(frappe.format(end, {"fieldtype": "Date"})))
 	detail = " · ".join(facts)
 	if not status and not settings.subscription_synced_at:
 		return _build_health_check_result(
