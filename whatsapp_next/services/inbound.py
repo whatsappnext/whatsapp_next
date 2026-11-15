@@ -51,6 +51,91 @@ def _sender_fields(event: WebhookEvent) -> dict[str, Any]:
 	}
 
 
+def _flag(value: Any) -> bool:
+	return value is True or str(value).strip().lower() in ("1", "true", "yes")
+
+
+def _jid_user(jid: str | None) -> str:
+	"""The account part of a JID, without the linked device: `8835…:44@lid` → `8835…`."""
+	return str(jid or "").split("@")[0].split(":")[0]
+
+
+def is_from_this_device(event: WebhookEvent, device: str) -> bool:
+	"""True for a message the device's own WhatsApp sent: from the phone, from another device
+	linked to the same number, or a tap in the number's chat with itself. The engine says so
+	(`is_from_me`); a sender whose number is the device's own number is taken the same way."""
+	raw = event.raw or {}
+	nested = raw.get("data") if isinstance(raw.get("data"), dict) else {}
+	if _flag(raw.get("is_from_me")) or _flag(nested.get("is_from_me")):
+		return True
+	if not event.inbound:
+		return False
+	sender = _sender_fields(event)["phone_e164"]
+	own = frappe.db.get_value("WhatsApp Device", device, "phone_e164")
+	return bool(sender and own and sender == own)
+
+
+def _is_chat_with_itself(event: WebhookEvent, device: str) -> bool:
+	inbound_payload = event.inbound
+	chat = inbound_payload.chat_jid or ""
+	if chat.lower().endswith("@g.us"):
+		return False
+	sender = inbound_payload.sender_jid or inbound_payload.from_jid
+	if sender and _jid_user(chat) == _jid_user(sender):
+		return True
+	own = frappe.db.get_value("WhatsApp Device", device, "phone_e164")
+	return bool(own and not is_group_or_lid(chat) and normalize_phone_to_e164(chat) == own)
+
+
+def _counterpart_phone(event: WebhookEvent, device: str) -> str | None:
+	"""The number of the customer the device wrote to: the chat's number, or for a privacy id
+	(`…@lid`) the number this site already holds for it from that customer's own messages."""
+	chat = event.inbound.chat_jid or ""
+	if not chat or chat.lower().endswith("@g.us"):
+		return None
+	if not is_group_or_lid(chat):
+		return normalize_phone_to_e164(chat)
+	for field in ("chat_jid", "jid", "sender_jid"):
+		phone = frappe.db.get_value(
+			"WhatsApp Inbound Message",
+			{field: chat, "phone_e164": ("is", "set")},
+			"phone_e164",
+			order_by="creation desc",
+		)
+		if phone:
+			return phone
+	return frappe.db.get_value("WhatsApp Number", {"jid": chat}, "phone_e164")
+
+
+def record_own_message(event: WebhookEvent, *, device: str) -> str | None:
+	"""Keep a message the device's own WhatsApp sent (`is_from_this_device`) on the outbound side,
+	as the history import keeps one: a `WhatsApp Log` row, source History, status Sent. Returns
+	its name; None when nothing is kept (the chat with itself, a type the outbound side has no
+	place for, a privacy id whose number this site does not know, or a reaction)."""
+	from whatsapp_next.providers.schemas import HistoryMessage
+	from whatsapp_next.services import history_import
+	from whatsapp_next.services.numbers_materializer import refresh_keys
+
+	inbound_payload = event.inbound
+	if not inbound_payload or not inbound_payload.provider_message_id:
+		return None
+	if event.event_name != "message.received" or _is_chat_with_itself(event, device):
+		return None
+	message = HistoryMessage(
+		kind=str(inbound_payload.message_type or "Text").strip().lower().replace(" ", "_"),
+		from_me=True,
+		inbound=inbound_payload,
+		counterpart_phone=_counterpart_phone(event, device),
+		raw=event.raw or {},
+	)
+	key = history_import.store_or_apply_history_message(device, message)
+	if isinstance(key, str):
+		refresh_keys([key])
+	return frappe.db.get_value(
+		"WhatsApp Log", {"provider_message_id": inbound_payload.provider_message_id}, "name"
+	)
+
+
 def _existing(device: str, provider_message_id: str | None) -> str | None:
 	if not provider_message_id:
 		return None

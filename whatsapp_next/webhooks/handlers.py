@@ -105,6 +105,11 @@ def handle_event(
 	if name == "message.received":
 		if not device:
 			return "Ignored", {}
+		if inbound.is_from_this_device(event, device):
+			# sent by the device's own WhatsApp (the phone, another linked device): never a
+			# customer's message, never a command (live test 2026-11-12)
+			outbound_name = inbound.record_own_message(event, device=device)
+			return ("Processed", {"outbound_message": outbound_name}) if outbound_name else ("Ignored", {})
 		inbound_name = inbound.record_inbound(event, webhook_event_name, device=device)
 		return ("Processed", {"inbound_message": inbound_name}) if inbound_name else ("Ignored", {})
 	if name in ("message.edited", "message.deleted"):
@@ -113,7 +118,8 @@ def handle_event(
 		inbound_name = inbound.record_change(event, device=device)
 		return ("Processed", {"inbound_message": inbound_name}) if inbound_name else ("Ignored", {})
 	if name == "message.reaction":
-		if not device:
+		if not device or inbound.is_from_this_device(event, device):
+			# the device's own reaction is not a customer's (the history import skips it too)
 			return "Ignored", {}
 		inbound_name = inbound.record_reaction(event, webhook_event_name, device=device)
 		return ("Processed", {"inbound_message": inbound_name}) if inbound_name else ("Ignored", {})
