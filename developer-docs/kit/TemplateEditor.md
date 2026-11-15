@@ -1,4 +1,4 @@
-# `sanad.ui.TemplateEditor`
+# `whatsapp.ui.TemplateEditor`
 
 A live Jinja preview mounted into any Desk form that has a template body field: a sample-record
 picker (a Link control on the reference DocType plus "Use latest"), a debounced preview pane that
@@ -25,13 +25,13 @@ relies on their shapes (below). Styles use Espresso/kit tokens only.
 ## Methods
 
 - Static `TemplateEditor.mount(opts)` — create once per form (stored as
-  `frm.__sanad_template_editor`) and `refresh()` it on later calls; call it from `refresh(frm)`.
+  `frm.__whatsapp_template_editor`) and `refresh()` it on later calls; call it from `refresh(frm)`.
   Returns the instance, or `null` without `frm`.
 - Static `TemplateEditor.bind_form_events(doctype, opts)` — registers `frappe.ui.form.on` handlers
   for the body, reference and sample fields once per DocType (called by the constructor).
 - `refresh()` — rebuild picker and variables if the reference DocType changed, else re-preview.
 - `on_reference_change()` — reset the sample record, rebuild the picker, reload variables, preview.
-- `preview()` — render now (returns a Promise); `schedule_preview()` is the debounced form.
+- `render_template_preview()` — render now (returns a Promise); `schedule_preview()` is the debounced form.
 - `use_latest()` — pick the newest record of the reference DocType as the sample.
 - `load_variables()` / `render_variables()` — fetch / redraw (respecting the filter box).
 - `insert_variable(name)` — insert `{{ name }}` at the body caret (appends when the body is not
@@ -59,7 +59,7 @@ relies on their shapes (below). Styles use Espresso/kit tokens only.
 ```js
 frappe.ui.form.on("WhatsApp Template", {
   refresh(frm) {
-    sanad.ui.TemplateEditor.mount({
+    whatsapp.ui.TemplateEditor.mount({
       frm,
       body_field: "body",
       reference_doctype_field: "reference_doctype",
@@ -72,19 +72,19 @@ frappe.ui.form.on("WhatsApp Template", {
 
 ## CSS hooks
 
-- Root `.sanad-kit.sanad-tpl`.
+- Root `.whatsapp-kit.whatsapp-kit-template-editor`.
 - Toolbar: `__toolbar`, `__sample`, `__sample-control`, `__latest`, `__sample-note`.
-- Preview: `__grid`, `__preview`, `__h`, `__state`, `__bubble`, `__muted`, `__errors`.
-- Variables: `__vars`, `__search`, `__vars-state`, `__list`, `__var[data-name]`, `__var-label`.
+- Preview: `__grid`, `__preview`, `__heading`, `__state`, `__bubble`, `__muted`, `__errors`.
+- Variables: `__variables`, `__search`, `__variables-state`, `__list`, `__variable[data-name]`, `__variable-label`.
 - Single column under 768 px (preview first).
 
 ## Notes
 
-- **States:** `sanad.ui.EmptyState` skeletons while loading (preview and variables); "Nothing to
+- **States:** `whatsapp.ui.EmptyState` skeletons while loading (preview and variables); "Nothing to
   preview" for a blank body; "The template renders to an empty message." for an empty render;
   errors with a Retry action; "No variables" / "No variables match".
 - Invalid JSON in `sample_field` is reported in the error list and the preview continues without it.
-- The preview uses `sanad.ui.ChatThread.format` when loaded (WhatsApp marks), else escaped text with
+- The preview uses `whatsapp.ui.ChatThread.format_whatsapp_text` when loaded (WhatsApp marks), else escaped text with
   line breaks. Stale responses are discarded (sequence counter); the bubble is `aria-busy` during
   a render; the error list is `role="alert"` and re-rendered only when its content changes.
 - "Use latest" is hidden without a reference DocType, disabled/`aria-busy` while calling, and a

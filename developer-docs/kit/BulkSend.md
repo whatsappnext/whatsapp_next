@@ -1,18 +1,18 @@
-# `sanad.ui.BulkSend`
+# `whatsapp.ui.BulkSend`
 
 The "Send a bulk message" window: a full-height modal with a header (title, subtitle, close) over
 two panes. **Recipients** — Groups · Contacts · Numbers segments with counts, a search, selectable
 rows, a numbers box, and a footer with "Selected N", "Show the selected" and "Remove all".
 **The message** — a header saying who it goes to with a "Send settings" pill (template, device,
 rate, timing), the first recipient as the preview identity, the message bubble, a composer with a
-"+" that opens `sanad.ui.AttachMenu`, and an estimates bar with the send pill. Sending asks through
-`sanad.ui.ConfirmDialog` with the facts of the send. The constructor opens the window immediately.
+"+" that opens `whatsapp.ui.AttachMenu`, and an estimates bar with the send pill. Sending asks through
+`whatsapp.ui.ConfirmDialog` with the facts of the send. The constructor opens the window immediately.
 
 **Portability:** the data source is passed in as functions, so the component makes no server calls
 of its own; but the shapes it expects (`load`, `estimate`, `send` payload/result) mirror this app's
-`bulk_send.*` API, and the stylesheet uses the app's `--wa-*` palette tokens from
+`bulk_send.*` API, and the stylesheet uses the app's `--whatsapp-*` palette tokens from
 `public/scss/_tokens.scss`, which live outside the kit. It reuses `CommandEditor`'s layer/modal
-classes (`sanad-ce-*`), so that stylesheet must load too (the kit's `style.scss` imports both).
+classes (`whatsapp-kit-command-editor-*`), so that stylesheet must load too (the kit's `style.scss` imports both).
 
 ## Options
 
@@ -29,7 +29,7 @@ classes (`sanad-ce-*`), so that stylesheet must load too (the kit's `style.scss`
 | `on_templates` | `() => void` | — | If given, the settings show "Manage message templates"; clicking closes the window and calls it. |
 | `on_close` | `() => void` | — | After every close. |
 
-**`load()` context:** `groups[{name, group_name, kind, description, source, member_count}]`
+**`load_send_context()` context:** `groups[{name, group_name, kind, description, source, member_count}]`
 (`kind === "Blacklist"` gets a warning badge), `templates[{name, template_name, category, body}]`,
 `devices[{name, device_name, status}]`, `default_device`, `rate` (default 20), `max_rate`
 (optional cap; a higher rate is refused with a message), `messages_remaining` (optional).
@@ -40,7 +40,7 @@ scheduled_at ("YYYY-MM-DD HH:mm" or null)}`.
 
 ## Methods
 
-- `show()` — build and open the window (called by the constructor), then `load()`.
+- `show()` — build and open the window (called by the constructor), then `load_send_context()`.
 - `close()` — remove the window, restore focus to the opener, call `on_close`.
 - `hide()` — remove the window without restoring focus or calling `on_close`.
 - `render()` — redraw both panes, keeping focus, caret and list scroll.
@@ -51,7 +51,7 @@ scheduled_at ("YYYY-MM-DD HH:mm" or null)}`.
 - `on_sent(result)`, `on_templates()`, `on_close()` as above.
 - No custom DOM events; no realtime subscriptions. All clicks are delegated through `data-act`
   attributes on the root; inputs through `data-in` / `data-ch`.
-- Registers itself with `sanad.ui.overlay.open/close` when available.
+- Registers itself with `whatsapp.ui.overlay.open/close` when available.
 
 ## Server calls
 
@@ -62,8 +62,8 @@ None directly — everything goes through the host's `load`, `estimate`, `search
 ## Usage
 
 ```js
-const call = (m, args) => sanad.ui.call(`bulk_send.${m}`, args);
-new sanad.ui.BulkSend({
+const call = (m, args) => whatsapp.ui.call(`bulk_send.${m}`, args);
+new whatsapp.ui.BulkSend({
   load: () => call("get_context"),
   estimate: (sel) => call("estimate", sel),
   search_contacts: (txt) => call("search_contacts", { txt }),
@@ -76,21 +76,21 @@ new sanad.ui.BulkSend({
 
 ## CSS hooks
 
-- Layer/modal: `.sanad-kit.sanad-ce-layer.sanad-bs-layer` > `.sanad-ce-backdrop` +
-  `.sanad-ce.sanad-bs[role=dialog]`; `body.sanad-ce-open` while any layer is open.
-- Header: `.sanad-bs__top`, `__title`, `__subtitle`; body `__body`, `__grid`.
-- Recipients: `__list-pane`, `__list-head`, `__segs` (`--sm`), `__seg` (`.is-sel`), `__seg-n`,
-  `__search`, `__list`, `__row` (`.is-on`), `__avatar` (`--nf`, `--q`, `.is-on`), `__row-name`,
-  `__row-sub`, `__badge--{wn|muted|pri|nf}`, `__mark` (`.is-on`, `.is-rm`), `__none`, `__manual`,
+- Layer/modal: `.whatsapp-kit.whatsapp-kit-command-editor-layer.whatsapp-kit-bulk-send-layer` > `.whatsapp-kit-command-editor-backdrop` +
+  `.whatsapp-kit-command-editor.whatsapp-kit-bulk-send[role=dialog]`; `body.whatsapp-kit-command-editor-open` while any layer is open.
+- Header: `.whatsapp-kit-bulk-send__top`, `__title`, `__subtitle`; body `__body`, `__grid`.
+- Recipients: `__list-pane`, `__list-head`, `__segments` (`--sm`), `__segment` (`.is-sel`), `__segment-count`,
+  `__search`, `__list`, `__row` (`.is-on`), `__avatar` (`--info`, `--q`, `.is-on`), `__row-name`,
+  `__row-subtitle`, `__badge--{warning|muted|primary|info}`, `__mark` (`.is-on`, `.is-rm`), `__none`, `__manual`,
   `__numbers`, `__list-foot`, `__picked`, `__show` (`.is-on`), `__clear`.
-- Message: `__main`, `__head`, `__head-title`, `__head-sub`, `__settings-btn`, `__settings`,
-  `__form`, `__fld`, `__ctl`, `__who`, `__note`, `__thread`, `__day`, `__bubble`, `__bubble-file`,
-  `__bubble-at`, `__empty`, `__attach`, `__composer`, `__round` (`--plain`, `--pri`), `__input`,
-  `__clear-x`, `__bar`, `__est`, `__send` (`.is-ready`).
+- Message: `__main`, `__head`, `__head-title`, `__head-subtitle`, `__settings-button`, `__settings`,
+  `__form`, `__labelled-field`, `__control`, `__who`, `__note`, `__thread`, `__day`, `__bubble`, `__bubble-file`,
+  `__bubble-at`, `__empty`, `__attach`, `__composer`, `__round` (`--plain`, `--primary`), `__input`,
+  `__clear-x`, `__bar`, `__estimate`, `__send` (`.is-ready`).
 
 ## Notes
 
-- **Loading/error:** "Loading…" until `load()` resolves; a rejected `load()` shows its message
+- **Loading/error:** "Loading…" until `load_send_context()` resolves; a rejected `load_send_context()` shows its message
   with `role="alert"`. The Contacts list shows "Loading…" while searching and a "no results" line
   when empty.
 - **Numbers:** split on newlines, commas, `،` and `;`; spaces, dashes and parentheses stripped;

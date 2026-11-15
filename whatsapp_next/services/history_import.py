@@ -27,7 +27,7 @@ from whatsapp_next.exceptions import WAStateConflictError
 from whatsapp_next.providers import exceptions as pex
 from whatsapp_next.providers.schemas import HistoryMessage, WebhookEvent
 from whatsapp_next.services.guards import status_writer
-from whatsapp_next.services.phone import key_for, normalize
+from whatsapp_next.services.phone import key_for, normalize_phone_to_e164
 
 PAGE_SIZE = 500
 PAGES_PER_RUN = 20  # ≤ 10 000 messages per job, then the job queues the next slice
@@ -94,7 +94,7 @@ def allowed() -> bool:
 	return bool(cint(frappe.get_cached_doc("WhatsApp Settings").get("import_past_messages")))
 
 
-def start(device: str, *, restart: bool = False) -> None:
+def queue_history_import(device: str, *, restart: bool = False) -> None:
 	"""Queue the import of `device` (one job per device at a time). `restart` reads from the start
 	again; rows already here are skipped, so it only fills gaps. Refused while Settings forbid it."""
 	if not allowed():
@@ -116,7 +116,7 @@ def start(device: str, *, restart: bool = False) -> None:
 		)
 	frappe.db.set_value(DEVICE, device, values, update_modified=False)
 	frappe.enqueue(
-		"whatsapp_next.services.history_import.run",
+		"whatsapp_next.services.history_import.run_history_import_slice",
 		device=device,
 		queue="long",
 		timeout=JOB_TIMEOUT,
@@ -129,7 +129,7 @@ def on_connected(device: str) -> None:
 	its history to the platform for a while after pairing; what lands after this run is read by
 	the hourly `catch_up`, since the cursor follows the platform's storage order."""
 	if allowed() and not frappe.db.get_value(DEVICE, device, "history_started_at"):
-		start(device)
+		queue_history_import(device)
 
 
 def catch_up() -> None:
@@ -139,7 +139,7 @@ def catch_up() -> None:
 		return
 	for name in frappe.get_all(DEVICE, filters={"status": "Connected", "disabled": 0}, pluck="name"):
 		if not is_running(name):
-			start(name)
+			queue_history_import(name)
 
 
 # ---- the job ----------------------------------------------------------------------------------
@@ -151,7 +151,7 @@ def since_timestamp() -> int | None:
 	return int(get_datetime(add_days(now_datetime(), -days)).timestamp()) if days > 0 else None
 
 
-def run(device: str) -> dict[str, Any]:
+def run_history_import_slice(device: str) -> dict[str, Any]:
 	"""One slice of the import of `device`; re-enqueues itself while the platform has more. A job
 	queued before the setting was switched off stops here."""
 	if not allowed():
@@ -166,16 +166,16 @@ def run(device: str) -> dict[str, Any]:
 	if not _acquire(device):
 		return {"ok": False, "busy": True}
 	try:
-		result = _run(device)
+		result = _import_history_pages(device)
 	finally:
 		_release(device)
 	if result.get("more"):
-		start(device)  # the next slice, queued only once the lock is free
+		queue_history_import(device)  # the next slice, queued only once the lock is free
 		frappe.db.commit()
 	return result
 
 
-def _run(device: str) -> dict[str, Any]:
+def _import_history_pages(device: str) -> dict[str, Any]:
 	from whatsapp_next.providers import registry
 
 	row = frappe.db.get_value(
@@ -194,7 +194,7 @@ def _run(device: str) -> dict[str, Any]:
 			for message in page.messages:
 				try:
 					frappe.db.savepoint("wa_history_row")
-					key = apply(device, message)
+					key = store_or_apply_history_message(device, message)
 				except Exception:
 					# one message this site cannot hold (no usable number, text the database
 					# refuses …) never stops the rest; the first such failure of a slice is logged
@@ -219,7 +219,7 @@ def _run(device: str) -> dict[str, Any]:
 			if not page.has_more:
 				break
 		else:
-			_refresh(keys)
+			_refresh_whatsapp_numbers_for_keys(keys)
 			return {"ok": True, "imported": imported, "more": True}
 	except (pex.ProviderError, pex.NotSupportedError) as exc:
 		frappe.db.rollback()
@@ -231,7 +231,7 @@ def _run(device: str) -> dict[str, Any]:
 		)
 		frappe.db.commit()
 		return {"ok": False, "error": str(exc)}
-	_refresh(keys)
+	_refresh_whatsapp_numbers_for_keys(keys)
 	frappe.db.set_value(
 		DEVICE,
 		device,
@@ -242,7 +242,7 @@ def _run(device: str) -> dict[str, Any]:
 	return {"ok": True, "imported": imported, "more": False}
 
 
-def _refresh(keys: set[str]) -> None:
+def _refresh_whatsapp_numbers_for_keys(keys: set[str]) -> None:
 	"""WhatsApp Numbers for every counterpart the slice touched, once (the per-row hook is off)."""
 	if not keys:
 		return
@@ -255,11 +255,11 @@ def _refresh(keys: set[str]) -> None:
 # ---- one message --------------------------------------------------------------------------------
 
 
-def apply(device: str, message: HistoryMessage) -> str | bool | None:
+def store_or_apply_history_message(device: str, message: HistoryMessage) -> str | bool | None:
 	"""Store or apply one past message. Returns the counterpart's Number key for a new row, `True`
 	for a change applied to an existing one, `None` when nothing was written."""
-	p = message.inbound
-	if not p.provider_message_id:
+	inbound_payload = message.inbound
+	if not inbound_payload.provider_message_id:
 		return None
 	if message.kind == "edit":
 		return _apply_edit(device, message)
@@ -273,14 +273,14 @@ def apply(device: str, message: HistoryMessage) -> str | bool | None:
 	return _insert_inbound(device, message, message_type) if message_type else None
 
 
-def _text(value: str | None) -> str | None:
+def _strip_lone_surrogates(value: str | None) -> str | None:
 	"""Text as the database takes it: a lone surrogate half (an emoji cut in two) is dropped."""
 	if value is None:
 		return None
 	return str(value).encode("utf-8", "ignore").decode("utf-8")
 
 
-def _event(device: str, message: HistoryMessage) -> WebhookEvent:
+def _build_webhook_event_from_history_message(device: str, message: HistoryMessage) -> WebhookEvent:
 	return WebhookEvent(
 		event_id=message.inbound.provider_message_id,
 		event_name="message.received",
@@ -292,10 +292,12 @@ def _event(device: str, message: HistoryMessage) -> WebhookEvent:
 def _insert_inbound(device: str, message: HistoryMessage, message_type: str) -> str | None:
 	from whatsapp_next.services import inbound
 
-	p = message.inbound
-	if frappe.db.exists(INBOUND, {"device": device, "provider_message_id": p.provider_message_id}):
+	inbound_payload = message.inbound
+	if frappe.db.exists(
+		INBOUND, {"device": device, "provider_message_id": inbound_payload.provider_message_id}
+	):
 		return None
-	fields = inbound._sender_fields(_event(device, message))
+	fields = inbound._sender_fields(_build_webhook_event_from_history_message(device, message))
 	contact = (
 		inbound.resolve_contact(fields["phone_e164"])
 		if fields["phone_e164"] and not fields["is_group"]
@@ -305,28 +307,31 @@ def _insert_inbound(device: str, message: HistoryMessage, message_type: str) -> 
 		"doctype": INBOUND,
 		"device": device,
 		**fields,
-		"display_name": _text(p.push_name) or inbound._known_name(fields, contact),
+		"display_name": _strip_lone_surrogates(inbound_payload.push_name)
+		or inbound._known_name(fields, contact),
 		"contact": contact,
 		"message_type": message_type,
-		"body": _text(p.reaction if message_type == "Reaction" else p.body),
-		"caption": _text(p.caption),
-		"media_url": p.media_url,
-		"media_mime_type": p.media_mime_type,
-		"reaction": p.reaction,
-		"reaction_to_provider_message_id": p.reaction_to,
-		"provider_message_id": p.provider_message_id,
-		"quoted_provider_message_id": p.quoted_id,
-		"selected_option_id": p.selected_id,
-		"received_at": p.received_at or now_datetime(),
+		"body": _strip_lone_surrogates(
+			inbound_payload.reaction if message_type == "Reaction" else inbound_payload.body
+		),
+		"caption": _strip_lone_surrogates(inbound_payload.caption),
+		"media_url": inbound_payload.media_url,
+		"media_mime_type": inbound_payload.media_mime_type,
+		"reaction": inbound_payload.reaction,
+		"reaction_to_provider_message_id": inbound_payload.reaction_to,
+		"provider_message_id": inbound_payload.provider_message_id,
+		"quoted_provider_message_id": inbound_payload.quoted_id,
+		"selected_option_id": inbound_payload.selected_id,
+		"received_at": inbound_payload.received_at or now_datetime(),
 		"command_status": "None",
 		"is_history": 1,
 	}
-	if p.location:
+	if inbound_payload.location:
 		values.update(
 			{
-				"location_latitude": p.location.latitude,
-				"location_longitude": p.location.longitude,
-				"location_name": p.location.name,
+				"location_latitude": inbound_payload.location.latitude,
+				"location_longitude": inbound_payload.location.longitude,
+				"location_name": inbound_payload.location.name,
 			}
 		)
 	doc = frappe.get_doc(values)
@@ -341,18 +346,24 @@ def _insert_inbound(device: str, message: HistoryMessage, message_type: str) -> 
 
 
 def _insert_outbound(device: str, message: HistoryMessage) -> str | None:
-	p = message.inbound
-	if frappe.db.exists(OUTBOUND, {"provider_message_id": p.provider_message_id}):
+	inbound_payload = message.inbound
+	if frappe.db.exists(OUTBOUND, {"provider_message_id": inbound_payload.provider_message_id}):
 		return None
 	message_type = OUTBOUND_TYPES.get(message.kind)
 	if not message_type:
 		return None
-	is_group = bool(p.is_group) or str(p.chat_jid or "").endswith("@g.us")
-	phone = None if is_group else normalize(message.counterpart_phone) if message.counterpart_phone else None
-	jid = p.chat_jid if is_group else None
+	is_group = bool(inbound_payload.is_group) or str(inbound_payload.chat_jid or "").endswith("@g.us")
+	phone = (
+		None
+		if is_group
+		else normalize_phone_to_e164(message.counterpart_phone)
+		if message.counterpart_phone
+		else None
+	)
+	jid = inbound_payload.chat_jid if is_group else None
 	if not phone and not jid:
 		return None  # a private chat whose number the platform could not resolve
-	at = p.received_at or now_datetime()
+	sent_at = inbound_payload.received_at or now_datetime()
 	values: dict[str, Any] = {
 		"doctype": OUTBOUND,
 		"device": device,
@@ -361,14 +372,14 @@ def _insert_outbound(device: str, message: HistoryMessage) -> str | None:
 		"phone_e164": phone,
 		"jid": jid,
 		"message_type": message_type,
-		"body": _text(p.body),
-		"caption": _text(p.caption),
-		"mime_type": p.media_mime_type,
+		"body": _strip_lone_surrogates(inbound_payload.body),
+		"caption": _strip_lone_surrogates(inbound_payload.caption),
+		"mime_type": inbound_payload.media_mime_type,
 		"status": "Sent",
-		"sent_at": at,
+		"sent_at": sent_at,
 		"source_type": "History",
-		"provider_message_id": p.provider_message_id,
-		"reply_to_provider_message_id": p.quoted_id,
+		"provider_message_id": inbound_payload.provider_message_id,
+		"reply_to_provider_message_id": inbound_payload.quoted_id,
 	}
 	doc = frappe.get_doc(values)
 	doc.flags.ignore_permissions = True
@@ -380,22 +391,22 @@ def _insert_outbound(device: str, message: HistoryMessage) -> str | None:
 		return None
 	# the read layer orders the outbound side by `creation`, and retention purges by it: the
 	# message's own time, not the import's (insert always stamps now)
-	frappe.db.set_value(OUTBOUND, doc.name, {"creation": at, "modified": at}, update_modified=False)
+	frappe.db.set_value(OUTBOUND, doc.name, {"creation": sent_at, "modified": sent_at}, update_modified=False)
 	return key_for(phone, jid) or True
 
 
 def _apply_edit(device: str, message: HistoryMessage) -> bool | None:
-	p = message.inbound
+	inbound_payload = message.inbound
 	target = message.original_id
-	if not target or p.body is None:
+	if not target or inbound_payload.body is None:
 		return None
-	at = p.received_at or now_datetime()
+	edited_at = inbound_payload.received_at or now_datetime()
 	name = frappe.db.get_value(INBOUND, {"device": device, "provider_message_id": target}, "name")
 	if name:
 		row = frappe.db.get_value(INBOUND, name, ["body", "original_body", "edited_at"], as_dict=True)
-		if row.edited_at and get_datetime(row.edited_at) >= get_datetime(at):
+		if row.edited_at and get_datetime(row.edited_at) >= get_datetime(edited_at):
 			return None
-		values = {"body": _text(p.body), "edited_at": at}
+		values = {"body": _strip_lone_surrogates(inbound_payload.body), "edited_at": edited_at}
 		if not row.original_body:
 			values["original_body"] = row.body
 		with status_writer():
@@ -404,7 +415,9 @@ def _apply_edit(device: str, message: HistoryMessage) -> bool | None:
 	name = frappe.db.get_value(OUTBOUND, {"provider_message_id": target}, "name")
 	if name:
 		with status_writer():
-			frappe.db.set_value(OUTBOUND, name, "body", _text(p.body), update_modified=False)
+			frappe.db.set_value(
+				OUTBOUND, name, "body", _strip_lone_surrogates(inbound_payload.body), update_modified=False
+			)
 		return True
 	return None
 
@@ -418,14 +431,14 @@ def _apply_revoke(device: str, message: HistoryMessage) -> bool | None:
 	)
 	if not name:
 		return None
-	p = message.inbound
+	inbound_payload = message.inbound
 	with status_writer():
 		frappe.db.set_value(
 			INBOUND,
 			name,
 			{
-				"deleted_at": p.received_at or now_datetime(),
-				"deleted_by": p.sender_phone or p.sender_jid or "",
+				"deleted_at": inbound_payload.received_at or now_datetime(),
+				"deleted_by": inbound_payload.sender_phone or inbound_payload.sender_jid or "",
 			},
 			update_modified=False,
 		)

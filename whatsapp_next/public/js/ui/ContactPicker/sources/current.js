@@ -11,7 +11,7 @@ export class CurrentSource extends BaseSource {
 		return "__current";
 	}
 
-	static label() {
+	static default_tab_label() {
 		return __("Current members");
 	}
 
@@ -21,16 +21,8 @@ export class CurrentSource extends BaseSource {
 		this.txt = "";
 		const cfg = this.picker.current_config();
 		this.cfg = cfg;
-		const $head = $('<div class="sanad-picker__head"></div>');
-		$head.append(this.search_box(__("Search by name or phone"), (txt) => this.reload({ txt })));
 		const types = cfg.source_types || [];
-		if (types.length) $head.append(this.select_field(__("Source"), types, (v) => this.reload({ source_type: v })));
-		this.$results = $('<div class="sanad-picker__results"></div>');
-		this.$pager = this.pager((p) => this.reload({ page: p }));
-		this.$foot = $('<div class="sanad-picker__foot"></div>');
-		this.$pane.append($head, this.$results, this.$pager, this.$foot);
-		this.state = this.state_for(this.$results);
-		this.reload();
+		this.search_pane(types.length ? [this.select_field(__("Source"), types, (v) => this.reload({ source_type: v }))] : []);
 	}
 
 	reload({ txt, source_type, page } = {}) {
@@ -40,7 +32,7 @@ export class CurrentSource extends BaseSource {
 		this.state.loading();
 		this.$foot.empty();
 		const args = this.cfg.args({ page: this.page, page_length: this.page_length, search: this.txt || null, source_type: this.source_type || null });
-		return this.call(this.cfg.method, args, { silent: true })
+		return this.call_picker_api(this.cfg.method, args, { silent: true })
 			.then((r) => {
 				let rows = (r && r.rows) || [];
 				// Client-side narrowing for methods without search / source filters.
@@ -56,9 +48,9 @@ export class CurrentSource extends BaseSource {
 					return;
 				}
 				this.state.hide();
-				const $table = this.candidate_table(rows, { show_source: true, disabled_when: (row) => row.status === "Removed", extra_columns: this.cfg.status_field ? [{ label: __("Status"), format: (row) => (row[this.cfg.status_field] ? sanad.ui.StatusBadge.html({ label: __(row[this.cfg.status_field]), colour: this.cfg.status_colour ? this.cfg.status_colour(row) : "gray" }) : "") }] : [] });
+				const $table = this.candidate_table(rows, { show_source: true, disabled_when: (row) => row.status === "Removed", extra_columns: this.cfg.status_field ? [{ label: __("Status"), format: (row) => (row[this.cfg.status_field] ? whatsapp.ui.StatusBadge.html({ label: __(row[this.cfg.status_field]), colour: this.cfg.status_colour ? this.cfg.status_colour(row) : "gray" }) : "") }] : [] });
 				this.$results.html($table);
-				this.$foot.append(this.add_selected_button($table, { source_type: "__current", label: (n) => __("Mark {0} for removal", [ui.format_int(n)]) }));
+				this.$foot.append(this.add_selected_button($table, { source_type: "__current", label: (n) => __("Mark {0} for removal", [ui.format_integer(n)]) }));
 			})
 			.catch((err) => this.state.error(err, { action: { label: __("Retry"), onclick: () => this.reload() } }));
 	}

@@ -10,7 +10,7 @@ from whatsapp_next.api.v1 import quick_send as api
 from whatsapp_next.exceptions import WAInvalidPhoneError, WAPermissionError, WAValidationError
 from whatsapp_next.tests.conftest_frappe import as_user, delete_all, ensure_device, ensure_settings
 
-P1, P2 = "+966500920101", "+966500920102"
+P1, P2 = "+967784499996", "+967777667663"
 TAG = "ApiTest quick"
 
 
@@ -18,20 +18,20 @@ class TestApiQuickSend(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		cls.device = ensure_device("ApiTest Device QS", "WAD-TEST-API21", phone="+966500920001")
+		cls.device = ensure_device("ApiTest Device QS", "WAD-TEST-API21", phone="+967777999579")
 		ensure_settings(default_device=cls.device, queue_paused=0, send_only_to_known_numbers=0)
 
 	@classmethod
 	def tearDownClass(cls):
-		cls._clean()
+		cls._delete_test_sent_messages()
 		super().tearDownClass()
 
 	def setUp(self):
-		self._clean()
+		self._delete_test_sent_messages()
 		ensure_settings(queue_paused=0, send_only_to_known_numbers=0)
 
 	@staticmethod
-	def _clean():
+	def _delete_test_sent_messages():
 		names = frappe.get_all("WhatsApp Log", filters={"body": ("like", f"{TAG}%")}, pluck="name")
 		if names:
 			delete_all("WhatsApp Queue Item", {"outbound_message": ("in", names)})
@@ -52,7 +52,7 @@ class TestApiQuickSend(IntegrationTestCase):
 			self.assertIn(self.device, [d["name"] for d in ctx["devices"]])
 			self.assertEqual(ctx["policy"], {"send_only_to_known_numbers": False})
 			self.assertEqual(ctx["default_device"], self.device)
-			ctx = api.get_context(phone="0500920101")
+			ctx = api.get_context(phone="+967784499996")
 			rec = ctx["recipient"]
 			self.assertEqual((rec["phone_e164"], rec["blacklisted"]), (P1, False))
 			self.assertIn("known", rec)
@@ -115,7 +115,7 @@ class TestApiQuickSend(IntegrationTestCase):
 			# a number still being typed does not break the preview
 			self.assertEqual(api.preview(template=tpl, phone="05", **ref)["errors"], [])
 		finally:
-			self._clean()
+			self._delete_test_sent_messages()
 			delete_all("WhatsApp Template", {"name": tpl})
 			delete_all("WhatsApp Number", {"name": ("in", [P1, P2])})
 			frappe.delete_doc("ToDo", todo.name, force=True, ignore_permissions=True)
@@ -151,7 +151,7 @@ class TestApiQuickSend(IntegrationTestCase):
 				)
 			self.assertFalse(frappe.db.exists("WhatsApp Log", {"reference_name": todo.name}))
 		finally:
-			self._clean()
+			self._delete_test_sent_messages()
 			frappe.delete_doc("ToDo", todo.name, force=True, ignore_permissions=True)
 
 	def test_a_message_about_a_document_is_a_form_message(self):
@@ -180,13 +180,13 @@ class TestApiQuickSend(IntegrationTestCase):
 			)
 			self.assertEqual(frappe.db.get_value("WhatsApp Queue Item", res["queue_item"], "priority"), 1)
 		finally:
-			self._clean()
+			self._delete_test_sent_messages()
 			frappe.db.delete("Comment", {"reference_doctype": "ToDo", "reference_name": todo.name})
 			frappe.delete_doc("ToDo", todo.name, force=True, ignore_permissions=True)
 
 	def test_send(self):
 		with as_user("WhatsApp Agent"):
-			res = api.send(device=self.device, phone="0500920101", body=f"{TAG} hello")
+			res = api.send(device=self.device, phone="+967784499996", body=f"{TAG} hello")
 			log = frappe.db.get_value(
 				"WhatsApp Log",
 				res["outbound"],

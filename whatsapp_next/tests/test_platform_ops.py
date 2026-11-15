@@ -32,7 +32,7 @@ class EndpointProvider(FakeProvider):
 
 	def configure_webhook(self, endpoint_url, events, max_retries):
 		state = WebhookEndpointState(
-			endpoint_id=self._next("WEP"),
+			endpoint_id=self._generate_fake_id("WEP"),
 			url=endpoint_url,
 			status="Active",
 			events=tuple(events),
@@ -78,7 +78,7 @@ class TestPlatformOps(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		cls.device = ensure_device("Ops Device", "WAD-TEST-OP01", phone="+966500000081")
+		cls.device = ensure_device("Ops Device", "WAD-TEST-OP01", phone="+967784499996")
 		# This site's webhook registration goes back afterwards (it may be a live dev site).
 		s = frappe.get_single("WhatsApp Settings")
 		# and its subscription cache: `test_usage_sync` writes the fake provider's plan over it
@@ -183,7 +183,7 @@ class TestPlatformOps(IntegrationTestCase):
 			self.assertEqual(webhook_setup.set_status("Disabled").status, "Disabled")
 			with self.assertRaises(WAValidationError):
 				webhook_setup.set_status("Locked")
-			self.assertTrue(webhook_setup.test()["ok"])
+			self.assertTrue(webhook_setup.send_test_webhook()["ok"])
 			provider.store[summary.endpoint_id] = WebhookEndpointState(
 				endpoint_id=summary.endpoint_id,
 				url=summary.url,
@@ -220,11 +220,11 @@ class TestPlatformOps(IntegrationTestCase):
 
 			remove_encrypted_password("WhatsApp Settings", "WhatsApp Settings", "webhook_secret")
 			ensure_settings(webhook_endpoint=None, webhook_endpoint_url=None)
-			stored = secrets.read
+			stored = secrets.read_password_field
 			linked = lambda field: "a-key" if field == "customer_api_key" else stored(field)  # noqa: E731
 			with (
 				patch.object(webhook_setup, "receiver_url", return_value="http://wn.example.test:8000/x"),
-				patch.object(secrets, "read", side_effect=linked),
+				patch.object(secrets, "read_password_field", side_effect=linked),
 			):
 				self.assertEqual(webhook_setup.sync_status().endpoint_id, summary.endpoint_id)
 			self.assertEqual(
@@ -286,7 +286,7 @@ class TestPlatformOps(IntegrationTestCase):
 					"doctype": "WhatsApp Log",
 					"device": self.device,
 					"recipient_type": "Individual",
-					"phone": "+966500000082",
+					"phone": "+967777667663",
 					"message_type": "Text",
 					"body": "retention-test",
 					"status": "Sent",
@@ -298,7 +298,7 @@ class TestPlatformOps(IntegrationTestCase):
 					"doctype": "WhatsApp Log",
 					"device": self.device,
 					"recipient_type": "Individual",
-					"phone": "+966500000083",
+					"phone": "+967777999579",
 					"message_type": "Text",
 					"body": "retention-test keep",
 					"status": "Queued",
@@ -311,7 +311,7 @@ class TestPlatformOps(IntegrationTestCase):
 					"outbound_message": log.name,
 					"device": self.device,
 					"status": "Completed",
-					"phone_e164": "+966500000082",
+					"phone_e164": "+967777667663",
 				}
 			).insert(ignore_permissions=True)
 			# a run that failed before its cleanup leaves the event behind (it commits)

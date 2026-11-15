@@ -100,7 +100,7 @@ class TestBackup(IntegrationTestCase):
 		row = {**rows[0], "name": name, **changes}
 		return {**data, "settings": {}, "records": {doctype: [row]}}
 
-	def _drop(self, doctype: str, name: str) -> None:
+	def _delete_doc_if_exists(self, doctype: str, name: str) -> None:
 		if frappe.db.exists(doctype, name):
 			frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)
 
@@ -127,7 +127,7 @@ class TestBackup(IntegrationTestCase):
 				frappe.db.get_value("WhatsApp Notification", name, ["enabled", "send_count"]), (0, 0)
 			)
 		finally:
-			self._drop("WhatsApp Notification", name)
+			self._delete_doc_if_exists("WhatsApp Notification", name)
 
 	def test_a_campaign_comes_in_as_a_draft_and_an_existing_one_is_kept(self):
 		name = "BackupTest Campaign"
@@ -141,7 +141,7 @@ class TestBackup(IntegrationTestCase):
 			again = backup.import_backup(data)
 			self.assertEqual((again["created"], again["updated"], again["kept"]), (0, 0, 1))
 		finally:
-			self._drop("WhatsApp Campaign", name)
+			self._delete_doc_if_exists("WhatsApp Campaign", name)
 
 	def test_a_file_that_is_not_a_backup_is_refused(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -165,7 +165,7 @@ class TestBackup(IntegrationTestCase):
 			patch.object(backup.frappe.db, "set_single_value"),
 			patch.object(backup.frappe.db, "delete", side_effect=lambda *a, **k: deleted.append(a)),
 			patch.object(backup, "account_key", return_value=current_key),
-			patch.object(backup.audit, "log"),
+			patch.object(backup.audit, "record_audit_entry"),
 		):
 			frappe.flags.wa_allow_account_switch = True
 			try:
@@ -227,11 +227,11 @@ class TestBackup(IntegrationTestCase):
 			patch.object(backup.frappe.db, "set_value"),
 			patch.object(backup.frappe.db, "set_default"),
 			patch.object(backup.frappe.db, "commit"),
-			patch.object(backup.audit, "log"),
+			patch.object(backup.audit, "record_audit_entry"),
 		):
 			counts = backup.purge_previous_account(pending)
 		self.assertEqual(set(counts), {dt for dt in backup.ACCOUNT_DOCTYPES if frappe.db.table_exists(dt)})
 		self.assertFalse(set(backup.DOCTYPES) & set(deleted))  # what a backup carries stays
-		scope = backup._scope(pending)
+		scope = backup._build_previous_account_filters(pending)
 		self.assertEqual(scope["WhatsApp Log"], {"creation": ("<=", pending["at"])})
 		self.assertEqual(scope["WhatsApp Device"]["name"], ("in", ["DEV-OLD"]))

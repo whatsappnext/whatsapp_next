@@ -20,7 +20,7 @@ from whatsapp_next.exceptions import WAProviderUnavailableError
 from whatsapp_next.providers import exceptions as pex
 from whatsapp_next.providers.schemas import WebhookEvent
 from whatsapp_next.services.guards import status_writer
-from whatsapp_next.services.phone import is_group_or_lid, key_for, normalize
+from whatsapp_next.services.phone import is_group_or_lid, key_for, normalize_phone_to_e164
 
 COMMAND_TOKENS = ("#", "/", "!")
 
@@ -33,14 +33,14 @@ def resolve_contact(phone_e164: str | None) -> str | None:
 
 
 def _sender_fields(event: WebhookEvent) -> dict[str, Any]:
-	p = event.inbound
-	raw_phone = p.sender_phone or None
-	e164 = normalize(raw_phone) if raw_phone else None
-	sender_jid = p.sender_jid or p.from_jid
+	inbound_payload = event.inbound
+	raw_phone = inbound_payload.sender_phone or None
+	e164 = normalize_phone_to_e164(raw_phone) if raw_phone else None
+	sender_jid = inbound_payload.sender_jid or inbound_payload.from_jid
 	if not e164 and sender_jid and not is_group_or_lid(sender_jid):
-		e164 = normalize(sender_jid)
-	chat_jid = p.chat_jid or sender_jid
-	is_group = bool(p.is_group) or bool(chat_jid and chat_jid.lower().endswith("@g.us"))
+		e164 = normalize_phone_to_e164(sender_jid)
+	chat_jid = inbound_payload.chat_jid or sender_jid
+	is_group = bool(inbound_payload.is_group) or bool(chat_jid and chat_jid.lower().endswith("@g.us"))
 	return {
 		"phone": raw_phone or e164,
 		"phone_e164": e164,
@@ -49,6 +49,91 @@ def _sender_fields(event: WebhookEvent) -> dict[str, Any]:
 		"sender_jid": sender_jid,
 		"is_group": 1 if is_group else 0,
 	}
+
+
+def _flag(value: Any) -> bool:
+	return value is True or str(value).strip().lower() in ("1", "true", "yes")
+
+
+def _jid_user(jid: str | None) -> str:
+	"""The account part of a JID, without the linked device: `8835…:44@lid` → `8835…`."""
+	return str(jid or "").split("@")[0].split(":")[0]
+
+
+def is_from_this_device(event: WebhookEvent, device: str) -> bool:
+	"""True for a message the device's own WhatsApp sent: from the phone, from another device
+	linked to the same number, or a tap in the number's chat with itself. The engine says so
+	(`is_from_me`); a sender whose number is the device's own number is taken the same way."""
+	raw = event.raw or {}
+	nested = raw.get("data") if isinstance(raw.get("data"), dict) else {}
+	if _flag(raw.get("is_from_me")) or _flag(nested.get("is_from_me")):
+		return True
+	if not event.inbound:
+		return False
+	sender = _sender_fields(event)["phone_e164"]
+	own = frappe.db.get_value("WhatsApp Device", device, "phone_e164")
+	return bool(sender and own and sender == own)
+
+
+def _is_chat_with_itself(event: WebhookEvent, device: str) -> bool:
+	inbound_payload = event.inbound
+	chat = inbound_payload.chat_jid or ""
+	if chat.lower().endswith("@g.us"):
+		return False
+	sender = inbound_payload.sender_jid or inbound_payload.from_jid
+	if sender and _jid_user(chat) == _jid_user(sender):
+		return True
+	own = frappe.db.get_value("WhatsApp Device", device, "phone_e164")
+	return bool(own and not is_group_or_lid(chat) and normalize_phone_to_e164(chat) == own)
+
+
+def _counterpart_phone(event: WebhookEvent, device: str) -> str | None:
+	"""The number of the customer the device wrote to: the chat's number, or for a privacy id
+	(`…@lid`) the number this site already holds for it from that customer's own messages."""
+	chat = event.inbound.chat_jid or ""
+	if not chat or chat.lower().endswith("@g.us"):
+		return None
+	if not is_group_or_lid(chat):
+		return normalize_phone_to_e164(chat)
+	for field in ("chat_jid", "jid", "sender_jid"):
+		phone = frappe.db.get_value(
+			"WhatsApp Inbound Message",
+			{field: chat, "phone_e164": ("is", "set")},
+			"phone_e164",
+			order_by="creation desc",
+		)
+		if phone:
+			return phone
+	return frappe.db.get_value("WhatsApp Number", {"jid": chat}, "phone_e164")
+
+
+def record_own_message(event: WebhookEvent, *, device: str) -> str | None:
+	"""Keep a message the device's own WhatsApp sent (`is_from_this_device`) on the outbound side,
+	as the history import keeps one: a `WhatsApp Log` row, source History, status Sent. Returns
+	its name; None when nothing is kept (the chat with itself, a type the outbound side has no
+	place for, a privacy id whose number this site does not know, or a reaction)."""
+	from whatsapp_next.providers.schemas import HistoryMessage
+	from whatsapp_next.services import history_import
+	from whatsapp_next.services.numbers_materializer import refresh_keys
+
+	inbound_payload = event.inbound
+	if not inbound_payload or not inbound_payload.provider_message_id:
+		return None
+	if event.event_name != "message.received" or _is_chat_with_itself(event, device):
+		return None
+	message = HistoryMessage(
+		kind=str(inbound_payload.message_type or "Text").strip().lower().replace(" ", "_"),
+		from_me=True,
+		inbound=inbound_payload,
+		counterpart_phone=_counterpart_phone(event, device),
+		raw=event.raw or {},
+	)
+	key = history_import.store_or_apply_history_message(device, message)
+	if isinstance(key, str):
+		refresh_keys([key])
+	return frappe.db.get_value(
+		"WhatsApp Log", {"provider_message_id": inbound_payload.provider_message_id}, "name"
+	)
 
 
 def _existing(device: str, provider_message_id: str | None) -> str | None:
@@ -71,8 +156,8 @@ def record_inbound(
 	device = device or _device_for(event)
 	if not device:
 		return None
-	p = event.inbound
-	dup = _existing(device, p.provider_message_id)
+	inbound_payload = event.inbound
+	dup = _existing(device, inbound_payload.provider_message_id)
 	if dup:
 		return dup
 	fields = _sender_fields(event)
@@ -85,27 +170,27 @@ def record_inbound(
 		**fields,
 		# the sender's own WhatsApp name, else a name this site knows them by; in a group, the
 		# group's name beside it (owner, 2026-10-08)
-		"display_name": p.push_name or _known_name(fields, contact),
-		"group_name": p.group_name if fields.get("is_group") else None,
+		"display_name": inbound_payload.push_name or _known_name(fields, contact),
+		"group_name": inbound_payload.group_name if fields.get("is_group") else None,
 		"contact": contact,
-		"message_type": p.message_type or "Text",
-		"body": p.body,
-		"caption": p.caption,
-		"media_url": p.media_url,
-		"media_mime_type": p.media_mime_type,
-		"provider_message_id": p.provider_message_id or event.event_id,
-		"quoted_provider_message_id": p.quoted_id,
-		"selected_option_id": p.selected_id,
-		"received_at": p.received_at or event.timestamp or now_datetime(),
+		"message_type": inbound_payload.message_type or "Text",
+		"body": inbound_payload.body,
+		"caption": inbound_payload.caption,
+		"media_url": inbound_payload.media_url,
+		"media_mime_type": inbound_payload.media_mime_type,
+		"provider_message_id": inbound_payload.provider_message_id or event.event_id,
+		"quoted_provider_message_id": inbound_payload.quoted_id,
+		"selected_option_id": inbound_payload.selected_id,
+		"received_at": inbound_payload.received_at or event.timestamp or now_datetime(),
 		"webhook_event": webhook_event_name,
 		"command_status": "None",
 	}
-	if p.location:
+	if inbound_payload.location:
 		values.update(
 			{
-				"location_latitude": p.location.latitude,
-				"location_longitude": p.location.longitude,
-				"location_name": p.location.name,
+				"location_latitude": inbound_payload.location.latitude,
+				"location_longitude": inbound_payload.location.longitude,
+				"location_name": inbound_payload.location.name,
 			}
 		)
 	try:
@@ -115,12 +200,12 @@ def record_inbound(
 			doc.insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
 		return _existing(device, values["provider_message_id"])
-	_after_insert(doc.name, device, fields, p.message_type or "Text", p.body)
-	if p.media_url:
+	_after_insert(doc.name, device, fields, inbound_payload.message_type or "Text", inbound_payload.body)
+	if inbound_payload.media_url:
 		frappe.enqueue(
 			"whatsapp_next.services.inbound.fetch_media",
 			inbound_name=doc.name,
-			file_name=p.media_file_name,
+			file_name=inbound_payload.media_file_name,
 			queue="short",
 			job_id=f"wa-media-{doc.name}",
 			deduplicate=True,
@@ -211,14 +296,14 @@ def record_change(event: WebhookEvent, *, device: str) -> str | None:
 	if not name:
 		return None
 	row = frappe.db.get_value("WhatsApp Inbound Message", name, ["body", "original_body"], as_dict=True)
-	at = event.timestamp or now_datetime()
+	changed_at = event.timestamp or now_datetime()
 	if event.event_name == "message.edited":
-		values = {"body": raw.get("new_text") or row.body, "edited_at": at}
+		values = {"body": raw.get("new_text") or row.body, "edited_at": changed_at}
 		if not row.original_body:
 			values["original_body"] = raw.get("original_text") or row.body
 	else:
 		values = {
-			"deleted_at": at,
+			"deleted_at": changed_at,
 			"deleted_by": raw.get("deleted_by_number") or raw.get("deleted_by") or "",
 		}
 		if raw.get("original_text") and not row.body:
@@ -298,8 +383,8 @@ def record_reaction(
 	device = device or _device_for(event)
 	if not device:
 		return None
-	p = event.inbound
-	dup = _existing(device, p.provider_message_id)
+	inbound_payload = event.inbound
+	dup = _existing(device, inbound_payload.provider_message_id)
 	if dup:
 		return dup
 	fields = _sender_fields(event)
@@ -307,14 +392,14 @@ def record_reaction(
 		"doctype": "WhatsApp Inbound Message",
 		"device": device,
 		**fields,
-		"display_name": p.push_name,
+		"display_name": inbound_payload.push_name,
 		"contact": resolve_contact(fields["phone_e164"]) if fields["phone_e164"] else None,
 		"message_type": "Reaction",
-		"body": p.reaction,
-		"reaction": p.reaction,
-		"reaction_to_provider_message_id": p.reaction_to,
-		"provider_message_id": p.provider_message_id or event.event_id,
-		"received_at": p.received_at or event.timestamp or now_datetime(),
+		"body": inbound_payload.reaction,
+		"reaction": inbound_payload.reaction,
+		"reaction_to_provider_message_id": inbound_payload.reaction_to,
+		"provider_message_id": inbound_payload.provider_message_id or event.event_id,
+		"received_at": inbound_payload.received_at or event.timestamp or now_datetime(),
 		"webhook_event": webhook_event_name,
 		"command_status": "None",
 	}
@@ -373,7 +458,7 @@ def _after_insert(
 	_publish(name, device, _conversation_key(fields))
 	if should_route(message_type, body, bool(fields["is_group"])):
 		frappe.enqueue(
-			"whatsapp_next.services.command_router.route",
+			"whatsapp_next.services.command_router.route_inbound_message",
 			inbound_name=name,
 			queue="short",
 			job_id=f"wa-cmd-{name}",
@@ -439,7 +524,7 @@ MATCHED_STATUSES = ("Matched", "Executed", "Failed", "Blocked")
 REPLY_SAMPLE = 5000
 
 
-def summary(days: int | None = 30) -> dict[str, Any]:
+def get_inbound_summary(days: int | None = 30) -> dict[str, Any]:
 	"""The Inbound screen's figures (09 G-07) over the last `days` (all time when falsy):
 	`{total, by_status{}, matched, executed, unmatched, match_rate, avg_reply_seconds,
 	replies_measured}`. `matched` = a command recognised the message (whatever happened next);
@@ -448,15 +533,15 @@ def summary(days: int | None = 30) -> dict[str, Any]:
 	window."""
 	from frappe.utils import add_days, get_datetime, nowdate
 
-	msg = frappe.qb.DocType("WhatsApp Inbound Message")
+	inbound_message_table = frappe.qb.DocType("WhatsApp Inbound Message")
 	since = get_datetime(add_days(nowdate(), -(cint(days) - 1))) if cint(days) else None
 	query = (
-		frappe.qb.from_(msg)
-		.select(msg.command_status, frappe.query_builder.functions.Count("*"))
-		.groupby(msg.command_status)
+		frappe.qb.from_(inbound_message_table)
+		.select(inbound_message_table.command_status, frappe.query_builder.functions.Count("*"))
+		.groupby(inbound_message_table.command_status)
 	)
 	if since:
-		query = query.where(msg.received_at >= since)
+		query = query.where(inbound_message_table.received_at >= since)
 	by_status = {(status or "None"): int(n) for status, n in query.run()}
 	total = sum(by_status.values())
 	matched = sum(by_status.get(s, 0) for s in MATCHED_STATUSES)

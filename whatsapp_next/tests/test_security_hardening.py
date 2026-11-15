@@ -24,7 +24,7 @@ PREFIX = "WA SecTest"
 class TestTemplateSandbox(IntegrationTestCase):
 	def _render(self, source: str) -> templates.RenderResult:
 		ctx = {"doc": frappe.get_doc("User", "Administrator"), "recipient": frappe._dict(display_name="R")}
-		return templates.render(source, ctx)
+		return templates.render_message_template(source, ctx)
 
 	def test_no_data_access_from_a_message_body(self):
 		for source in (
@@ -115,7 +115,7 @@ class TestUserComposedMessages(IntegrationTestCase):
 
 	def test_quick_send_preview_needs_read_on_the_record(self):
 		with as_user("WhatsApp Agent"), self.assertRaises(frappe.PermissionError):
-			quick_send.preview(
+			quick_send.preview_message_body(
 				body="{{ doc.name }}", reference_doctype="User", reference_name="Administrator"
 			)
 
@@ -124,14 +124,14 @@ class TestUserComposedMessages(IntegrationTestCase):
 			with self.assertRaises(frappe.PermissionError):
 				quick_send_api.send(
 					device="x",
-					phone="+966500000001",
+					phone="+967784499996",
 					body="hi",
 					reference_doctype="User",
 					reference_name="Administrator",
 				)
 			with self.assertRaises(WAPermissionError):
 				quick_send_api.send(
-					device="x", phone="+966500000001", message_type="Document", attachment=self.file.file_url
+					device="x", phone="+967784499996", message_type="Document", attachment=self.file.file_url
 				)
 		compose.assert_not_called()
 
@@ -141,7 +141,7 @@ class TestSimulatorImpersonation(IntegrationTestCase):
 		customer = frappe.db.get_value("Customer", {}, "name")
 		if not customer:
 			self.skipTest("no Customer on this site")
-		self.contact = ensure_contact(f"{PREFIX} Party", phone="+966500000077")
+		self.contact = ensure_contact(f"{PREFIX} Party", phone="+967777999579")
 		doc = frappe.get_doc("Contact", self.contact)
 		if not any(link.link_doctype == "Customer" for link in doc.links):
 			doc.append("links", {"link_doctype": "Customer", "link_name": customer})
@@ -153,10 +153,10 @@ class TestSimulatorImpersonation(IntegrationTestCase):
 	def test_agent_cannot_run_commands_as_a_party(self):
 		with as_user("WhatsApp Agent"):
 			with self.assertRaises(WAPermissionError):
-				simulator_api._require_manager_to_act_as_party("+966500000077")
-			simulator_api._require_manager_to_act_as_party("+966500000078")  # no party: allowed
+				simulator_api._require_manager_to_act_as_party("+967777999579")
+			simulator_api._require_manager_to_act_as_party("+967784499996")  # no party: allowed
 		with as_user("WhatsApp Manager"):
-			simulator_api._require_manager_to_act_as_party("+966500000077")
+			simulator_api._require_manager_to_act_as_party("+967777999579")
 
 
 class TestDocumentInfoOwnership(IntegrationTestCase):
@@ -178,7 +178,7 @@ class TestDocumentInfoOwnership(IntegrationTestCase):
 			script = fp.read().replace("@function     document_info", "@function     _test_document_info")
 		cls.script = ff.ensure_script("wa_fn__test_document_info", script)
 
-	def _run(self, party_name: str | None, name: str, **values):
+	def _run_document_info_function(self, party_name: str | None, name: str, **values):
 		from whatsapp_next.services import function_header as fh
 		from whatsapp_next.services import function_runner
 
@@ -191,11 +191,11 @@ class TestDocumentInfoOwnership(IntegrationTestCase):
 		if not invoice:
 			self.skipTest("no Sales Invoice on this site")
 		# a party field the document does not have: refused, never "every document of the type"
-		refused = self._run("Someone", invoice.name, party_field="no_such_field")
+		refused = self._run_document_info_function("Someone", invoice.name, party_field="no_such_field")
 		self.assertTrue(refused["error"])
 		self.assertEqual(refused["messages"], [])
-		other = self._run("Someone Else", invoice.name)
-		missing = self._run("Someone Else", "NO-SUCH-DOC")
+		other = self._run_document_info_function("Someone Else", invoice.name)
+		missing = self._run_document_info_function("Someone Else", "NO-SUCH-DOC")
 		# one answer for "not yours" and "does not exist"
 		self.assertEqual([m["reply"] for m in other["messages"]], ["not_found_text"])
 		self.assertEqual(
@@ -203,8 +203,8 @@ class TestDocumentInfoOwnership(IntegrationTestCase):
 			missing["messages"][0]["text"].replace("NO-SUCH-DOC", "?"),
 		)
 		self.assertNotIn("status", other["data"])  # nothing of the document is read out
-		own = self._run(invoice.customer, invoice.name)
+		own = self._run_document_info_function(invoice.customer, invoice.name)
 		self.assertIsNone(own["error"])
 		self.assertEqual([m["reply"] for m in own["messages"]], ["result_text"])
 		# no party at all: the script refuses
-		self.assertTrue(self._run(None, invoice.name)["error"])
+		self.assertTrue(self._run_document_info_function(None, invoice.name)["error"])

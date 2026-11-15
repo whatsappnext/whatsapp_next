@@ -12,11 +12,11 @@
 // writes goes through `frm.set_value` / `frappe.model.set_value`, so dirty state, validation,
 // permissions and save are Frappe's throughout.
 
-const K = whatsapp_next.campaigns;
-const B = whatsapp_next.campaign;
+const campaign_helpers = whatsapp_next.campaigns;
+const campaign_builder = whatsapp_next.campaign;
 
 // The one status → colour source for recipient rows; DataList and the ContactPicker read it
-// through `sanad.ui.indicator_for`.
+// through `whatsapp.ui.indicator_for`.
 frappe.listview_settings["WhatsApp Campaign Recipient"] = {
 	get_indicator(doc) {
 		const colour = { Pending: "gray", Queued: "blue", Sent: "green", Delivered: "green", Read: "green", Failed: "red", Cancelled: "red", Removed: "gray" }[doc.status] || "gray";
@@ -27,10 +27,10 @@ frappe.listview_settings["WhatsApp Campaign Recipient"] = {
 /** Our screen's own container, in front of the layout that saves. */
 function mount(frm) {
 	const $layout = frm.$wrapper.find(".form-layout").first();
-	$layout.addClass("wa-cb-native");
+	$layout.addClass("whatsapp-campaign-builder-native");
 	if (!frm.wa_root || !frm.wa_root.closest("body").length) {
-		frm.$wrapper.find("> .wa-cb").remove();
-		frm.wa_root = $('<div class="sanad-kit wa-cb"></div>').insertBefore($layout);
+		frm.$wrapper.find("> .whatsapp-campaign-builder").remove();
+		frm.wa_root = $('<div class="whatsapp-kit whatsapp-campaign-builder"></div>').insertBefore($layout);
 	}
 	// Desk keeps one form per DocType and hands it the next document: a builder left over from the
 	// campaign opened before this one would carry that campaign's step and tab.
@@ -39,7 +39,7 @@ function mount(frm) {
 		frm.wa_builder = null;
 	}
 	if (!frm.wa_builder) {
-		frm.wa_builder = new B.Builder({ frm, wrapper: frm.wa_root });
+		frm.wa_builder = new campaign_builder.Builder({ frm, wrapper: frm.wa_root });
 		frm.wa_builder.docname = frm.doc.name;
 	} else {
 		frm.wa_builder.refresh();
@@ -47,28 +47,28 @@ function mount(frm) {
 	return frm.wa_builder;
 }
 
-const sync = (frm) => frm.wa_builder && frm.wa_builder.sync();
+const sync_campaign_builder = (frm) => frm.wa_builder && frm.wa_builder.refresh_header_and_stepper();
 
 function subscribe(frm) {
 	unsubscribe(frm);
 	// The runner publishes each change twice — to the document's room and to everyone — and a busy
 	// campaign publishes on every status callback: one progress read per burst, not one per event.
-	const catch_up = sanad.ui.debounce(() => {
+	const catch_up = whatsapp.ui.debounce(() => {
 		if (!frm.wa_builder) return;
-		frm.wa_builder.sync();
+		frm.wa_builder.refresh_header_and_stepper();
 		if (frm.wa_builder.pane && frm.wa_builder.pane.load_progress) frm.wa_builder.pane.load_progress();
 	}, 400);
-	frm.sanad_realtime = (data) => {
+	frm.whatsapp_realtime = (data) => {
 		if (!data || data.campaign !== frm.doc.name) return;
 		if (data.status && data.status !== frm.doc.status) return frm.is_dirty() ? null : frm.reload_doc();
 		catch_up();
 	};
-	frappe.realtime.on("wa:campaign:status", frm.sanad_realtime);
+	frappe.realtime.on("wa:campaign:status", frm.whatsapp_realtime);
 }
 
 function unsubscribe(frm) {
-	if (frm.sanad_realtime) frappe.realtime.off("wa:campaign:status", frm.sanad_realtime);
-	frm.sanad_realtime = null;
+	if (frm.whatsapp_realtime) frappe.realtime.off("wa:campaign:status", frm.whatsapp_realtime);
+	frm.whatsapp_realtime = null;
 }
 
 frappe.ui.form.on("WhatsApp Campaign", {
@@ -83,7 +83,7 @@ frappe.ui.form.on("WhatsApp Campaign", {
 		// "Campaign for this group" (Contact Group list / form) — new_doc drops unknown route_options,
 		// so the group travels in frappe.flags and the picker opens on it after the first save.
 		if (frappe.flags.wa_picker_group) {
-			frm.sanad_picker_group = frappe.flags.wa_picker_group;
+			frm.whatsapp_picker_group = frappe.flags.wa_picker_group;
 			frappe.flags.wa_picker_group = null;
 		}
 	},
@@ -91,27 +91,27 @@ frappe.ui.form.on("WhatsApp Campaign", {
 	refresh(frm) {
 		// the screen takes the height it has and scrolls inside itself, so the page it sits on
 		// must not add a second scroll under it
-		frm.$wrapper.addClass("wa-campaign");
-		if (K.TERMINAL.includes(frm.doc.status)) {
+		frm.$wrapper.addClass("whatsapp-campaign");
+		if (campaign_helpers.TERMINAL.includes(frm.doc.status)) {
 			frm.set_read_only();
 			frm.disable_save();
 		}
 		const builder = mount(frm);
 		if (!frm.is_new()) subscribe(frm);
 
-		if (frm.sanad_picker_group && !frm.is_new() && !frm.is_dirty()) {
-			const group = frm.sanad_picker_group;
-			frm.sanad_picker_group = null;
-			builder.go(2);
+		if (frm.whatsapp_picker_group && !frm.is_new() && !frm.is_dirty()) {
+			const group = frm.whatsapp_picker_group;
+			frm.whatsapp_picker_group = null;
+			builder.go_to_step(2);
 			if (builder.pane && builder.pane.open_picker) builder.pane.open_picker("add", { source: "groups", ref: group });
 		}
 	},
 
 	// the header, the summary aside and the sticky bar all count the messages; a row added or
 	// taken away changes what the campaign costs, so they are told
-	messages_add: sync,
-	messages_remove: sync,
-	messages_move: sync,
+	messages_add: sync_campaign_builder,
+	messages_remove: sync_campaign_builder,
+	messages_move: sync_campaign_builder,
 
 	on_hide(frm) {
 		unsubscribe(frm);
@@ -121,9 +121,9 @@ frappe.ui.form.on("WhatsApp Campaign", {
 // the delay between two messages is part of how long the campaign takes
 frappe.ui.form.on("WhatsApp Campaign Message", {
 	delay_seconds(frm) {
-		sync(frm);
+		sync_campaign_builder(frm);
 	},
 	message_type(frm) {
-		sync(frm);
+		sync_campaign_builder(frm);
 	},
 });

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -82,6 +81,7 @@ class SampleDoc(frappe._dict):
 	(`items`, the usual child table) is the field, not the dict method (see `_message_jenv`)."""
 
 	def get_formatted(self, fieldname, *args, **kwargs):
+		"""The sample value as text, empty when the sample has none."""
 		value = self.get(fieldname)
 		return "" if value is None else cstr(value)
 
@@ -110,12 +110,13 @@ def _message_jenv():
 
 	class MessageEnvironment(type(base)):
 		def is_safe_attribute(self, obj, attr, value):
+			"""A record's methods are closed to a message, except the read methods in `_DOC_READ_METHODS`."""
 			if isinstance(obj, Document) and callable(value) and attr not in _DOC_READ_METHODS:
 				return False
 			return super().is_safe_attribute(obj, attr, value)
 
 		def getattr(self, obj, attribute):
-			# a sample's `doc.items` is its child table (empty without sample rows), never dict.items
+			"""A sample's `doc.items` is its child table (empty without sample rows), never dict.items."""
 			if isinstance(obj, SampleDoc) and attribute in _FIELD_NOT_METHOD:
 				return obj.get(attribute) or []
 			return super().getattr(obj, attribute)
@@ -144,7 +145,7 @@ def compile_check(source: str | None) -> list[str]:
 	return []
 
 
-def render(
+def render_message_template(
 	source: str | None, context: dict[str, Any] | None = None, *, strict: bool = False
 ) -> RenderResult:
 	"""Render `source` with Frappe's sandboxed Jinja.
@@ -153,13 +154,13 @@ def render(
 	(used by previews, where the user wants to see the error)."""
 	if not (source or "").strip():
 		return RenderResult(text="")
-	ctx = dict(context or {})
+	render_context = dict(context or {})
 	try:
 		# Frappe's sandbox, but with the message globals only (see `_message_jenv`); the raw
 		# Jinja exception is kept instead of Frappe's HTML-wrapped ValidationError.
 		if ".__" in source:
 			raise TemplateError(_("Illegal template"))
-		text = _message_jenv().from_string(source).render(ctx)
+		text = _message_jenv().from_string(source).render(render_context)
 	except Exception as exc:
 		message = f"{type(exc).__name__}: {cstr(exc)}"[:_MAX_ERROR]
 		if strict:
@@ -171,7 +172,7 @@ def render(
 
 def render_text(source: str | None, context: dict[str, Any] | None = None, *, fallback: str = "") -> str:
 	"""Convenience: rendered text, or `fallback` on error (never raises)."""
-	result = render(source, context)
+	result = render_message_template(source, context)
 	return result.text if result.ok else fallback
 
 
@@ -222,7 +223,7 @@ def context_for(
 			doc = frappe.get_doc(reference_doctype, reference_name)
 		except frappe.DoesNotExistError:
 			doc = None
-	ctx: dict[str, Any] = {
+	render_context: dict[str, Any] = {
 		"doc": doc if doc is not None else SampleDoc(),
 		"recipient": _recipient(recipient),
 		"now": now_datetime(),
@@ -233,8 +234,8 @@ def context_for(
 		else "",
 	}
 	if extra:
-		ctx.update(extra)
-	return ctx
+		render_context.update(extra)
+	return render_context
 
 
 def sample_context(reference_doctype: str | None, sample_json: str | dict | None = None) -> dict[str, Any]:
@@ -269,11 +270,11 @@ def sample_context(reference_doctype: str | None, sample_json: str | dict | None
 				else:
 					doc = SampleDoc(doc_values)
 			extra = parsed
-	ctx = context_for(reference_doctype, getattr(doc, "name", None), extra, doc=doc)
+	render_context = context_for(reference_doctype, getattr(doc, "name", None), extra, doc=doc)
 	# `context_for` always sets a recipient with blank fields; a sample has nobody, so name one
-	if not any((ctx.get("recipient") or {}).values()):
-		ctx["recipient"] = frappe._dict(phone_e164="+966500000000", display_name=_("Recipient"))
-	return ctx
+	if not any((render_context.get("recipient") or {}).values()):
+		render_context["recipient"] = frappe._dict(phone_e164="+966500000000", display_name=_("Recipient"))
+	return render_context
 
 
 def variables(reference_doctype: str | None) -> list[str]:
@@ -294,13 +295,3 @@ def variables(reference_doctype: str | None) -> list[str]:
 			if c.fieldtype not in _HINT_EXCLUDED_TYPES and c.fieldname
 		]
 	return list(dict.fromkeys(names))
-
-
-_VAR_RE = re.compile(r"{{\s*([a-zA-Z_][\w.]*)")
-
-
-def referenced_names(source: str | None) -> list[str]:
-	"""Top-level names a template references (`{{ doc.x }}` → `doc`), for validation hints."""
-	if not source:
-		return []
-	return list(dict.fromkeys(m.group(1).split(".")[0] for m in _VAR_RE.finditer(source)))

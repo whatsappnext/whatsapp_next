@@ -21,7 +21,7 @@ from whatsapp_next.exceptions import WANotFoundError, WAValidationError
 from whatsapp_next.services import attachments, dispatch, templates
 from whatsapp_next.services.dispatch import OutboundSpec
 from whatsapp_next.services.guards import field_changed
-from whatsapp_next.services.phone import normalize
+from whatsapp_next.services.phone import normalize_phone_to_e164
 
 CACHE_PREFIX = "wa:notif:"
 HANDLED_EVENTS = (
@@ -236,14 +236,14 @@ def _phone_from_field(doc, fieldname: str | None) -> tuple[str | None, str | Non
 			meta = frappe.get_meta(target)
 			for f in ("mobile_no", "phone", "whatsapp_no", "contact_mobile", "phone_no"):
 				if meta.has_field(f):
-					v = frappe.db.get_value(target, value, f)
-					if v and normalize(v):
-						return normalize(v), None
+					linked_phone = frappe.db.get_value(target, value, f)
+					if linked_phone and normalize_phone_to_e164(linked_phone):
+						return normalize_phone_to_e164(linked_phone), None
 			if meta.has_field("contact"):
-				c = frappe.db.get_value(target, value, "contact")
-				return _contact_primary_phone(c), c
+				linked_contact = frappe.db.get_value(target, value, "contact")
+				return _contact_primary_phone(linked_contact), linked_contact
 		return None, None
-	return normalize(str(value)), None
+	return normalize_phone_to_e164(str(value)), None
 
 
 def resolve_recipients(notification, doc, errors: list[str] | None = None) -> list[Recipient]:
@@ -271,9 +271,11 @@ def resolve_recipients(notification, doc, errors: list[str] | None = None) -> li
 				and row.linked_mobile_fieldname
 				and frappe.get_meta(df.options).has_field(row.linked_mobile_fieldname)
 			):
-				phone = normalize(frappe.db.get_value(df.options, linked, row.linked_mobile_fieldname))
+				phone = normalize_phone_to_e164(
+					frappe.db.get_value(df.options, linked, row.linked_mobile_fieldname)
+				)
 		elif row.recipient_type == "Fixed Number":
-			phone = row.phone_e164 or normalize(row.phone)
+			phone = row.phone_e164 or normalize_phone_to_e164(row.phone)
 		if not phone:
 			missing.append(f"row {row.idx}: no valid number")
 			continue
@@ -303,13 +305,13 @@ def recipient_context(phone_e164: str, display_name: str | None = None, contact:
 # ---- job -----------------------------------------------------------------------------------
 
 
-def _body(notification, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
+def _render_notification_body(notification, ctx: dict[str, Any]) -> tuple[str | None, str | None]:
 	source = None
 	if notification.template:
 		source = frappe.db.get_value("WhatsApp Template", notification.template, "body")
 	if not source:
 		source = notification.message
-	result = templates.render(source, ctx)
+	result = templates.render_message_template(source, ctx)
 	return (result.text if result.ok else None), result.error
 
 
@@ -361,8 +363,10 @@ def send_for_document(notification: str, doctype: str, name: str, doc_event: str
 	doc.flags.in_wa_notification = True
 	if not evaluate(notif, doc, doc_event):
 		return {"sent": 0, "skipped": 1, "error": None}
-	ctx = templates.context_for(doctype, name, {"event": doc_event, "notification": notif.name}, doc=doc)
-	body, render_error = _body(notif, ctx)
+	template_context = templates.context_for(
+		doctype, name, {"event": doc_event, "notification": notif.name}, doc=doc
+	)
+	body, render_error = _render_notification_body(notif, template_context)
 	if render_error or not (body or "").strip():
 		_record_error(notification, f"template: {render_error or 'empty body'}")
 		return {"sent": 0, "skipped": 1, "error": render_error or "empty body"}
@@ -377,8 +381,8 @@ def send_for_document(notification: str, doctype: str, name: str, doc_event: str
 	outbounds: list[str] = []
 	for r in recipients:
 		# rendered for each recipient: `{{ recipient.display_name }}` is theirs, as the preview shows
-		ctx["recipient"] = recipient_context(r.phone_e164, r.display_name, r.contact)
-		text, render_error = _body(notif, ctx)
+		template_context["recipient"] = recipient_context(r.phone_e164, r.display_name, r.contact)
+		text, render_error = _render_notification_body(notif, template_context)
 		if render_error or not (text or "").strip():
 			last_error = f"template: {render_error or 'empty body'}"
 			continue
@@ -475,7 +479,7 @@ def document_fields(document_type: str) -> dict[str, list[dict[str, Any]]]:
 def preview_for_document(notification: str, reference_name: str) -> dict[str, Any]:
 	"""Dry evaluation of one notification against one document: condition, rendered body and
 	the resolved recipients (phones masked). Nothing is sent or queued."""
-	from whatsapp_next.services.phone import mask
+	from whatsapp_next.services.phone import mask_phone_for_logs
 
 	notif = frappe.get_doc("WhatsApp Notification", notification)
 	errors: list[str] = []
@@ -486,19 +490,21 @@ def preview_for_document(notification: str, reference_name: str) -> dict[str, An
 	# error an earlier real send left there is not this record's)
 	meets = evaluate(notif, doc, notif.event, errors)
 	recipients = resolve_recipients(notif, doc, errors)
-	ctx = templates.context_for(
+	template_context = templates.context_for(
 		notif.document_type, reference_name, {"event": notif.event, "notification": notif.name}, doc=doc
 	)
 	if recipients:  # render as the job would for the first recipient
 		first = recipients[0]
-		ctx["recipient"] = recipient_context(first.phone_e164, first.display_name, first.contact)
-	body, render_error = _body(notif, ctx)
+		template_context["recipient"] = recipient_context(first.phone_e164, first.display_name, first.contact)
+	body, render_error = _render_notification_body(notif, template_context)
 	if render_error:
 		errors.append(f"template: {render_error}")
 	return {
 		"meets_condition": bool(meets),
 		"message": body or "",
-		"recipients": [{"phone_e164": mask(r.phone_e164), "source": r.source} for r in recipients],
+		"recipients": [
+			{"phone_e164": mask_phone_for_logs(r.phone_e164), "source": r.source} for r in recipients
+		],
 		"errors": errors,
 	}
 
@@ -537,7 +543,7 @@ def documents_due(notification) -> list[str]:
 
 
 def _trigger(events: tuple[str, ...]) -> int:
-	n = 0
+	queued_count = 0
 	for row in frappe.get_all(
 		"WhatsApp Notification", filters={"enabled": 1, "event": ("in", list(events))}, pluck="name"
 	):
@@ -554,8 +560,8 @@ def _trigger(events: tuple[str, ...]) -> int:
 				deduplicate=True,
 				timeout=120,
 			)
-			n += 1
-	return n
+			queued_count += 1
+	return queued_count
 
 
 def trigger_daily() -> int:

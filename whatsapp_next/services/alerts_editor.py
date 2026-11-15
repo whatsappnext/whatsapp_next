@@ -1,4 +1,4 @@
-# Module role: the notification alert editor (D-139) — what `sanad.ui.AlertEditor` opens with,
+# Module role: the notification alert editor (D-139) — what `whatsapp.ui.AlertEditor` opens with,
 # saves and deletes, plus the live preview of the unsaved draft and the test send to one number.
 # The controller keeps every rule (content, schedule, JSON, recipients, next run); this module maps
 # an allow-listed payload onto the document and runs it through `alerts.execute`. The API layer
@@ -15,8 +15,8 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 
 from whatsapp_next.exceptions import WANotFoundError, WAValidationError
-from whatsapp_next.services import alerts, alerts_dates, audit
-from whatsapp_next.services.phone import normalize
+from whatsapp_next.services import alerts, alerts_dates, audit, editor_payload
+from whatsapp_next.services.phone import normalize_phone_to_e164
 from whatsapp_next.whatsapp_next.doctype.whatsapp_notification_alert.whatsapp_notification_alert import (
 	_as_time,
 )
@@ -63,18 +63,13 @@ VARIABLES: tuple[tuple[str, str], ...] = (
 # ---- reads ---------------------------------------------------------------------------------
 
 
-def _get(name: str):
+def _get_alert_doc(name: str):
 	if not frappe.db.exists(DOCTYPE, name):
 		frappe.throw(_("Notification alert {0} not found").format(name), WANotFoundError)
 	return frappe.get_doc(DOCTYPE, name)
 
 
-def _meta_options(fieldname: str) -> list[str]:
-	df = frappe.get_meta(DOCTYPE).get_field(fieldname)
-	return [o for o in (df.options or "").split("\n") if o] if df else []
-
-
-def _values(doc) -> dict[str, Any]:
+def _alert_doc_to_editor_values(doc) -> dict[str, Any]:
 	out = {f: doc.get(f) for f in FIELDS}
 	out["notification_time"] = (
 		_as_time(doc.notification_time).strftime("%H:%M") if doc.notification_time else None
@@ -85,14 +80,14 @@ def _values(doc) -> dict[str, Any]:
 	return out
 
 
-def editor(name: str | None = None) -> dict[str, Any]:
+def get_alert_editor_data(name: str | None = None) -> dict[str, Any]:
 	"""Everything the editor opens with: `{alert, stats, options, devices[], templates[], tokens[],
 	variables[], recent[], png_available, me{phone}}` — the alert (defaults for a new one), what it
 	has done, the choices every control offers and the sends it made last. E: `WANotFoundError`."""
 	if name:
-		doc = _get(name)
+		doc = _get_alert_doc(name)
 		doc.check_permission("read")
-		alert = {"name": doc.name, **_values(doc)}
+		alert = {"name": doc.name, **_alert_doc_to_editor_values(doc)}
 		stats = {f: doc.get(f) for f in STAT_FIELDS}
 		recent = frappe.get_all(
 			"WhatsApp Log",
@@ -137,18 +132,22 @@ def editor(name: str | None = None) -> dict[str, Any]:
 	from whatsapp_next.services.notifications_editor import templates_for
 
 	templates = templates_for(None)
-	me = frappe.db.get_value("User", frappe.session.user, ["mobile_no", "phone"], as_dict=True) or {}
+	current_user_phones = (
+		frappe.db.get_value("User", frappe.session.user, ["mobile_no", "phone"], as_dict=True) or {}
+	)
 	return {
 		"alert": alert,
 		"stats": stats,
 		"recent": recent,
 		"options": {
-			"periodicity": _meta_options("periodicity"),
-			"day_of_week": _meta_options("day_of_week"),
-			"month_of_year": _meta_options("month_of_year"),
-			"content_type": _meta_options("content_type"),
-			"attachment_format": _meta_options("attachment_format"),
-			"recipient_type": _meta_options_child("recipient_type"),
+			"periodicity": editor_payload.select_options(DOCTYPE, "periodicity"),
+			"day_of_week": editor_payload.select_options(DOCTYPE, "day_of_week"),
+			"month_of_year": editor_payload.select_options(DOCTYPE, "month_of_year"),
+			"content_type": editor_payload.select_options(DOCTYPE, "content_type"),
+			"attachment_format": editor_payload.select_options(DOCTYPE, "attachment_format"),
+			"recipient_type": editor_payload.select_options(
+				"WhatsApp Notification Alert Recipient", "recipient_type"
+			),
 		},
 		"devices": devices,
 		"templates": templates,
@@ -158,15 +157,13 @@ def editor(name: str | None = None) -> dict[str, Any]:
 		],
 		"variables": [{"code": code, "label": _(label)} for code, label in VARIABLES],
 		"png_available": bool(shutil.which(alerts.PNG_BINARY)),
-		"me": {"phone": normalize(me.get("mobile_no")) or normalize(me.get("phone"))},
+		"me": {
+			"phone": normalize_phone_to_e164(current_user_phones.get("mobile_no"))
+			or normalize_phone_to_e164(current_user_phones.get("phone"))
+		},
 		"can_write": bool(frappe.has_permission(DOCTYPE, "write")),
 		"can_delete": bool(name and frappe.has_permission(DOCTYPE, "delete", name)),
 	}
-
-
-def _meta_options_child(fieldname: str) -> list[str]:
-	df = frappe.get_meta("WhatsApp Notification Alert Recipient").get_field(fieldname)
-	return [o for o in (df.options or "").split("\n") if o] if df else []
 
 
 # ---- the draft -----------------------------------------------------------------------------
@@ -180,10 +177,8 @@ def _json_text(value: Any) -> str | None:
 	return json.dumps(value, ensure_ascii=False)
 
 
-def _apply(doc, payload: dict) -> None:
-	unknown = sorted(set(payload) - PAYLOAD_KEYS)
-	if unknown:
-		frappe.throw(_("Unknown payload keys: {0}").format(", ".join(unknown)), WAValidationError)
+def _apply_editor_payload_to_alert(doc, payload: dict) -> None:
+	editor_payload.reject_unknown(payload, PAYLOAD_KEYS)
 	for f in FIELDS:
 		if f not in payload:
 			continue
@@ -198,34 +193,24 @@ def _apply(doc, payload: dict) -> None:
 	if doc.alert_name:
 		doc.alert_name = doc.alert_name.strip()
 	if "recipients" in payload:
-		rows = payload.get("recipients") or []
-		if not isinstance(rows, list):
-			frappe.throw(_("recipients must be a list"), WAValidationError)
-		doc.set("recipients", [])
-		for row in rows:
-			if not isinstance(row, dict):
-				continue
-			doc.append(
-				"recipients", {f: row.get(f) for f in RECIPIENT_FIELDS if row.get(f) not in (None, "")}
-			)
+		editor_payload.replace_recipients(doc, payload.get("recipients"), RECIPIENT_FIELDS)
 
 
-def _draft(payload: dict):
+def _build_draft_alert(payload: dict):
 	"""The editor's alert as an unsaved document: the saved one with the payload over it, or new."""
-	if not isinstance(payload, dict):
-		frappe.throw(_("payload must be an object"), WAValidationError)
+	editor_payload.require_object(payload)
 	name = payload.get("name")
 	# a saved alert is loaded and changed in memory only — nothing here calls save
-	doc = _get(name) if name else frappe.new_doc(DOCTYPE)
+	doc = _get_alert_doc(name) if name else frappe.new_doc(DOCTYPE)
 	if name:
 		# what `save` compares against: without it every field reads as changed, and the report
 		# access check (made only when the report changes) refused a draft `save` would accept
 		doc._doc_before_save = frappe.get_doc(DOCTYPE, name)
-	_apply(doc, payload)
+	_apply_editor_payload_to_alert(doc, payload)
 	return doc
 
 
-def _problem(doc) -> str | None:
+def _find_first_validation_problem(doc) -> str | None:
 	"""The first rule the draft breaks, in words, or None — the controller's own validation."""
 	queued = len(frappe.local.message_log or [])
 	try:
@@ -241,21 +226,21 @@ def _problem(doc) -> str | None:
 def _next_runs(doc) -> list[str]:
 	"""The next three occurrences, or none while the schedule is incomplete."""
 	try:
-		at, out = now_datetime(), []
+		next_run_at, out = now_datetime(), []
 		for _i in range(NEXT_RUNS):
-			at = doc.compute_next_run(at)
-			out.append(str(at))
+			next_run_at = doc.compute_next_run(next_run_at)
+			out.append(str(next_run_at))
 		return out
 	except Exception:
 		return []
 
 
-def preview(payload: dict) -> dict[str, Any]:
+def preview_alert_draft(payload: dict) -> dict[str, Any]:
 	"""Run the draft — saved or not — without sending: `{problem, next_runs[], row_count, columns[],
 	recipients[{phone_e164, source, rows}], recipients_count, message, attachment{file_name,
 	mime_type, message_type}, error}`. Nothing is saved, nothing is sent."""
-	doc = _draft(payload)
-	problem = _problem(doc)
+	doc = _build_draft_alert(payload)
+	problem = _find_first_validation_problem(doc)
 	out: dict[str, Any] = {"problem": problem, "next_runs": _next_runs(doc)}
 	if doc.content_type == "Report" and not doc.report:
 		out.update({"row_count": 0, "recipients": [], "recipients_count": 0, "message": None})
@@ -291,7 +276,7 @@ def make_file(payload: dict) -> dict[str, Any]:
 	Nothing is saved or sent."""
 	import base64
 
-	doc = _draft(payload)
+	doc = _build_draft_alert(payload)
 	content, file_name, mime_type = alerts.sample_file(doc)
 	return {"file_name": file_name, "mime_type": mime_type, "content_b64": base64.b64encode(content).decode()}
 
@@ -299,15 +284,15 @@ def make_file(payload: dict) -> dict[str, Any]:
 def send_test(payload: dict, phone: str) -> dict[str, Any]:
 	"""Send the draft once to `phone` — what its first recipient would receive — and nothing else:
 	no counters, no schedule. Audited `Alert Test Sent`. Returns `{outbound, phone_e164, error}`."""
-	phone_e164 = normalize(phone)
+	phone_e164 = normalize_phone_to_e164(phone)
 	if not phone_e164:
 		frappe.throw(_("Enter a valid phone number"), WAValidationError)
-	doc = _draft(payload)
-	problem = _problem(doc)
+	doc = _build_draft_alert(payload)
+	problem = _find_first_validation_problem(doc)
 	if problem and not doc.get("recipients"):
 		# a test needs no recipients of its own: the number is the recipient
 		doc.append("recipients", {"recipient_type": "Phone", "phone": phone_e164})
-		problem = _problem(doc)
+		problem = _find_first_validation_problem(doc)
 	if problem:
 		frappe.throw(problem, WAValidationError)
 	run = alerts.execute(doc, test_phone=phone_e164)
@@ -320,7 +305,7 @@ def send_test(payload: dict, phone: str) -> dict[str, Any]:
 				WAValidationError,
 			)
 		frappe.throw(_("The test could not be sent: {0}").format(run.error), WAValidationError)
-	audit.log(
+	audit.record_audit_entry(
 		"Alert Test Sent",
 		reference=(DOCTYPE, doc.name) if not doc.is_new() else None,
 		details={"alert": doc.alert_name, "message_type": (run.recipients or [{}])[0].get("message_type")},
@@ -332,17 +317,16 @@ def send_test(payload: dict, phone: str) -> dict[str, Any]:
 # ---- writes --------------------------------------------------------------------------------
 
 
-def save(payload: dict) -> dict[str, Any]:
+def save_alert_from_editor(payload: dict) -> dict[str, Any]:
 	"""Create or update the alert from the payload; a changed name renames it. Returns
 	`{name, next_run_at}`. The controller validates everything."""
-	if not isinstance(payload, dict):
-		frappe.throw(_("payload must be an object"), WAValidationError)
+	editor_payload.require_object(payload)
 	name = payload.get("name")
 	if name:
-		doc = _get(name)
+		doc = _get_alert_doc(name)
 		doc.check_permission("write")
 		new_name = (payload.get("alert_name") or "").strip()
-		_apply(doc, payload)
+		_apply_editor_payload_to_alert(doc, payload)
 		doc.save()
 		if new_name and new_name != doc.name:
 			if frappe.db.exists(DOCTYPE, new_name):
@@ -351,7 +335,7 @@ def save(payload: dict) -> dict[str, Any]:
 	else:
 		frappe.has_permission(DOCTYPE, "create", throw=True)
 		doc = frappe.new_doc(DOCTYPE)
-		_apply(doc, payload)
+		_apply_editor_payload_to_alert(doc, payload)
 		if doc.alert_name and frappe.db.exists(DOCTYPE, doc.alert_name):
 			frappe.throw(_("An alert named {0} already exists").format(doc.alert_name), WAValidationError)
 		doc.insert()
@@ -360,16 +344,16 @@ def save(payload: dict) -> dict[str, Any]:
 
 def set_enabled(name: str, enabled: int) -> dict[str, Any]:
 	"""Switch the alert on or off; `next_run_at` is recomputed by the controller."""
-	doc = _get(name)
+	doc = _get_alert_doc(name)
 	doc.check_permission("write")
 	doc.enabled = 1 if cint(enabled) else 0
 	doc.save()
 	return {"name": doc.name, "enabled": doc.enabled, "next_run_at": doc.next_run_at}
 
 
-def delete(name: str) -> None:
+def delete_alert(name: str) -> None:
 	"""Delete the alert (its sent messages stay in the log)."""
-	doc = _get(name)
+	doc = _get_alert_doc(name)
 	doc.check_permission("delete")
 	frappe.delete_doc(DOCTYPE, doc.name)
 
@@ -411,7 +395,7 @@ def _can_run(report: str) -> bool:
 # ---- pickers -------------------------------------------------------------------------------
 
 
-def search(kind: str, txt: str | None = None) -> list[dict[str, Any]]:
+def search_editor_picker_options(kind: str, txt: str | None = None) -> list[dict[str, Any]]:
 	"""The editor's pickers: `report`, `user`, `role`, `print_format`, `letter_head`, `language` —
 	`[{value, label, description}]`, through `frappe.get_list` so the caller's permissions apply."""
 	txt = (txt or "").strip()

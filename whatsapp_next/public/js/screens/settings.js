@@ -1,6 +1,6 @@
 // Screen 15 — Subscription, usage and settings (spec §2 row 15, §5.7; D-138).
 //
-// A window, not a page: `sanad.ui.SettingsWindow` in claude.ai's shape — search, the sections in
+// A window, not a page: `whatsapp.ui.SettingsWindow` in claude.ai's shape — search, the sections in
 // two groups ("Account": subscription, usage, audit log; "Settings": the platform link and every
 // sending setting), one pane that scrolls by itself. It opens over whatever screen the user is on,
 // from the sidebar's "Settings" item and from every link that used to route to the page; the
@@ -66,11 +66,11 @@ const write_hash = (key) => {
 class SettingsView {
 	constructor() {
 		this.sections = this.section_list();
-		this.win = new sanad.ui.SettingsWindow({
+		this.win = new whatsapp.ui.SettingsWindow({
 			title: __("Settings"),
-			cls: "wa-settings-window",
+			cls: "whatsapp-settings-window",
 			groups: this.groups(),
-			render: (key, $pane) => this.draw(key, $pane),
+			render: (key, $pane) => this.draw_section_pane(key, $pane),
 			on_show: (key) => write_hash(key),
 			on_close: () => {
 				write_hash(null);
@@ -91,7 +91,7 @@ class SettingsView {
 		key = ALIASES[key] || key;
 		if (key && !this.sections.find((s) => s.key === key)) key = null;
 		this.bind_realtime();
-		const ready = this.meta ? Promise.resolve() : sanad.ui.meta.with_doctype(SINGLE).then((m) => (this.meta = m));
+		const ready = this.meta ? Promise.resolve() : whatsapp.ui.meta.with_doctype(SINGLE).then((m) => (this.meta = m));
 		return ready.then(() => this.win.show_window(key || null));
 	}
 
@@ -134,12 +134,12 @@ class SettingsView {
 		return this.win.current;
 	}
 
-	draw(key, $pane) {
+	draw_section_pane(key, $pane) {
 		const section = this.sections.find((s) => s.key === key) || this.sections[0];
-		this.$root = $('<div class="wa-settings"></div>').appendTo($pane);
-		this.$root.append(sanad.ui.SettingsWindow.head_html(section.label, this.blurb(section.key)));
-		this.$content = $('<div class="wa-settings__pane-body"></div>').appendTo(this.$root);
-		this.state = new sanad.ui.EmptyState({ wrapper: this.$content, state: "loading", rows: 4 });
+		this.$root = $('<div class="whatsapp-settings"></div>').appendTo($pane);
+		this.$root.append(whatsapp.ui.SettingsWindow.head_html(section.label, this.blurb(section.key)));
+		this.$content = $('<div class="whatsapp-settings__pane-body"></div>').appendTo(this.$root);
+		this.state = new whatsapp.ui.EmptyState({ wrapper: this.$content, state: "loading", rows: 4 });
 		const renderer = this[`render_${section.key}`];
 		if (typeof renderer !== "function") return this.state.empty({ title: __("Nothing to show") });
 		return Promise.resolve(renderer.call(this, this.$content)).catch((err) =>
@@ -183,23 +183,23 @@ class SettingsView {
 	 * Frappe controls with one Save. `skip` names the fields the caller draws itself.
 	 */
 	render_fields($el, section, values, skip = []) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const fieldnames = Object.keys(values || {}).filter(
 			(f) => !f.startsWith("has_") && !skip.includes(f) && this.docfield(f)
 		);
 		const controls = {};
 		// one list of rows, read-only and editable alike: the app's own rows and controls
-		// (`sanad-sw__row`, `wa-input` / `wa-select` / `wa-toggle`), not Desk's form groups
-		const $read = $('<div class="wa-settings__facts"></div>');
-		const $form = $('<div class="wa-settings__form"></div>');
+		// (`whatsapp-kit-settings-window__row`, `whatsapp-input` / `whatsapp-select` / `whatsapp-toggle`), not Desk's form groups
+		const $read = $('<div class="whatsapp-settings__facts"></div>');
+		const $form = $('<div class="whatsapp-settings__form"></div>');
 		fieldnames.forEach((fieldname) => {
 			const df = this.docfield(fieldname);
-			if (sanad.ui.meta.is_layout(df)) return;
+			if (whatsapp.ui.meta.is_layout(df)) return;
 			const special = OWNED_ELSEWHERE[fieldname];
 			const read_only = !!df.read_only || special === "read_only" || !IS_SM();
 			if (read_only) {
 				$read.append(
-					`<div><dt>${esc(__(df.label || fieldname))}</dt><dd>${this.read_value(
+					`<div><dt>${escape_html(__(df.label || fieldname))}</dt><dd>${this.read_value(
 						df,
 						values[fieldname],
 						special
@@ -208,39 +208,39 @@ class SettingsView {
 				return;
 			}
 			const control = this.setting_control(df, values[fieldname]);
-			const required = df.reqd ? ' <span class="wa-settings__req" aria-hidden="true">*</span>' : "";
+			const required = df.reqd ? ' <span class="whatsapp-settings__required" aria-hidden="true">*</span>' : "";
 			const $row = $(`
-				<div class="sanad-sw__row wa-settings__field${control.stacked ? " wa-settings__field--stacked" : ""}" data-fieldname="${esc(fieldname)}">
-					<div class="sanad-sw__row-text">
-						<label class="sanad-sw__row-title" for="${esc(control.id)}">${esc(__(df.label || fieldname))}${required}</label>
-						${df.description ? `<span class="sanad-sw__row-desc">${esc(__(df.description))}</span>` : ""}
+				<div class="whatsapp-kit-settings-window__row whatsapp-settings__field${control.stacked ? " whatsapp-settings__field--stacked" : ""}" data-fieldname="${escape_html(fieldname)}">
+					<div class="whatsapp-kit-settings-window__row-text">
+						<label class="whatsapp-kit-settings-window__row-title" for="${escape_html(control.id)}">${escape_html(__(df.label || fieldname))}${required}</label>
+						${df.description ? `<span class="whatsapp-kit-settings-window__row-description">${escape_html(__(df.description))}</span>` : ""}
 					</div>
-					<div class="sanad-sw__row-control"></div>
+					<div class="whatsapp-kit-settings-window__row-control"></div>
 				</div>`).appendTo($form);
-			$row.find(".sanad-sw__row-control").append(control.$el);
+			$row.find(".whatsapp-kit-settings-window__row-control").append(control.$el);
 			controls[fieldname] = control;
 		});
 		const has_controls = Object.keys(controls).length > 0;
 		if ($read.children().length) {
 			if (has_controls) {
 				$el.append(
-					`<h4 class="wa-settings__subhead">${esc(__("Read only"))}</h4>`
+					`<h4 class="whatsapp-settings__subheading">${escape_html(__("Read only"))}</h4>`
 				);
 			}
 			$el.append($read);
 		}
 		if (has_controls) {
 			if ($read.children().length) {
-				$el.append(`<h4 class="wa-settings__subhead">${esc(__("Editable"))}</h4>`);
+				$el.append(`<h4 class="whatsapp-settings__subheading">${escape_html(__("Editable"))}</h4>`);
 			}
 			$el.append($form);
 			// The save bar (owner, 2026-10-08): pinned to the bottom of the pane so it is always in
 			// reach, quiet until something changes, then the one primary action of the section.
 			const $bar = $(`
-				<div class="wa-settings__savebar" role="region" aria-label="${esc(__("Save changes"))}">
-					<span class="wa-settings__savebar-text" aria-live="polite"></span>
-					<button type="button" class="btn btn-default wa-settings__discard" hidden>${esc(__("Discard changes"))}</button>
-					<button type="button" class="btn btn-primary wa-settings__save" disabled>${esc(__("Save changes"))}</button>
+				<div class="whatsapp-settings__save-bar" role="region" aria-label="${escape_html(__("Save changes"))}">
+					<span class="whatsapp-settings__save-bar-text" aria-live="polite"></span>
+					<button type="button" class="btn btn-default whatsapp-settings__discard" hidden>${escape_html(__("Discard changes"))}</button>
+					<button type="button" class="btn btn-primary whatsapp-settings__save" disabled>${escape_html(__("Save changes"))}</button>
 				</div>`).appendTo($el);
 			const read_all = () => {
 				const out = {};
@@ -251,39 +251,39 @@ class SettingsView {
 			const refresh_bar = () => {
 				const dirty = JSON.stringify(read_all()) !== saved;
 				$bar.toggleClass("is-dirty", dirty);
-				$bar.find(".wa-settings__save").prop("disabled", !dirty);
-				$bar.find(".wa-settings__discard").prop("hidden", !dirty);
-				$bar.find(".wa-settings__savebar-text").text(dirty ? __("You have unsaved changes") : "");
+				$bar.find(".whatsapp-settings__save").prop("disabled", !dirty);
+				$bar.find(".whatsapp-settings__discard").prop("hidden", !dirty);
+				$bar.find(".whatsapp-settings__save-bar-text").text(dirty ? __("You have unsaved changes") : "");
 			};
 			// a Frappe control reports a change on its own schedule (debounced, on blur, on a pick):
 			// ask again a moment after any of them
 			$form.on("input change click keyup", () => window.setTimeout(refresh_bar, 350));
-			$bar.find(".wa-settings__discard").on("click", () => {
+			$bar.find(".whatsapp-settings__discard").on("click", () => {
 				const before = JSON.parse(saved);
 				Object.entries(controls).forEach(([f, c]) => c.set_value(before[f] == null ? "" : before[f]));
 				window.setTimeout(refresh_bar, 350);
 			});
-			$bar.find(".wa-settings__save").on("click", () => {
+			$bar.find(".whatsapp-settings__save").on("click", () => {
 				const payload = read_all();
-				sanad.ui
+				whatsapp.ui
 					.call("settings.save_settings", { section, values: payload }, { freeze: true })
 					.then((r) => {
 						saved = JSON.stringify(payload);
 						refresh_bar();
-						sanad.ui.Toast.success(
+						whatsapp.ui.Toast.success(
 							r && r.changed && r.changed.length
-								? sanad.ui.plural(r.changed.length, {
+								? whatsapp.ui.plural(r.changed.length, {
 										one: __("Saved {0} setting"),
 										other: __("Saved {0} settings"),
 								  })
 								: __("Nothing to save")
 						);
 					})
-					.catch((err) => sanad.ui.Toast.error(err));
+					.catch((err) => whatsapp.ui.Toast.error(err));
 			});
 		}
 		if (!$read.children().length && !has_controls) {
-			new sanad.ui.EmptyState({
+			new whatsapp.ui.EmptyState({
 				wrapper: $el,
 				state: "empty",
 				size: "sm",
@@ -305,32 +305,32 @@ class SettingsView {
 	 * to" and "Send only to". The value is the rows, `[{phone_e164, display_name, source}]`.
 	 */
 	targets_control(df, value, id) {
-		const esc = frappe.utils.escape_html;
-		const key = (r) => String((r && (r.phone_e164 || r.jid)) || "").trim();
-		let rows = (value || []).map((r) => ({ phone_e164: key(r), display_name: r.display_name || "", source: r.source || "" })).filter((r) => r.phone_e164);
-		const $el = $(`<div class="wa-settings__targets" id="${esc(id)}" role="group" aria-label="${esc(__(df.label))}"></div>`);
+		const escape_html = frappe.utils.escape_html;
+		const read_target_key = (r) => String((r && (r.phone_e164 || r.jid)) || "").trim();
+		let rows = (value || []).map((r) => ({ phone_e164: read_target_key(r), display_name: r.display_name || "", source: r.source || "" })).filter((r) => r.phone_e164);
+		const $el = $(`<div class="whatsapp-settings__targets" id="${escape_html(id)}" role="group" aria-label="${escape_html(__(df.label))}"></div>`);
 		const changed = () => {
-			draw();
+			draw_target_chips();
 			$el.trigger("change");
 		};
-		const draw = () => {
+		const draw_target_chips = () => {
 			const chips = rows
 				.map(
-					(r, i) => `<span class="wa-settings__target">
-						<span class="wa-settings__target-name" dir="auto">${esc(r.display_name || r.phone_e164)}</span>
-						${r.display_name ? `<span class="wa-settings__target-key" dir="ltr">${esc(r.phone_e164)}</span>` : ""}
-						<button type="button" class="wa-settings__target-x" data-i="${i}" aria-label="${esc(__("Remove {0}", [r.display_name || r.phone_e164]))}">${sanad.ui.ico("x", "xs")}</button>
+					(r, i) => `<span class="whatsapp-settings__target">
+						<span class="whatsapp-settings__target-name" dir="auto">${escape_html(r.display_name || r.phone_e164)}</span>
+						${r.display_name ? `<span class="whatsapp-settings__target-key" dir="ltr">${escape_html(r.phone_e164)}</span>` : ""}
+						<button type="button" class="whatsapp-settings__target-x" data-i="${i}" aria-label="${escape_html(__("Remove {0}", [r.display_name || r.phone_e164]))}">${whatsapp.ui.inline_icon_html("x", "xs")}</button>
 					</span>`
 				)
 				.join("");
 			$el.html(`
-				<div class="wa-settings__targets-list">${chips || `<span class="wa-settings__targets-all">${esc(__("Everyone"))}</span>`}</div>
-				<div class="wa-settings__targets-actions">
-					<button type="button" class="btn btn-default btn-sm" data-act="pick">${sanad.ui.ico("users", "sm")}${esc(__("Choose…"))}</button>
-					${rows.length ? `<button type="button" class="btn btn-link btn-sm" data-act="clear">${esc(__("Clear the list"))}</button>` : ""}
+				<div class="whatsapp-settings__targets-list">${chips || `<span class="whatsapp-settings__targets-all">${escape_html(__("Everyone"))}</span>`}</div>
+				<div class="whatsapp-settings__targets-actions">
+					<button type="button" class="btn btn-default btn-sm" data-act="pick">${whatsapp.ui.inline_icon_html("users", "sm")}${escape_html(__("Choose…"))}</button>
+					${rows.length ? `<button type="button" class="btn btn-link btn-sm" data-act="clear">${escape_html(__("Clear the list"))}</button>` : ""}
 				</div>`);
 		};
-		$el.on("click", ".wa-settings__target-x", (e) => {
+		$el.on("click", ".whatsapp-settings__target-x", (e) => {
 			rows.splice(cint(e.currentTarget.getAttribute("data-i")), 1);
 			changed();
 		});
@@ -339,13 +339,13 @@ class SettingsView {
 			changed();
 		});
 		$el.on("click", '[data-act="pick"]', () => {
-			new sanad.ui.ContactPicker({
+			new whatsapp.ui.ContactPicker({
 				title: __(df.label),
 				existing: rows.map((r) => r.phone_e164),
 				on_pick: (picked) => {
 					const have = new Set(rows.map((r) => r.phone_e164));
 					(picked || []).forEach((r) => {
-						const k = key(r);
+						const k = read_target_key(r);
 						if (!k || have.has(k)) return;
 						have.add(k);
 						rows.push({ phone_e164: k, display_name: r.display_name || r.full_name || "", source: r.source_type || r.__source || "" });
@@ -354,39 +354,39 @@ class SettingsView {
 				},
 			});
 		});
-		draw();
+		draw_target_chips();
 		return {
 			id,
 			$el,
 			stacked: true,
 			get_value: () => rows.map((r) => Object.assign({}, r)),
 			set_value: (v) => {
-				rows = (v || []).map((r) => ({ phone_e164: key(r), display_name: r.display_name || "", source: r.source || "" })).filter((r) => r.phone_e164);
-				draw();
+				rows = (v || []).map((r) => ({ phone_e164: read_target_key(r), display_name: r.display_name || "", source: r.source || "" })).filter((r) => r.phone_e164);
+				draw_target_chips();
 			},
 		};
 	}
 
 	setting_control(df, value) {
-		const esc = frappe.utils.escape_html;
-		const id = sanad.ui.uid("wa-set");
+		const escape_html = frappe.utils.escape_html;
+		const id = whatsapp.ui.unique_dom_id("whatsapp-set");
 		const type = df.fieldtype;
 		if (type === "Table" && df.options === "WhatsApp Settings Target") return this.targets_control(df, value, id);
 		if (type === "Check") {
-			const $el = $(`<label class="wa-toggle"><input type="checkbox" id="${id}"><span class="wa-toggle__track" aria-hidden="true"></span></label>`);
+			const $el = $(`<label class="whatsapp-toggle"><input type="checkbox" id="${id}"><span class="whatsapp-toggle__track" aria-hidden="true"></span></label>`);
 			const $in = $el.find("input").prop("checked", !!cint(value));
 			return { id, $el, get_value: () => ($in.prop("checked") ? 1 : 0), set_value: (v) => $in.prop("checked", !!cint(v)) };
 		}
 		if (type === "Select") {
-			const $el = $(`<select class="wa-select" id="${id}"></select>`);
-			(df.options || "").split("\n").forEach((o) => $el.append(`<option value="${esc(o)}">${esc(o ? __(o) : "")}</option>`));
+			const $el = $(`<select class="whatsapp-select" id="${id}"></select>`);
+			(df.options || "").split("\n").forEach((o) => $el.append(`<option value="${escape_html(o)}">${escape_html(o ? __(o) : "")}</option>`));
 			$el.val(value == null ? "" : String(value));
 			return { id, $el, get_value: () => $el.val(), set_value: (v) => $el.val(v == null ? "" : String(v)) };
 		}
 		if (type === "Link") {
-			const $el = $('<div class="wa-settings__link"></div>');
+			const $el = $('<div class="whatsapp-settings__link"></div>');
 			let current = value || "";
-			const link = sanad.ui.OverlayPanel.link_input($el, {
+			const link = whatsapp.ui.OverlayPanel.link_input($el, {
 				id,
 				value: current,
 				display: current,
@@ -411,11 +411,11 @@ class SettingsView {
 			};
 		}
 		if (["Small Text", "Text", "Long Text"].includes(type)) {
-			const $el = $(`<textarea class="wa-textarea" id="${id}" rows="2"></textarea>`).val(value == null ? "" : value);
+			const $el = $(`<textarea class="whatsapp-textarea" id="${id}" rows="2"></textarea>`).val(value == null ? "" : value);
 			return { id, $el, stacked: true, get_value: () => $el.val(), set_value: (v) => $el.val(v == null ? "" : v) };
 		}
 		const numeric = ["Int", "Float", "Currency", "Percent"].includes(type);
-		const $el = $(`<input class="wa-input${numeric ? " wa-input--mono wa-settings__number" : ""}" id="${id}" type="${numeric ? "number" : "text"}"${
+		const $el = $(`<input class="whatsapp-input${numeric ? " whatsapp-input--mono whatsapp-settings__number" : ""}" id="${id}" type="${numeric ? "number" : "text"}"${
 			df.fieldtype === "Data" && /url/i.test(df.fieldname) ? ' dir="ltr"' : ""
 		}>`).val(value == null ? "" : value);
 		return {
@@ -427,41 +427,41 @@ class SettingsView {
 	}
 
 	read_value(df, value, special) {
-		const esc = frappe.utils.escape_html;
-		if (value == null || value === "") return `<span class="wa-settings__muted">&mdash;</span>`;
+		const escape_html = frappe.utils.escape_html;
+		if (value == null || value === "") return `<span class="whatsapp-settings__muted">&mdash;</span>`;
 		if (special === "json_list") {
 			let data = value;
 			try {
 				data = typeof value === "string" ? JSON.parse(value) : value;
 			} catch (e) {
-				return esc(String(value));
+				return escape_html(String(value));
 			}
 			const entries = Object.entries(data || {});
-			if (!entries.length) return `<span class="wa-settings__muted">&mdash;</span>`;
-			return `<ul class="wa-settings__minilist">${entries
-				.map(([k, v]) => `<li><span>${esc(k)}</span><span>${esc(String(v))}</span></li>`)
+			if (!entries.length) return `<span class="whatsapp-settings__muted">&mdash;</span>`;
+			return `<ul class="whatsapp-settings__mini-list">${entries
+				.map(([k, v]) => `<li><span>${escape_html(k)}</span><span>${escape_html(String(v))}</span></li>`)
 				.join("")}</ul>`;
 		}
-		if (special === "long_text") return `<span class="wa-settings__longtext">${esc(String(value))}</span>`;
-		if (df.fieldtype === "Check") return esc(cint(value) ? __("Yes") : __("No"));
-		return sanad.ui.meta.format(value, df) || esc(String(value));
+		if (special === "long_text") return `<span class="whatsapp-settings__long-text">${escape_html(String(value))}</span>`;
+		if (df.fieldtype === "Check") return escape_html(cint(value) ? __("Yes") : __("No"));
+		return whatsapp.ui.meta.format(value, df) || escape_html(String(value));
 	}
 
 	// ---- shared pieces ------------------------------------------------------------------------
 
 	banner($el, { tone, icon, title, text, action }) {
-		const esc = frappe.utils.escape_html;
-		const $b = $(`<div class="wa-settings__banner sanad-tone--${sanad.ui.tone(tone)}" role="${
+		const escape_html = frappe.utils.escape_html;
+		const $b = $(`<div class="whatsapp-settings__banner whatsapp-kit-tone--${whatsapp.ui.tone_for_colour(tone)}" role="${
 			tone === "red" ? "alert" : "status"
 		}">
-			<span class="wa-settings__banner-icon" aria-hidden="true">${sanad.ui.icon(icon, "md")}</span>
-			<span class="wa-settings__banner-text"><strong>${esc(title)}</strong><span>${esc(text || "")}</span></span>
+			<span class="whatsapp-settings__banner-icon" aria-hidden="true">${whatsapp.ui.icon(icon, "md")}</span>
+			<span class="whatsapp-settings__banner-text"><strong>${escape_html(title)}</strong><span>${escape_html(text || "")}</span></span>
 		</div>`).appendTo($el);
 		if (action) {
 			$(
 				`<button type="button" class="btn btn-sm ${
 					action.primary ? "btn-primary" : "btn-default"
-				}">${esc(action.label)}</button>`
+				}">${escape_html(action.label)}</button>`
 			)
 				.on("click", () => action.handler())
 				.appendTo($b);
@@ -470,19 +470,19 @@ class SettingsView {
 	}
 
 	panel($el, { title, note, action }) {
-		const esc = frappe.utils.escape_html;
-		const $p = $(`<section class="wa-settings__panel">
+		const escape_html = frappe.utils.escape_html;
+		const $p = $(`<section class="whatsapp-settings__panel">
 			<header>
-				<span><strong>${esc(title)}</strong>${note ? `<span>${esc(note)}</span>` : ""}</span>
+				<span><strong>${escape_html(title)}</strong>${note ? `<span>${escape_html(note)}</span>` : ""}</span>
 			</header>
-			<div class="wa-settings__panel-body"></div>
+			<div class="whatsapp-settings__panel-body"></div>
 		</section>`).appendTo($el);
 		if (action) {
-			$(`<button type="button" class="btn btn-xs btn-default">${esc(action.label)}</button>`)
+			$(`<button type="button" class="btn btn-xs btn-default">${escape_html(action.label)}</button>`)
 				.on("click", () => action.handler())
 				.appendTo($p.find("header"));
 		}
-		return $p.find(".wa-settings__panel-body");
+		return $p.find(".whatsapp-settings__panel-body");
 	}
 
 	/**
@@ -490,20 +490,20 @@ class SettingsView {
 	 * on its own line, `badge` draws a StatusBadge instead of text. Values are plain strings —
 	 * nothing here renders HTML a Frappe helper produced.
 	 */
-	rows($el, rows) {
-		const esc = frappe.utils.escape_html;
+	render_label_value_rows($el, rows) {
+		const escape_html = frappe.utils.escape_html;
 		$el.html(
-			`<ul class="wa-settings__rows">${rows
+			`<ul class="whatsapp-settings__rows">${rows
 				.map(
 					(r) =>
-						`<li class="${r.stacked ? "wa-settings__row--stacked" : ""}"><span class="wa-settings__row-label">${esc(
+						`<li class="${r.stacked ? "whatsapp-settings__row--stacked" : ""}"><span class="whatsapp-settings__row-label">${escape_html(
 							r.label
-						)}${r.sub ? `<span>${esc(r.sub)}</span>` : ""}</span><span class="wa-settings__row-value${
-							r.ltr ? " sanad-table__ltr" : ""
+						)}${r.sub ? `<span>${escape_html(r.sub)}</span>` : ""}</span><span class="whatsapp-settings__row-value${
+							r.ltr ? " whatsapp-kit-table__ltr" : ""
 						}">${
 							r.badge
-								? sanad.ui.StatusBadge.html({ label: r.badge, colour: r.colour || "gray" })
-								: esc(r.value == null || r.value === "" ? "—" : String(r.value))
+								? whatsapp.ui.StatusBadge.html({ label: r.badge, colour: r.colour || "gray" })
+								: escape_html(r.value == null || r.value === "" ? "—" : String(r.value))
 						}</span></li>`
 				)
 				.join("")}</ul>`
@@ -514,8 +514,8 @@ class SettingsView {
 
 	render_provider($el) {
 		return Promise.all([
-			sanad.ui.call("settings.get_settings", { section: "provider" }),
-			sanad.ui.call("onboarding.get_status"),
+			whatsapp.ui.call("settings.get_settings", { section: "provider" }),
+			whatsapp.ui.call("onboarding.get_status"),
 		]).then(([data, status]) => {
 			const values = data.provider || {};
 			this.state.hide();
@@ -534,7 +534,7 @@ class SettingsView {
 					? values.last_connection_latency_ms
 						? __("Last check {0} · answered in {1} ms", [
 								frappe.datetime.str_to_user(tested),
-								sanad.ui.format_int(values.last_connection_latency_ms),
+								whatsapp.ui.format_integer(values.last_connection_latency_ms),
 						  ])
 						: __("Last check {0}", [frappe.datetime.str_to_user(tested)])
 					: __("Run a check to see whether the credentials and the address work."),
@@ -542,20 +542,20 @@ class SettingsView {
 					? {
 							label: __("Test the connection"),
 							handler: () =>
-								sanad.ui
+								whatsapp.ui
 									.call("settings.test_connection", {}, { freeze: true })
 									.then((r) => {
 										r && r.ok
-											? sanad.ui.Toast.success(__("Connection is healthy ({0} ms)", [r.latency_ms]))
-											: sanad.ui.Toast.error(r && r.error ? r.error : __("The connection failed"));
+											? whatsapp.ui.Toast.success(__("Connection is healthy ({0} ms)", [r.latency_ms]))
+											: whatsapp.ui.Toast.error(r && r.error ? r.error : __("The connection failed"));
 										this.show("provider");
 									})
-									.catch((err) => sanad.ui.Toast.error(err)),
+									.catch((err) => whatsapp.ui.Toast.error(err)),
 					  }
 					: null,
 			});
 
-			const $cols = $('<div class="wa-settings__cols"></div>').appendTo($el);
+			const $cols = $('<div class="whatsapp-settings__columns"></div>').appendTo($el);
 			const $connection = this.panel($cols, {
 				title: __("Connection"),
 				note: __("Written by the last test, never by hand."),
@@ -566,7 +566,7 @@ class SettingsView {
 				Failed: __("Not reachable"),
 				Untested: __("Not tested yet"),
 			};
-			this.rows($connection, [
+			this.render_label_value_rows($connection, [
 				{
 					label: __("Status"),
 					badge: CONNECTION[values.connection_status] || CONNECTION.Untested,
@@ -579,7 +579,7 @@ class SettingsView {
 				{
 					label: __("Response time"),
 					value: values.last_connection_latency_ms
-						? __("{0} ms", [sanad.ui.format_int(values.last_connection_latency_ms)])
+						? __("{0} ms", [whatsapp.ui.format_integer(values.last_connection_latency_ms)])
 						: null,
 				},
 				{ label: __("Last error"), value: values.last_connection_error },
@@ -597,7 +597,7 @@ class SettingsView {
 				device: __("A connected device"),
 				webhook: __("An active webhook"),
 			};
-			this.rows(
+			this.render_label_value_rows(
 				$steps,
 				(status.steps || []).map((s) => ({
 					label: STEP_LABEL[s.key] || s.key,
@@ -606,14 +606,14 @@ class SettingsView {
 					colour: s.done ? "green" : "orange",
 				}))
 			);
-			const $form = $('<section class="wa-settings__panel"></section>').appendTo($el);
+			const $form = $('<section class="whatsapp-settings__panel"></section>').appendTo($el);
 			$form.append(
 				`<header><span><strong>${frappe.utils.escape_html(__("Platform"))}</strong><span>${frappe.utils.escape_html(
 					__("Where this site's platform is, and how long to wait for it.")
 				)}</span></span></header>`
 			);
 			this.render_fields(
-				$('<div class="wa-settings__panel-body wa-settings__pane-body"></div>').appendTo($form),
+				$('<div class="whatsapp-settings__panel-body whatsapp-settings__pane-body"></div>').appendTo($form),
 				"provider",
 				values,
 				["connection_status", "last_connection_test_at", "last_connection_latency_ms", "last_connection_error"]
@@ -625,8 +625,8 @@ class SettingsView {
 
 	render_credentials($el) {
 		return Promise.all([
-			sanad.ui.call("settings.get_settings", { section: "credentials" }),
-			sanad.ui.call("settings.get_settings", { section: "webhook" }),
+			whatsapp.ui.call("settings.get_settings", { section: "credentials" }),
+			whatsapp.ui.call("settings.get_settings", { section: "webhook" }),
 			frappe.db.count("WhatsApp Device"),
 		]).then(([creds, webhook, devices]) => {
 			const values = creds.credentials || {};
@@ -642,7 +642,7 @@ class SettingsView {
 					? { label: __("Rotate credentials"), handler: () => this.rotate_credentials(devices, webhook.webhook) }
 					: null,
 			});
-			this.rows($body, [
+			this.render_label_value_rows($body, [
 				{
 					label: __("Customer API key"),
 					badge: values.has_customer_api_key ? __("Stored") : __("Not set"),
@@ -666,7 +666,7 @@ class SettingsView {
 			]);
 			if (!IS_SM()) {
 				$el.append(
-					`<p class="wa-settings__muted">${frappe.utils.escape_html(
+					`<p class="whatsapp-settings__muted">${frappe.utils.escape_html(
 						__("Only a System Manager can change the credentials.")
 					)}</p>`
 				);
@@ -675,7 +675,7 @@ class SettingsView {
 	}
 
 	rotate_credentials(devices, webhook) {
-		sanad.ui.ConfirmDialog.ask({
+		whatsapp.ui.ConfirmDialog.ask_for_confirmation({
 			title: __("Rotate the platform credentials?"),
 			message: __(
 				"New keys are shown once. Every integration still using the old keys stops immediately — tell the developer before you rotate."
@@ -711,16 +711,16 @@ class SettingsView {
 			],
 			primary_action_label: __("Save credentials"),
 			primary_action: (values) => {
-				sanad.ui
+				whatsapp.ui
 					.call("onboarding.save_credentials", values, { freeze: true })
 					.then((r) => {
 						dialog.hide();
-						sanad.ui.Toast.success(__("Credentials saved"));
+						whatsapp.ui.Toast.success(__("Credentials saved"));
 						this.show("credentials");
 						// keys of another account: what the previous one left waits for a decision (D-145)
-						if (r && r.account_switched) whatsapp_next.account_switch.check({ force: true });
+						if (r && r.account_switched) whatsapp_next.account_switch.check_pending_account_switch({ force: true });
 					})
-					.catch((err) => sanad.ui.Toast.error(err));
+					.catch((err) => whatsapp.ui.Toast.error(err));
 			},
 		});
 		dialog.show();
@@ -730,8 +730,8 @@ class SettingsView {
 
 	render_webhook($el) {
 		return Promise.all([
-			sanad.ui.call("settings.get_settings", { section: "webhook" }),
-			sanad.ui.call("onboarding.get_status"),
+			whatsapp.ui.call("settings.get_settings", { section: "webhook" }),
+			whatsapp.ui.call("onboarding.get_status"),
 		]).then(([data, status]) => {
 			const values = data.webhook || {};
 			this.state.hide();
@@ -749,18 +749,18 @@ class SettingsView {
 					: __("Without it no inbound message arrives and no status ever changes past “Sent”."),
 				action: IS_SM()
 					? active
-						? { label: __("Copy the receiver URL"), handler: () => this.copy(url) }
+						? { label: __("Copy the receiver URL"), handler: () => this.copy_receiver_url(url) }
 						: { label: __("Turn it on now"), primary: true, handler: () => this.enable_webhook() }
 					: null,
 			});
 
-			const $cols = $('<div class="wa-settings__cols"></div>').appendTo($el);
+			const $cols = $('<div class="whatsapp-settings__columns"></div>').appendTo($el);
 			const $endpoint = this.panel($cols, {
 				title: __("Receiver"),
 				note: __("POST · JSON"),
-				action: url ? { label: __("Copy"), handler: () => this.copy(url) } : null,
+				action: url ? { label: __("Copy"), handler: () => this.copy_receiver_url(url) } : null,
 			});
-			this.rows($endpoint, [
+			this.render_label_value_rows($endpoint, [
 				{ label: __("URL"), value: url || __("Not registered"), ltr: true, stacked: true },
 				{ label: __("Signature"), value: "HMAC-SHA256", ltr: true },
 				{
@@ -788,7 +788,7 @@ class SettingsView {
 			if (SettingsView.linked(status)) {
 				this.render_events($events);
 			} else {
-				new sanad.ui.EmptyState({
+				new whatsapp.ui.EmptyState({
 					wrapper: $events,
 					state: "empty",
 					size: "sm",
@@ -798,24 +798,24 @@ class SettingsView {
 				});
 			}
 
-			const $tools = $('<div class="wa-settings__actions"></div>').appendTo($el);
+			const $tools = $('<div class="whatsapp-settings__actions"></div>').appendTo($el);
 			if (IS_MGR()) {
 				$(`<button type="button" class="btn btn-sm btn-default">${frappe.utils.escape_html(
 					__("Send a test event")
 				)}</button>`)
 					.on("click", () =>
-						sanad.ui
+						whatsapp.ui
 							.call("settings.test_webhook", {}, { freeze: true })
 							.then((r) =>
 								r && r.status === "ok"
-									? sanad.ui.Toast.success(__("The platform delivered the test event"))
-									: sanad.ui.Toast.warning(
+									? whatsapp.ui.Toast.success(__("The platform delivered the test event"))
+									: whatsapp.ui.Toast.warning(
 											r && r.http_status_code
 												? __("The test event was not delivered (HTTP {0})", [r.http_status_code])
 												: __("The test event was not delivered")
 									  )
 							)
-							.catch((err) => sanad.ui.Toast.error(err))
+							.catch((err) => whatsapp.ui.Toast.error(err))
 					)
 					.appendTo($tools);
 			}
@@ -832,14 +832,14 @@ class SettingsView {
 				.on("click", () => frappe.set_route("List", "WhatsApp Webhook Event"))
 				.appendTo($tools);
 
-			const $form = $('<section class="wa-settings__panel"></section>').appendTo($el);
+			const $form = $('<section class="whatsapp-settings__panel"></section>').appendTo($el);
 			$form.append(
 				`<header><span><strong>${frappe.utils.escape_html(__("Delivery"))}</strong><span>${frappe.utils.escape_html(
 					__("How many times a failed delivery is retried.")
 				)}</span></span></header>`
 			);
 			this.render_fields(
-				$('<div class="wa-settings__panel-body wa-settings__pane-body"></div>').appendTo($form),
+				$('<div class="whatsapp-settings__panel-body whatsapp-settings__pane-body"></div>').appendTo($form),
 				"webhook",
 				values,
 				SKIP_IN_FORM.concat([
@@ -854,8 +854,8 @@ class SettingsView {
 	}
 
 	render_events($el) {
-		const state = new sanad.ui.EmptyState({ wrapper: $el, state: "loading", rows: 3, size: "sm" });
-		return sanad.ui
+		const state = new whatsapp.ui.EmptyState({ wrapper: $el, state: "loading", rows: 3, size: "sm" });
+		return whatsapp.ui
 			.call("settings.list_webhook_events_available", {}, { silent: true })
 			.then((rows) => {
 				if (!rows || !rows.length) {
@@ -866,25 +866,25 @@ class SettingsView {
 					return;
 				}
 				state.hide();
-				const esc = frappe.utils.escape_html;
+				const escape_html = frappe.utils.escape_html;
 				const $list = $(
-					`<fieldset class="wa-settings__checks"><legend class="sanad-visually-hidden">${esc(
+					`<fieldset class="whatsapp-settings__checks"><legend class="whatsapp-kit-visually-hidden">${escape_html(
 						__("Received events")
 					)}</legend></fieldset>`
 				).appendTo($el);
 				rows.forEach((row) => {
-					const id = sanad.ui.uid("ev");
-					$(`<label class="wa-settings__check" for="${id}">
-						<input type="checkbox" id="${id}" value="${esc(row.event_name)}"
+					const id = whatsapp.ui.unique_dom_id("ev");
+					$(`<label class="whatsapp-settings__check" for="${id}">
+						<input type="checkbox" id="${id}" value="${escape_html(row.event_name)}"
 							${row.subscribed ? "checked" : ""} ${row.enabled === false || !IS_SM() ? "disabled" : ""}>
-						<span>${esc(row.event_name)}${
-						row.disabled_reason ? `<span>${esc(__(row.disabled_reason))}</span>` : ""
+						<span>${escape_html(row.event_name)}${
+						row.disabled_reason ? `<span>${escape_html(__(row.disabled_reason))}</span>` : ""
 					}</span>
 					</label>`).appendTo($list);
 				});
 				if (!IS_SM()) return;
 				const $save = $(
-					`<button type="button" class="btn btn-xs btn-primary wa-settings__check-save">${esc(
+					`<button type="button" class="btn btn-xs btn-primary whatsapp-settings__check-save">${escape_html(
 						__("Save the event list")
 					)}</button>`
 				).appendTo($el);
@@ -893,60 +893,60 @@ class SettingsView {
 						.find("input:checked")
 						.toArray()
 						.map((el) => el.value);
-					if (!events.length) return sanad.ui.Toast.warning(__("Choose at least one event"));
-					sanad.ui
+					if (!events.length) return whatsapp.ui.Toast.warning(__("Choose at least one event"));
+					whatsapp.ui
 						.call("settings.set_webhook_events", { events }, { freeze: true })
 						.then((r) =>
-							sanad.ui.Toast.success(
-								sanad.ui.plural((r.events || []).length, {
+							whatsapp.ui.Toast.success(
+								whatsapp.ui.plural((r.events || []).length, {
 									one: __("Subscribed to {0} event"),
 									other: __("Subscribed to {0} events"),
 								})
 							)
 						)
-						.catch((err) => sanad.ui.Toast.error(err));
+						.catch((err) => whatsapp.ui.Toast.error(err));
 				});
 			})
 			.catch((err) => state.error(err, { action: { label: __("Retry"), onclick: () => this.render_events($el) } }));
 	}
 
 	enable_webhook() {
-		sanad.ui
+		whatsapp.ui
 			.call("settings.setup_webhook", {}, { freeze: true })
-			.then(() => sanad.ui.call("settings.set_webhook_status", { status: "Active" }))
+			.then(() => whatsapp.ui.call("settings.set_webhook_status", { status: "Active" }))
 			.then(() => {
-				sanad.ui.Toast.success(__("The webhook is on"));
+				whatsapp.ui.Toast.success(__("The webhook is on"));
 				this.show("webhook");
 			})
-			.catch((err) => sanad.ui.Toast.error(err));
+			.catch((err) => whatsapp.ui.Toast.error(err));
 	}
 
 	rotate_secret() {
-		sanad.ui.ConfirmDialog.ask({
+		whatsapp.ui.ConfirmDialog.ask_for_confirmation({
 			title: __("Rotate the webhook signing secret?"),
 			message: __("Events signed with the old secret are refused as soon as the new one is in place."),
 			ack_checkbox: __("I understand deliveries fail until the platform uses the new secret."),
 			danger: true,
 			confirm_label: __("Rotate the secret"),
-			on_confirm: () => sanad.ui.call("settings.rotate_webhook_secret"),
+			on_confirm: () => whatsapp.ui.call("settings.rotate_webhook_secret"),
 		})
 			.then(() => {
-				sanad.ui.Toast.success(__("Signing secret rotated"));
+				whatsapp.ui.Toast.success(__("Signing secret rotated"));
 				this.show("webhook");
 			})
 			.catch(() => {});
 	}
 
-	copy(text) {
-		if (!text) return sanad.ui.Toast.warning(__("There is no receiver URL yet"));
+	copy_receiver_url(text) {
+		if (!text) return whatsapp.ui.Toast.warning(__("There is no receiver URL yet"));
 		frappe.utils.copy_to_clipboard(text);
-		sanad.ui.Toast.success(__("Receiver URL copied"));
+		whatsapp.ui.Toast.success(__("Receiver URL copied"));
 	}
 
 	// ---- 4–8. the plain sections ------------------------------------------------------------------
 
 	plain(section, $el, extra, skip = []) {
-		return sanad.ui.call("settings.get_settings", { section }).then((data) => {
+		return whatsapp.ui.call("settings.get_settings", { section }).then((data) => {
 			this.state.hide();
 			$el.empty();
 			const values = data[section] || {};
@@ -974,8 +974,8 @@ class SettingsView {
 		const interactive = !!((frappe.boot.whatsapp_next || {}).features || {}).interactive;
 		const menu_fields = ["main_menu_mode", "main_menu_text", "main_menu_button", "main_menu_words"];
 		return this.plain("commands", $el, null, interactive ? [] : menu_fields).then(() => {
-			this.draw_link_panel($('<div class="wa-settings__menu"></div>').appendTo($el));
-			const $menu = $('<div class="wa-settings__menu"></div>').appendTo($el);
+			this.draw_link_panel($('<div class="whatsapp-settings__menu"></div>').appendTo($el));
+			const $menu = $('<div class="whatsapp-settings__menu"></div>').appendTo($el);
 			if (!interactive) {
 				this.banner($menu, {
 					tone: "gray",
@@ -993,41 +993,41 @@ class SettingsView {
 	// ---- a chat link and its QR code for printed documents (print formats: whatsapp_qr) ---------
 
 	draw_link_panel($el) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const $panel = this.panel($el, {
 			title: __("WhatsApp link on invoices"),
 			note: __("A QR code on a printed document opens a chat with your number and a message already typed."),
 		});
-		$panel.html(`<div class="wa-settings__qr">
-			<div class="wa-settings__qr-form">
-				<label class="control-label" for="wa-qr-text">${esc(__("Message typed in the chat"))}</label>
-				<input id="wa-qr-text" class="form-control" maxlength="500" value="${esc(__("Menu"))}">
-				<p class="help-box small text-muted">${esc(__("Paste this in a print format; doc fields work too, e.g. «كشف » ~ doc.customer."))}</p>
-				<div class="wa-settings__qr-snippet"><code dir="ltr"></code>
-					<button type="button" class="btn btn-xs btn-default wa-settings__qr-copy">${esc(__("Copy"))}</button></div>
-				<a class="wa-settings__qr-link" target="_blank" rel="noopener" dir="ltr"></a>
+		$panel.html(`<div class="whatsapp-settings__qr">
+			<div class="whatsapp-settings__qr-form">
+				<label class="control-label" for="whatsapp-qr-text">${escape_html(__("Message typed in the chat"))}</label>
+				<input id="whatsapp-qr-text" class="form-control" maxlength="500" value="${escape_html(__("Menu"))}">
+				<p class="help-box small text-muted">${escape_html(__("Paste this in a print format; doc fields work too, e.g. «كشف » ~ doc.customer."))}</p>
+				<div class="whatsapp-settings__qr-snippet"><code dir="ltr"></code>
+					<button type="button" class="btn btn-xs btn-default whatsapp-settings__qr-copy">${escape_html(__("Copy"))}</button></div>
+				<a class="whatsapp-settings__qr-link" target="_blank" rel="noopener" dir="ltr"></a>
 			</div>
-			<img class="wa-settings__qr-img" width="140" height="140" alt="${esc(__("Scan to chat on WhatsApp"))}">
+			<img class="whatsapp-settings__qr-img" width="140" height="140" alt="${escape_html(__("Scan to chat on WhatsApp"))}">
 		</div>`);
-		const $text = $panel.find("#wa-qr-text");
-		const draw = () => {
+		const $text = $panel.find("#whatsapp-qr-text");
+		const draw_qr_preview = () => {
 			const text = ($text.val() || "").trim();
 			const literal = JSON.stringify(text);
-			$panel.find(".wa-settings__qr-snippet code").text(`{{ whatsapp_qr(${literal}) }}`);
-			sanad.ui.call("settings.get_whatsapp_link", { text }, { silent: true }).then((r) => {
-				$panel.find(".wa-settings__qr-img").attr("src", r.qr);
-				$panel.find(".wa-settings__qr-link").attr("href", r.url).text(r.url);
-			}).catch(() => $panel.find(".wa-settings__qr-link").text(__("No WhatsApp device has a number yet")));
+			$panel.find(".whatsapp-settings__qr-snippet code").text(`{{ whatsapp_qr(${literal}) }}`);
+			whatsapp.ui.call("settings.get_whatsapp_link", { text }, { silent: true }).then((r) => {
+				$panel.find(".whatsapp-settings__qr-img").attr("src", r.qr);
+				$panel.find(".whatsapp-settings__qr-link").attr("href", r.url).text(r.url);
+			}).catch(() => $panel.find(".whatsapp-settings__qr-link").text(__("No WhatsApp device has a number yet")));
 		};
-		$text.on("input", frappe.utils.debounce(draw, 400));
-		$panel.find(".wa-settings__qr-copy").on("click", () => frappe.utils.copy_to_clipboard($panel.find(".wa-settings__qr-snippet code").text()));
-		draw();
+		$text.on("input", frappe.utils.debounce(draw_qr_preview, 400));
+		$panel.find(".whatsapp-settings__qr-copy").on("click", () => frappe.utils.copy_to_clipboard($panel.find(".whatsapp-settings__qr-snippet code").text()));
+		draw_qr_preview();
 	}
 
 	// ---- the main menu: which commands it offers, in what order --------------------------------
 
 	load_menu($el) {
-		return sanad.ui.call("settings.get_main_menu").then((data) => {
+		return whatsapp.ui.call("settings.get_main_menu").then((data) => {
 			const all = (data && data.commands) || [];
 			this.menu_max = (data && data.max) || 10;
 			this.menu_all = all;
@@ -1043,7 +1043,7 @@ class SettingsView {
 	}
 
 	draw_menu($el) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		$el.empty();
 		const can_add = IS_SM() && this.menu.length < this.menu_max && this.menu.length < (this.menu_all || []).length;
 		const $panel = this.panel($el, {
@@ -1052,7 +1052,7 @@ class SettingsView {
 			action: can_add ? { label: __("Add a command"), handler: () => this.menu_dialog(null, $el) } : null,
 		});
 		if (!this.menu.length) {
-			new sanad.ui.EmptyState({
+			new whatsapp.ui.EmptyState({
 				wrapper: $panel,
 				state: "empty",
 				size: "sm",
@@ -1062,28 +1062,28 @@ class SettingsView {
 			});
 			return;
 		}
-		$panel.html(`<div class="sanad-table-wrap"><table class="sanad-table">
+		$panel.html(`<div class="whatsapp-kit-table-wrap"><table class="whatsapp-kit-table">
 			<thead><tr>
 				<th scope="col">#</th>
-				<th scope="col">${esc(__("Command"))}</th>
-				<th scope="col">${esc(__("Shown as"))}</th>
-				<th scope="col">${esc(__("Menu description"))}</th>
-				<th scope="col"><span class="sanad-visually-hidden">${esc(__("Actions"))}</span></th>
+				<th scope="col">${escape_html(__("Command"))}</th>
+				<th scope="col">${escape_html(__("Shown as"))}</th>
+				<th scope="col">${escape_html(__("Menu description"))}</th>
+				<th scope="col"><span class="whatsapp-kit-visually-hidden">${escape_html(__("Actions"))}</span></th>
 			</tr></thead><tbody></tbody></table></div>`);
 		const $body = $panel.find("tbody");
 		this.menu.forEach((row, i) => {
 			const c = this.menu_command(row.command);
 			const $tr = $(`<tr>
-				<td class="sanad-table__num">${i + 1}</td>
-				<td><bdi>${esc(c.code || row.command)}</bdi></td>
-				<td>${esc(__(c.title || c.code || row.command))}</td>
-				<td>${row.menu_description ? esc(row.menu_description) : '<span class="wa-settings__muted">&mdash;</span>'}</td>
-				<td class="sanad-table__num"></td>
+				<td class="whatsapp-kit-table__number">${i + 1}</td>
+				<td><bdi>${escape_html(c.code || row.command)}</bdi></td>
+				<td>${escape_html(__(c.title || c.code || row.command))}</td>
+				<td>${row.menu_description ? escape_html(row.menu_description) : '<span class="whatsapp-settings__muted">&mdash;</span>'}</td>
+				<td class="whatsapp-kit-table__number"></td>
 			</tr>`).appendTo($body);
 			if (!IS_SM()) return;
 			const $actions = $tr.find("td").last();
 			const button = (label, disabled, handler) =>
-				$(`<button type="button" class="btn btn-xs btn-default">${esc(label)}</button>`)
+				$(`<button type="button" class="btn btn-xs btn-default">${escape_html(label)}</button>`)
 					.prop("disabled", disabled)
 					.on("click", handler)
 					.appendTo($actions);
@@ -1144,14 +1144,14 @@ class SettingsView {
 	}
 
 	save_menu($el) {
-		return sanad.ui
+		return whatsapp.ui
 			.call("settings.save_main_menu", { commands: this.menu }, { freeze: true })
 			.then(() => {
-				sanad.ui.Toast.success(__("Main menu saved"));
+				whatsapp.ui.Toast.success(__("Main menu saved"));
 				return this.load_menu($el);
 			})
 			.catch((err) => {
-				sanad.ui.Toast.error(err);
+				whatsapp.ui.Toast.error(err);
 				return this.load_menu($el);
 			});
 	}
@@ -1179,14 +1179,14 @@ class SettingsView {
 	// ---- backup: download and import (owner, 2026-10-10) ------------------------------------------
 
 	render_backup($el) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		this.state.hide();
 		$el.empty();
 		const $down = this.panel($el, {
 			title: __("Download a backup"),
 			note: __("Settings, templates, document notifications, notification alerts, functions, commands, contact groups and campaigns. No keys, no devices and no messages."),
 		});
-		$(`<button type="button" class="btn btn-primary btn-sm">${esc(__("Download a backup"))}</button>`)
+		$(`<button type="button" class="btn btn-primary btn-sm">${escape_html(__("Download a backup"))}</button>`)
 			.on("click", (e) => whatsapp_next.backup.download($(e.currentTarget)))
 			.appendTo($down);
 		if (!IS_SM()) return;
@@ -1194,16 +1194,16 @@ class SettingsView {
 			title: __("Import from a backup file"),
 			note: __("You see what the file adds and replaces before anything is written. Notifications and alerts come in switched off, campaigns as new drafts. Nothing is deleted."),
 		});
-		$(`<button type="button" class="btn btn-default btn-sm">${esc(__("Choose a JSON file…"))}</button>`)
+		$(`<button type="button" class="btn btn-default btn-sm">${escape_html(__("Choose a JSON file…"))}</button>`)
 			.on("click", (e) => whatsapp_next.backup.import_file($(e.currentTarget), $result))
 			.appendTo($up);
-		const $result = $('<div class="wa-settings__backup-result"></div>').appendTo($up);
+		const $result = $('<div class="whatsapp-settings__backup-result"></div>').appendTo($up);
 	}
 
 	// ---- 7. picker sources -------------------------------------------------------------------------
 
 	render_picker($el) {
-		return sanad.ui.call("settings.get_settings", { section: "picker" }).then((data) => {
+		return whatsapp.ui.call("settings.get_settings", { section: "picker" }).then((data) => {
 			this.state.hide();
 			$el.empty();
 			this.sources = ((data.picker || {}).picker_sources || []).slice();
@@ -1212,7 +1212,7 @@ class SettingsView {
 	}
 
 	draw_sources($el) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		$el.empty();
 		const $panel = this.panel($el, {
 			title: __("Sources"),
@@ -1220,7 +1220,7 @@ class SettingsView {
 			action: IS_SM() ? { label: __("Add a source"), handler: () => this.source_dialog(null) } : null,
 		});
 		if (!this.sources.length) {
-			new sanad.ui.EmptyState({
+			new whatsapp.ui.EmptyState({
 				wrapper: $panel,
 				state: "empty",
 				size: "sm",
@@ -1230,31 +1230,31 @@ class SettingsView {
 			});
 			return;
 		}
-		$panel.html(`<div class="sanad-table-wrap"><table class="sanad-table">
+		$panel.html(`<div class="whatsapp-kit-table-wrap"><table class="whatsapp-kit-table">
 			<thead><tr>
-				<th scope="col">${esc(__("Document type"))}</th>
-				<th scope="col">${esc(__("Label"))}</th>
-				<th scope="col">${esc(__("Number source"))}</th>
-				<th scope="col">${esc(__("Enabled"))}</th>
-				<th scope="col"><span class="sanad-visually-hidden">${esc(__("Actions"))}</span></th>
+				<th scope="col">${escape_html(__("Document type"))}</th>
+				<th scope="col">${escape_html(__("Label"))}</th>
+				<th scope="col">${escape_html(__("Number source"))}</th>
+				<th scope="col">${escape_html(__("Enabled"))}</th>
+				<th scope="col"><span class="whatsapp-kit-visually-hidden">${escape_html(__("Actions"))}</span></th>
 			</tr></thead><tbody></tbody></table></div>`);
 		const $body = $panel.find("tbody");
 		this.sources.forEach((row, i) => {
 			const $tr = $(`<tr>
-				<td>${esc(__(row.document_type || ""))}</td>
-				<td>${esc(row.label || "")}</td>
-				<td>${esc(whatsapp_next.picker_source_label(row))}</td>
-				<td>${sanad.ui.StatusBadge.html({
+				<td>${escape_html(__(row.document_type || ""))}</td>
+				<td>${escape_html(row.label || "")}</td>
+				<td>${escape_html(whatsapp_next.picker_source_label(row))}</td>
+				<td>${whatsapp.ui.StatusBadge.html({
 					label: cint(row.enabled) ? __("Enabled") : __("Disabled"),
 					colour: cint(row.enabled) ? "green" : "gray",
 				})}</td>
-				<td class="sanad-table__num"></td>
+				<td class="whatsapp-kit-table__number"></td>
 			</tr>`).appendTo($body);
 			if (!IS_SM()) return;
-			$(`<button type="button" class="btn btn-xs btn-default">${esc(__("Edit"))}</button>`)
+			$(`<button type="button" class="btn btn-xs btn-default">${escape_html(__("Edit"))}</button>`)
 				.on("click", () => this.source_dialog(i))
 				.appendTo($tr.find("td").last());
-			$(`<button type="button" class="btn btn-xs btn-default">${esc(__("Remove"))}</button>`)
+			$(`<button type="button" class="btn btn-xs btn-default">${escape_html(__("Remove"))}</button>`)
 				.on("click", () => {
 					this.sources.splice(i, 1);
 					this.save_sources($el);
@@ -1277,51 +1277,51 @@ class SettingsView {
 	}
 
 	save_sources($el) {
-		sanad.ui
+		whatsapp.ui
 			.call("settings.save_settings", { section: "picker", values: { picker_sources: this.sources } }, { freeze: true })
 			.then(() => {
-				sanad.ui.Toast.success(__("Picker sources saved"));
+				whatsapp.ui.Toast.success(__("Picker sources saved"));
 				this.draw_sources($el);
 			})
-			.catch((err) => sanad.ui.Toast.error(err));
+			.catch((err) => whatsapp.ui.Toast.error(err));
 	}
 
 	// ---- 9. subscription and plan ------------------------------------------------------------------
 
 	render_subscription($el) {
-		return sanad.ui.call("settings.get_settings", { section: "subscription" }).then((data) => {
+		return whatsapp.ui.call("settings.get_settings", { section: "subscription" }).then((data) => {
 			const values = (data && data.subscription) || {};
-			const SW = sanad.ui.SettingsWindow;
-			const esc = frappe.utils.escape_html;
+			const SettingsWindow = whatsapp.ui.SettingsWindow;
+			const escape_html = frappe.utils.escape_html;
 			this.state.hide();
 			$el.empty();
 			this.subscription_cards($el, values);
 
-			$el.append(SW.section_html(__("Plan details"), values.plan_name ? __(values.plan_name) : values.plan_code || __("Not synced yet")));
-			const $plan = $('<div class="wa-settings__plan"></div>').appendTo($el);
-			this.rows($plan, [
+			$el.append(SettingsWindow.section_html(__("Plan details"), values.plan_name ? __(values.plan_name) : values.plan_code || __("Not synced yet")));
+			const $plan = $('<div class="whatsapp-settings__plan"></div>').appendTo($el);
+			this.render_label_value_rows($plan, [
 				// the allowance is per billing cycle, which is not always a month (a trial runs 14 days)
-				{ label: __("Allowance per cycle"), value: sanad.ui.format_int(values.message_limit), ltr: true },
-				{ label: __("Used this cycle"), value: sanad.ui.format_int(values.messages_used), ltr: true },
-				{ label: __("Remaining"), value: sanad.ui.format_int(values.messages_remaining), ltr: true },
-				{ label: __("Devices allowed"), value: sanad.ui.format_int(values.device_limit), ltr: true },
+				{ label: __("Allowance per cycle"), value: whatsapp.ui.format_integer(values.message_limit), ltr: true },
+				{ label: __("Used this cycle"), value: whatsapp.ui.format_integer(values.messages_used), ltr: true },
+				{ label: __("Remaining"), value: whatsapp.ui.format_integer(values.messages_remaining), ltr: true },
+				{ label: __("Devices allowed"), value: whatsapp.ui.format_integer(values.device_limit), ltr: true },
 				{
 					label: __("Rate limit"),
-					value: __("{0} per minute", [sanad.ui.format_int(values.plan_messages_per_minute)]),
+					value: __("{0} per minute", [whatsapp.ui.format_integer(values.plan_messages_per_minute)]),
 				},
 				{ label: __("Cycle starts"), value: values.subscription_start ? frappe.datetime.str_to_user(values.subscription_start) : null },
 				{ label: __("Cycle ends"), value: values.subscription_end ? frappe.datetime.str_to_user(values.subscription_end) : null },
 			]);
 
-			$el.append(SW.section_html(__("Sync")));
+			$el.append(SettingsWindow.section_html(__("Sync")));
 			const synced = values.subscription_synced_at
 				? __("Last synced {0}.", [frappe.datetime.str_to_user(values.subscription_synced_at)])
 				: __("Never synced.");
 			$(
-				SW.row_html(
+				SettingsWindow.row_html(
 					__("Read the plan from the platform"),
 					`${synced} ${__("The plan is read again every hour on its own.")}`,
-					`<button type="button" class="btn btn-sm btn-default" data-act="sync">${esc(__("Sync now"))}</button>`
+					`<button type="button" class="btn btn-sm btn-default" data-act="sync">${escape_html(__("Sync now"))}</button>`
 				)
 			)
 				.appendTo($el)
@@ -1329,10 +1329,10 @@ class SettingsView {
 				.on("click", () => this.sync_subscription());
 			this.renewal_row($el, values);
 			$(
-				SW.row_html(
+				SettingsWindow.row_html(
 					__("Wallet, plan changes and invoices"),
 					__("Top up the wallet, change the plan and read the account statement here."),
-					`<span class="wa-settings__btns"><button type="button" class="btn btn-sm btn-default" data-go="wallet">${esc(__("Wallet"))}</button><button type="button" class="btn btn-sm btn-default" data-go="plans">${esc(__("Plans", null, "Billing"))}</button><button type="button" class="btn btn-sm btn-default" data-go="statement">${esc(__("Statement"))}</button></span>`
+					`<span class="whatsapp-settings__buttons"><button type="button" class="btn btn-sm btn-default" data-go="wallet">${escape_html(__("Wallet"))}</button><button type="button" class="btn btn-sm btn-default" data-go="plans">${escape_html(__("Plans", null, "Billing"))}</button><button type="button" class="btn btn-sm btn-default" data-go="statement">${escape_html(__("Statement"))}</button></span>`
 				)
 			)
 				.appendTo($el)
@@ -1342,28 +1342,28 @@ class SettingsView {
 
 	/** «Renew now»: offered when the plan is due — its messages are used up or its period is over. */
 	renewal_row($el, values) {
-		const SW = sanad.ui.SettingsWindow;
-		const esc = frappe.utils.escape_html;
+		const SettingsWindow = whatsapp.ui.SettingsWindow;
+		const escape_html = frappe.utils.escape_html;
 		const ended = values.subscription_end && frappe.datetime.get_day_diff(values.subscription_end, SITE_TODAY()) < 0;
 		const due = ["Expired", "Suspended"].includes(values.subscription_status) || ended || (cint(values.message_limit) && cint(values.messages_remaining) <= 0);
 		const $row = $(
-			SW.row_html(
+			SettingsWindow.row_html(
 				__("Renew the plan"),
 				due
 					? __("Your plan is due. Renewing starts a new cycle now and is paid from the wallet.")
 					: __("Renewing is offered when the messages run out or the cycle ends."),
-				`<button type="button" class="btn btn-sm ${due ? "btn-primary" : "btn-default"}" data-act="renew"${due ? "" : " disabled"}>${esc(__("Renew now"))}</button>`
+				`<button type="button" class="btn btn-sm ${due ? "btn-primary" : "btn-default"}" data-act="renew"${due ? "" : " disabled"}>${escape_html(__("Renew now"))}</button>`
 			)
 		).appendTo($el);
 		$row.find("[data-act=renew]").on("click", () => this.renew_now());
 	}
 
 	renew_now() {
-		sanad.ui.ConfirmDialog.ask({
+		whatsapp.ui.ConfirmDialog.ask_for_confirmation({
 			title: __("Renew the plan now?"),
 			message: __("A new cycle starts today and its price is paid from your wallet."),
 			confirm_label: __("Renew now"),
-			on_confirm: () => sanad.ui.call("billing.renew", {}, { freeze: true }).then((r) => (this.renewed = r)),
+			on_confirm: () => whatsapp.ui.call("billing.renew", {}, { freeze: true }).then((r) => (this.renewed = r)),
 		})
 			.then(() => this.after_payment(this.renewed, __("Your plan is renewed")))
 			.catch(() => {});
@@ -1372,7 +1372,7 @@ class SettingsView {
 	/** What a renewal or a plan change answered: done, or how much the wallet is short of. */
 	after_payment(result, done_text) {
 		if (result && result.done) {
-			sanad.ui.Toast.success(done_text);
+			whatsapp.ui.Toast.success(done_text);
 			return this.show("subscription");
 		}
 		const r = result || {};
@@ -1414,37 +1414,37 @@ class SettingsView {
 		const used = cint(values.messages_used);
 		const left = cint(values.messages_remaining);
 		const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const status = values.subscription_status || "Unknown";
 		const tone = { Active: "green", Trial: "blue", Expired: "red", Suspended: "red", Cancelled: "red" }[status] || "gray";
 		// the plan meter first — how much of the month is gone — then three facts under it
 		$el.append(`
-			<section class="wa-settings__meter" aria-label="${esc(__("Plan used"))}">
-				<div class="wa-settings__meter-line">
-					<span class="wa-settings__meter-title">${esc(__("Plan used"))}</span>
-					${sanad.ui.StatusBadge.html({ label: __(status), colour: tone })}
+			<section class="whatsapp-settings__meter" aria-label="${escape_html(__("Plan used"))}">
+				<div class="whatsapp-settings__meter-line">
+					<span class="whatsapp-settings__meter-title">${escape_html(__("Plan used"))}</span>
+					${whatsapp.ui.StatusBadge.html({ label: __(status), colour: tone })}
 				</div>
-				<div class="wa-settings__meter-value"><strong class="sanad-tabular" dir="ltr">${pct}%</strong><span>${esc(
-					__("{0} of {1} messages", [sanad.ui.format_int(used), sanad.ui.format_int(limit)])
+				<div class="whatsapp-settings__meter-value"><strong class="whatsapp-kit-tabular" dir="ltr">${pct}%</strong><span>${escape_html(
+					__("{0} of {1} messages", [whatsapp.ui.format_integer(used), whatsapp.ui.format_integer(limit)])
 				)}</span></div>
-				<div class="wa-settings__meter-track${pct > 80 ? " is-high" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${esc(
+				<div class="whatsapp-settings__meter-track${pct > 80 ? " is-high" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${escape_html(
 					__("Plan used")
 				)}"><span style="inline-size: ${pct}%"></span></div>
 			</section>
-			<div class="wa-settings__facts3">
-				<div><span>${esc(__("Messages left"))}</span><strong class="sanad-tabular" dir="ltr">${esc(
-					sanad.ui.format_int(left)
-				)}</strong><em>${esc(__("Before the plan runs out"))}</em></div>
-				<div><span>${esc(__("Wallet"))}</span><strong class="sanad-tabular">${
+			<div class="whatsapp-settings__facts-row">
+				<div><span>${escape_html(__("Messages left"))}</span><strong class="whatsapp-kit-tabular" dir="ltr">${escape_html(
+					whatsapp.ui.format_integer(left)
+				)}</strong><em>${escape_html(__("Before the plan runs out"))}</em></div>
+				<div><span>${escape_html(__("Wallet"))}</span><strong class="whatsapp-kit-tabular">${
 					// no wallet reported is not a wallet of 0: the Single stores a missing balance as 0,
 					// so a zero with no currency is read as "not reported"
 					values.wallet_balance == null || (!values.wallet_currency && !flt(values.wallet_balance))
 						? "—"
 						: frappe.format(values.wallet_balance, { fieldtype: "Currency", options: values.wallet_currency }, { inline: true })
-				}</strong><em>${esc(__("Covers the messages beyond the plan"))}</em></div>
-				<div><span>${esc(__("Renewal"))}</span><strong>${esc(
+				}</strong><em>${escape_html(__("Covers the messages beyond the plan"))}</em></div>
+				<div><span>${escape_html(__("Renewal"))}</span><strong>${escape_html(
 					values.subscription_end ? frappe.datetime.str_to_user(values.subscription_end) : "—"
-				)}</strong><em>${esc(this.renewal_note(values.subscription_end))}</em></div>
+				)}</strong><em>${escape_html(this.renewal_note(values.subscription_end))}</em></div>
 			</div>`);
 	}
 
@@ -1459,50 +1459,50 @@ class SettingsView {
 	}
 
 	sync_subscription() {
-		sanad.ui
+		whatsapp.ui
 			.call("settings.sync_subscription", {}, { freeze: true })
 			.then(() => {
-				sanad.ui.Toast.success(__("Subscription refreshed"));
+				whatsapp.ui.Toast.success(__("Subscription refreshed"));
 				this.show("subscription");
 			})
-			.catch((err) => sanad.ui.Toast.error(err));
+			.catch((err) => whatsapp.ui.Toast.error(err));
 	}
 
 
 	// ---- 9b. plans -----------------------------------------------------------------------------------
 
 	render_plans($el) {
-		return sanad.ui.call("billing.get_billing").then((data) => {
+		return whatsapp.ui.call("billing.get_billing").then((data) => {
 			this.state.hide();
 			$el.empty();
-			const esc = frappe.utils.escape_html;
+			const escape_html = frappe.utils.escape_html;
 			const wallet = data.wallet || {};
 			const plans = (data.plans || []).filter((p) => !p.is_trial && flt(p.monthly_price) > 0);
-			$el.append(`<p class="wa-settings__note wa-bill__lead">${esc(__("Wallet balance"))}: <strong class="sanad-tabular">${this.money(wallet.balance, wallet.currency)}</strong></p>`);
+			$el.append(`<p class="whatsapp-settings__note whatsapp-billing__lead">${escape_html(__("Wallet balance"))}: <strong class="whatsapp-kit-tabular">${this.money(wallet.balance, wallet.currency)}</strong></p>`);
 			if (!plans.length) {
-				new sanad.ui.EmptyState({ wrapper: $el, state: "empty", size: "sm", title: __("No plans to choose from right now") });
+				new whatsapp.ui.EmptyState({ wrapper: $el, state: "empty", size: "sm", title: __("No plans to choose from right now") });
 				return;
 			}
-			const $grid = $('<div class="wa-bill__plans"></div>').appendTo($el);
+			const $grid = $('<div class="whatsapp-billing__plans"></div>').appendTo($el);
 			plans.forEach((p) => {
 				const features = Object.entries(p.features || {}).filter(([, on]) => on).length;
 				const $card = $(`
-					<article class="wa-bill__plan${p.is_current ? " is-current" : ""}">
+					<article class="whatsapp-billing__plan${p.is_current ? " is-current" : ""}">
 						<header>
-							<h4>${esc(__(p.plan_name || p.plan_code))}</h4>
-							${p.is_current ? sanad.ui.StatusBadge.html({ label: __("Your plan"), colour: "green" }) : p.is_featured ? sanad.ui.StatusBadge.html({ label: __("Most popular"), colour: "blue" }) : ""}
+							<h4>${escape_html(__(p.plan_name || p.plan_code))}</h4>
+							${p.is_current ? whatsapp.ui.StatusBadge.html({ label: __("Your plan"), colour: "green" }) : p.is_featured ? whatsapp.ui.StatusBadge.html({ label: __("Most popular"), colour: "blue" }) : ""}
 						</header>
-						<p class="wa-bill__price"><strong class="sanad-tabular">${this.money(p.monthly_price, p.currency)}</strong><span>${esc(__("per month"))}</span></p>
+						<p class="whatsapp-billing__price"><strong class="whatsapp-kit-tabular">${this.money(p.monthly_price, p.currency)}</strong><span>${escape_html(__("per month"))}</span></p>
 						<ul>
-							<li><span>${esc(__("Messages a month"))}</span><b class="sanad-tabular">${sanad.ui.format_int(p.message_limit)}</b></li>
-							<li><span>${esc(__("WhatsApp numbers"))}</span><b class="sanad-tabular">${sanad.ui.format_int(p.device_limit)}</b></li>
-							<li><span>${esc(__("Unused messages"))}</span><b>${esc(p.cumulative_messages ? __("Carry over") : __("Don't carry over"))}</b></li>
-							<li><span>${esc(__("Features included"))}</span><b class="sanad-tabular">${sanad.ui.format_int(features)}</b></li>
+							<li><span>${escape_html(__("Messages a month"))}</span><b class="whatsapp-kit-tabular">${whatsapp.ui.format_integer(p.message_limit)}</b></li>
+							<li><span>${escape_html(__("WhatsApp numbers"))}</span><b class="whatsapp-kit-tabular">${whatsapp.ui.format_integer(p.device_limit)}</b></li>
+							<li><span>${escape_html(__("Unused messages"))}</span><b>${escape_html(p.cumulative_messages ? __("Carry over") : __("Don't carry over"))}</b></li>
+							<li><span>${escape_html(__("Features included"))}</span><b class="whatsapp-kit-tabular">${whatsapp.ui.format_integer(features)}</b></li>
 						</ul>
 						<footer>${
 							p.is_current
-								? `<span class="wa-bill__muted">${esc(__("You are on this plan"))}</span>`
-								: `<button type="button" class="btn btn-sm btn-primary" data-plan="${esc(p.plan_code)}">${esc(__("Move to this plan"))}</button>`
+								? `<span class="whatsapp-billing__muted">${escape_html(__("You are on this plan"))}</span>`
+								: `<button type="button" class="btn btn-sm btn-primary" data-plan="${escape_html(p.plan_code)}">${escape_html(__("Move to this plan"))}</button>`
 						}</footer>
 					</article>`).appendTo($grid);
 				$card.find("[data-plan]").on("click", () => this.change_plan(p, wallet));
@@ -1512,7 +1512,7 @@ class SettingsView {
 
 	change_plan(plan, wallet) {
 		const name = __(plan.plan_name || plan.plan_code);
-		sanad.ui.ConfirmDialog.ask({
+		whatsapp.ui.ConfirmDialog.ask_for_confirmation({
 			title: __("Move to {0}?", [name]),
 			message: __("The new plan starts today and its price is paid from your wallet."),
 			impact: [
@@ -1520,7 +1520,7 @@ class SettingsView {
 				{ label: __("Wallet balance"), value: this.money(wallet.balance, wallet.currency), tone: flt(wallet.balance) < flt(plan.monthly_price) ? "red" : undefined },
 			],
 			confirm_label: __("Move to this plan"),
-			on_confirm: () => sanad.ui.call("billing.change_plan", { plan_code: plan.plan_code }, { freeze: true }).then((r) => (this.changed = r)),
+			on_confirm: () => whatsapp.ui.call("billing.change_plan", { plan_code: plan.plan_code }, { freeze: true }).then((r) => (this.changed = r)),
 		})
 			.then(() => {
 				if (this.changed && !this.changed.done) this.topup_plan = plan.plan_code;
@@ -1532,18 +1532,18 @@ class SettingsView {
 	// ---- 9c. wallet and payments -----------------------------------------------------------------------
 
 	render_wallet($el) {
-		const back = this.paypal_back;
+		const paypal_return = this.paypal_back;
 		this.paypal_back = null;
-		const confirming = back && back.outcome === "return" && back.token ? sanad.ui.call("billing.confirm_paypal", { order_id: back.token }, { freeze: true, freeze_message: __("Confirming your PayPal payment…") }) : Promise.resolve(null);
+		const confirming = paypal_return && paypal_return.outcome === "return" && paypal_return.token ? whatsapp.ui.call("billing.confirm_paypal", { order_id: paypal_return.token }, { freeze: true, freeze_message: __("Confirming your PayPal payment…") }) : Promise.resolve(null);
 		return confirming
-			.then((paid) => sanad.ui.call("billing.get_billing").then((data) => ({ data, paid })))
+			.then((paid) => whatsapp.ui.call("billing.get_billing").then((data) => ({ data, paid })))
 			.then(({ data, paid }) => {
 				this.state.hide();
 				$el.empty();
-				const SW = sanad.ui.SettingsWindow;
+				const SettingsWindow = whatsapp.ui.SettingsWindow;
 				const wallet = data.wallet || {};
 				const renewal = wallet.renewal || {};
-				if (back && back.outcome === "cancel") $el.append(this.banner("warn", __("The PayPal payment was cancelled. Nothing was charged.")));
+				if (paypal_return && paypal_return.outcome === "cancel") $el.append(this.banner("warn", __("The PayPal payment was cancelled. Nothing was charged.")));
 				if (paid) {
 					const txn = paid.transaction || {};
 					$el.append(
@@ -1556,27 +1556,27 @@ class SettingsView {
 				}
 				const review = (wallet.transactions || []).filter((t) => t.transaction_type === "Credit" && t.status === "Draft");
 				$el.append(`
-					<div class="wa-settings__facts3">
-						<div><span>${frappe.utils.escape_html(__("Available now"))}</span><strong class="sanad-tabular">${this.money(wallet.balance, wallet.currency)}</strong><em>${frappe.utils.escape_html(__("Renewals are paid from here"))}</em></div>
-						<div><span>${frappe.utils.escape_html(__("Top-ups under review"))}</span><strong class="sanad-tabular">${this.money(review.reduce((a, t) => a + flt(t.amount), 0), wallet.currency)}</strong><em>${frappe.utils.escape_html(review.length ? __("Added once the platform accepts them") : __("Nothing waiting"))}</em></div>
-						<div><span>${frappe.utils.escape_html(__("Renewal price"))}</span><strong class="sanad-tabular">${this.money(renewal.renewal_price, renewal.renewal_currency || wallet.currency)}</strong><em>${frappe.utils.escape_html(renewal.auto_renew ? __("Renews by itself from the wallet") : __("Renewed when you choose"))}</em></div>
+					<div class="whatsapp-settings__facts-row">
+						<div><span>${frappe.utils.escape_html(__("Available now"))}</span><strong class="whatsapp-kit-tabular">${this.money(wallet.balance, wallet.currency)}</strong><em>${frappe.utils.escape_html(__("Renewals are paid from here"))}</em></div>
+						<div><span>${frappe.utils.escape_html(__("Top-ups under review"))}</span><strong class="whatsapp-kit-tabular">${this.money(review.reduce((a, t) => a + flt(t.amount), 0), wallet.currency)}</strong><em>${frappe.utils.escape_html(review.length ? __("Added once the platform accepts them") : __("Nothing waiting"))}</em></div>
+						<div><span>${frappe.utils.escape_html(__("Renewal price"))}</span><strong class="whatsapp-kit-tabular">${this.money(renewal.renewal_price, renewal.renewal_currency || wallet.currency)}</strong><em>${frappe.utils.escape_html(renewal.auto_renew ? __("Renews by itself from the wallet") : __("Renewed when you choose"))}</em></div>
 					</div>`);
 
-				$el.append(SW.section_html(__("Top up the wallet")));
+				$el.append(SettingsWindow.section_html(__("Top up the wallet")));
 				this.topup_form($el, wallet, data.payment || {});
 
-				$el.append(SW.section_html(__("Latest activity")));
+				$el.append(SettingsWindow.section_html(__("Latest activity")));
 				this.activity($el, wallet);
 			});
 	}
 
 	banner(tone, text) {
-		const cls = { ok: "wa-bill__banner--ok", warn: "wa-bill__banner--warn", bad: "wa-bill__banner--bad" }[tone];
-		return `<div class="wa-bill__banner ${cls}" role="status">${frappe.utils.escape_html(text)}</div>`;
+		const cls = { ok: "whatsapp-billing__banner--ok", warn: "whatsapp-billing__banner--warn", bad: "whatsapp-billing__banner--bad" }[tone];
+		return `<div class="whatsapp-billing__banner ${cls}" role="status">${frappe.utils.escape_html(text)}</div>`;
 	}
 
 	topup_form($el, wallet, payment) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const methods = payment.methods || [];
 		const paypal = payment.paypal || {};
 		const choices = [
@@ -1584,60 +1584,60 @@ class SettingsView {
 			...methods.map((m) => ({ key: m.name, title: __(m.title), note: __(m.method_type || "Transfer"), method: m })),
 		];
 		if (!choices.length) {
-			$el.append(sanad.ui.SettingsWindow.row_html(__("No payment method is offered for your country yet"), __("Contact the platform team to top up.")));
+			$el.append(whatsapp.ui.SettingsWindow.row_html(__("No payment method is offered for your country yet"), __("Contact the platform team to top up.")));
 			return;
 		}
 		const amount = this.topup_amount ? String(this.topup_amount) : "";
 		const plan_code = this.topup_plan || "";
 		this.topup_amount = null;
 		this.topup_plan = null;
-		const id = sanad.ui.uid("wa-topup");
+		const id = whatsapp.ui.unique_dom_id("whatsapp-topup");
 		const $form = $(`
-			<form class="wa-bill__topup" novalidate>
-				<label class="wa-bill__label" for="${id}-amount">${esc(__("Amount"))} <span class="wa-bill__muted">(${esc(wallet.currency || "")})</span></label>
-				<input class="wa-input wa-bill__amount" id="${id}-amount" type="number" inputmode="decimal" min="0.01" step="0.01" dir="ltr" required value="${esc(amount)}">
-				<fieldset class="wa-bill__methods"><legend class="wa-bill__label">${esc(__("How you pay"))}</legend>${choices
+			<form class="whatsapp-billing__topup" novalidate>
+				<label class="whatsapp-billing__label" for="${id}-amount">${escape_html(__("Amount"))} <span class="whatsapp-billing__muted">(${escape_html(wallet.currency || "")})</span></label>
+				<input class="whatsapp-input whatsapp-billing__amount" id="${id}-amount" type="number" inputmode="decimal" min="0.01" step="0.01" dir="ltr" required value="${escape_html(amount)}">
+				<fieldset class="whatsapp-billing__methods"><legend class="whatsapp-billing__label">${escape_html(__("How you pay"))}</legend>${choices
 					.map(
-						(c, i) => `<label class="wa-bill__method"><input type="radio" name="${id}-method" value="${esc(c.key)}"${i === 0 ? " checked" : ""}><span><b>${esc(c.title)}</b><em>${esc(c.note)}</em></span></label>`
+						(c, i) => `<label class="whatsapp-billing__method"><input type="radio" name="${id}-method" value="${escape_html(c.key)}"${i === 0 ? " checked" : ""}><span><b>${escape_html(c.title)}</b><em>${escape_html(c.note)}</em></span></label>`
 					)
 					.join("")}</fieldset>
-				<div class="wa-bill__details"></div>
-				<div class="wa-bill__actions"><button type="submit" class="btn btn-primary wa-bill__submit"></button></div>
+				<div class="whatsapp-billing__details"></div>
+				<div class="whatsapp-billing__actions"><button type="submit" class="btn btn-primary whatsapp-billing__submit"></button></div>
 			</form>`).appendTo($el);
 		let receipt = "";
-		const pick = () => {
+		const show_payment_method_details = () => {
 			const key = $form.find(`input[name="${id}-method"]:checked`).val();
 			const choice = choices.find((c) => c.key === key);
-			const $details = $form.find(".wa-bill__details").empty();
+			const $details = $form.find(".whatsapp-billing__details").empty();
 			receipt = "";
 			if (key === "paypal") {
-				$form.find(".wa-bill__submit").text(__("Pay with PayPal"));
-				$details.append(`<p class="wa-bill__muted">${esc(__("You go to PayPal to pay and come back here; the amount is added to your wallet straight away."))}</p>`);
+				$form.find(".whatsapp-billing__submit").text(__("Pay with PayPal"));
+				$details.append(`<p class="whatsapp-billing__muted">${escape_html(__("You go to PayPal to pay and come back here; the amount is added to your wallet straight away."))}</p>`);
 				return;
 			}
-			$form.find(".wa-bill__submit").text(__("Send for review"));
-			const m = choice.method;
+			$form.find(".whatsapp-billing__submit").text(__("Send for review"));
+			const method = choice.method;
 			const facts = [
-				[__("Bank"), m.bank_name],
-				[__("Account name"), m.account_name],
-				[__("Account number"), m.account_number],
-				[__("IBAN"), m.iban],
-				[__("SWIFT"), m.swift_code],
-				[__("Receiver"), m.receiver_name],
-				[__("Receiver's phone"), m.receiver_phone],
-				[__("City"), m.receiver_city],
-				[__("PayPal account"), m.paypal_account],
+				[__("Bank"), method.bank_name],
+				[__("Account name"), method.account_name],
+				[__("Account number"), method.account_number],
+				[__("IBAN"), method.iban],
+				[__("SWIFT"), method.swift_code],
+				[__("Receiver"), method.receiver_name],
+				[__("Receiver's phone"), method.receiver_phone],
+				[__("City"), method.receiver_city],
+				[__("PayPal account"), method.paypal_account],
 			].filter(([, v]) => v);
 			$details.append(`
-				${facts.length ? `<dl class="wa-bill__payto">${facts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd dir="auto" class="sanad-tabular">${esc(v)}</dd></div>`).join("")}</dl>` : ""}
-				${m.instructions ? `<p class="wa-bill__muted">${esc(m.instructions)}</p>` : ""}
-				<label class="wa-bill__label" for="${id}-ref">${esc(__("Transfer number"))}</label>
-				<input class="wa-input" id="${id}-ref" maxlength="140" dir="auto">
-				<span class="wa-bill__label">${esc(__("Receipt"))} <span class="wa-bill__muted">${esc(__("PDF or image, up to 5 MB"))}</span></span>
-				<div class="wa-bill__receipt"><button type="button" class="btn btn-sm btn-default" data-act="receipt">${esc(__("Attach the receipt"))}</button><span class="wa-bill__muted" data-receipt></span></div>
-				<label class="wa-bill__label" for="${id}-note">${esc(__("Note"))} <span class="wa-bill__muted">${esc(__("Optional"))}</span></label>
-				<textarea class="wa-input" id="${id}-note" rows="2" maxlength="500"></textarea>
-				<p class="wa-bill__muted">${esc(__("The platform checks the transfer, then adds the amount to your wallet."))}</p>`);
+				${facts.length ? `<dl class="whatsapp-billing__pay-to">${facts.map(([k, v]) => `<div><dt>${escape_html(k)}</dt><dd dir="auto" class="whatsapp-kit-tabular">${escape_html(v)}</dd></div>`).join("")}</dl>` : ""}
+				${method.instructions ? `<p class="whatsapp-billing__muted">${escape_html(method.instructions)}</p>` : ""}
+				<label class="whatsapp-billing__label" for="${id}-ref">${escape_html(__("Transfer number"))}</label>
+				<input class="whatsapp-input" id="${id}-ref" maxlength="140" dir="auto">
+				<span class="whatsapp-billing__label">${escape_html(__("Receipt"))} <span class="whatsapp-billing__muted">${escape_html(__("PDF or image, up to 5 MB"))}</span></span>
+				<div class="whatsapp-billing__receipt"><button type="button" class="btn btn-sm btn-default" data-act="receipt">${escape_html(__("Attach the receipt"))}</button><span class="whatsapp-billing__muted" data-receipt></span></div>
+				<label class="whatsapp-billing__label" for="${id}-note">${escape_html(__("Note"))} <span class="whatsapp-billing__muted">${escape_html(__("Optional"))}</span></label>
+				<textarea class="whatsapp-input" id="${id}-note" rows="2" maxlength="500"></textarea>
+				<p class="whatsapp-billing__muted">${escape_html(__("The platform checks the transfer, then adds the amount to your wallet."))}</p>`);
 			$details.find("[data-act=receipt]").on("click", () => {
 				new frappe.ui.FileUploader({
 					allow_multiple: false,
@@ -1651,31 +1651,31 @@ class SettingsView {
 				});
 			});
 		};
-		$form.on("change", `input[name="${id}-method"]`, pick);
-		pick();
+		$form.on("change", `input[name="${id}-method"]`, show_payment_method_details);
+		show_payment_method_details();
 		$form.on("submit", (e) => {
 			e.preventDefault();
 			const value = flt($form.find(`#${id}-amount`).val());
 			if (value <= 0) {
-				sanad.ui.Toast.error(__("Enter the amount to add."));
+				whatsapp.ui.Toast.error(__("Enter the amount to add."));
 				return $form.find(`#${id}-amount`).trigger("focus");
 			}
 			const key = $form.find(`input[name="${id}-method"]:checked`).val();
-			const $btn = $form.find(".wa-bill__submit").prop("disabled", true);
-			const done = () => $btn.prop("disabled", false);
+			const $btn = $form.find(".whatsapp-billing__submit").prop("disabled", true);
+			const enable_submit_button = () => $btn.prop("disabled", false);
 			if (key === "paypal") {
-				return sanad.ui
+				return whatsapp.ui
 					.call("billing.start_paypal", { amount: value, plan_code: plan_code || null }, { freeze: true, freeze_message: __("Opening PayPal…") })
 					.then((r) => {
 						if (r && r.approve_url) window.location.href = r.approve_url;
-						else done();
+						else enable_submit_button();
 					})
 					.catch((err) => {
-						done();
-						sanad.ui.Toast.error(err);
+						enable_submit_button();
+						whatsapp.ui.Toast.error(err);
 					});
 			}
-			sanad.ui
+			whatsapp.ui
 				.call(
 					"billing.request_topup",
 					{
@@ -1689,37 +1689,37 @@ class SettingsView {
 					{ freeze: true }
 				)
 				.then(() => {
-					sanad.ui.Toast.success(__("Sent. The platform reviews it and adds it to your wallet."));
+					whatsapp.ui.Toast.success(__("Sent. The platform reviews it and adds it to your wallet."));
 					this.show("wallet");
 				})
 				.catch((err) => {
-					done();
-					sanad.ui.Toast.error(err);
+					enable_submit_button();
+					whatsapp.ui.Toast.error(err);
 				});
 		});
 	}
 
 	activity($el, wallet) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const rows = (wallet.transactions || []).slice(0, 10);
 		if (!rows.length) {
-			new sanad.ui.EmptyState({ wrapper: $el, state: "empty", size: "sm", title: __("No wallet activity yet") });
+			new whatsapp.ui.EmptyState({ wrapper: $el, state: "empty", size: "sm", title: __("No wallet activity yet") });
 			return;
 		}
 		const kind = { Credit: __("Wallet top-up"), Refund: __("Refund to your wallet"), Debit: __("Paid from your wallet"), Adjustment: __("Balance correction") };
 		const status = { Approved: ["Done", "green"], Draft: ["Under review", "orange"], Cancelled: ["Not accepted", "red"] };
-		$el.append(`<ul class="wa-bill__activity">${rows
+		$el.append(`<ul class="whatsapp-billing__activity">${rows
 			.map((t) => {
 				const out = t.transaction_type === "Debit";
 				const [label, colour] = status[t.status] || [t.status, "gray"];
 				return `<li>
-					<span><b>${esc(kind[t.transaction_type] || __(t.transaction_type))}</b><em>${esc(frappe.datetime.str_to_user(t.posting_date || t.creation))}${t.reference_no ? ` · ${esc(__("Ref."))} <bdi>${esc(t.reference_no)}</bdi>` : ""}</em></span>
-					${sanad.ui.StatusBadge.html({ label: __(label), colour })}
-					<strong class="sanad-tabular${out ? "" : " is-in"}" dir="ltr">${out ? "−" : "+"}${this.money(t.amount, t.currency || wallet.currency)}</strong>
+					<span><b>${escape_html(kind[t.transaction_type] || __(t.transaction_type))}</b><em>${escape_html(frappe.datetime.str_to_user(t.posting_date || t.creation))}${t.reference_no ? ` · ${escape_html(__("Ref."))} <bdi>${escape_html(t.reference_no)}</bdi>` : ""}</em></span>
+					${whatsapp.ui.StatusBadge.html({ label: __(label), colour })}
+					<strong class="whatsapp-kit-tabular${out ? "" : " is-in"}" dir="ltr">${out ? "−" : "+"}${this.money(t.amount, t.currency || wallet.currency)}</strong>
 				</li>`;
 			})
 			.join("")}</ul>`);
-		$(`<p class="wa-settings__note"><button type="button" class="btn btn-link btn-sm">${esc(__("See the account statement"))}</button></p>`)
+		$(`<p class="whatsapp-settings__note"><button type="button" class="btn btn-link btn-sm">${escape_html(__("See the account statement"))}</button></p>`)
 			.appendTo($el)
 			.find("button")
 			.on("click", () => this.show("statement"));
@@ -1730,28 +1730,28 @@ class SettingsView {
 	render_statement($el) {
 		this.state.hide();
 		$el.empty();
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		this.statement_period = this.statement_period || "month";
-		const $bar = $('<div class="wa-bill__bar"></div>').appendTo($el);
-		const $seg = $('<div class="wa-settings__period" role="radiogroup"></div>').attr("aria-label", __("Period")).appendTo($bar);
+		const $bar = $('<div class="whatsapp-billing__bar"></div>').appendTo($el);
+		const $seg = $('<div class="whatsapp-settings__period" role="radiogroup"></div>').attr("aria-label", __("Period")).appendTo($bar);
 		[
 			["month", __("This month")],
 			["quarter", __("Last 3 months")],
 			["year", __("This year")],
 		].forEach(([key, label]) => {
-			$(`<button type="button" role="radio" aria-checked="${key === this.statement_period}" class="${key === this.statement_period ? "is-on" : ""}">${esc(label)}</button>`)
+			$(`<button type="button" role="radio" aria-checked="${key === this.statement_period}" class="${key === this.statement_period ? "is-on" : ""}">${escape_html(label)}</button>`)
 				.on("click", () => {
 					this.statement_period = key;
 					this.show("statement");
 				})
 				.appendTo($seg);
 		});
-		const $tools = $(`<span class="wa-settings__btns"><button type="button" class="btn btn-sm btn-default" data-act="csv" disabled>${esc(__("Download"))}</button><button type="button" class="btn btn-sm btn-default" data-act="print" disabled>${esc(__("Print"))}</button></span>`).appendTo($bar);
-		const $body = $('<div class="wa-bill__statement"></div>').appendTo($el);
-		const state = new sanad.ui.EmptyState({ wrapper: $body, state: "loading", rows: 5, size: "sm" });
+		const $tools = $(`<span class="whatsapp-settings__buttons"><button type="button" class="btn btn-sm btn-default" data-act="csv" disabled>${escape_html(__("Download"))}</button><button type="button" class="btn btn-sm btn-default" data-act="print" disabled>${escape_html(__("Print"))}</button></span>`).appendTo($bar);
+		const $body = $('<div class="whatsapp-billing__statement"></div>').appendTo($el);
+		const state = new whatsapp.ui.EmptyState({ wrapper: $body, state: "loading", rows: 5, size: "sm" });
 		const today = SITE_TODAY();
 		const from_date = this.statement_period === "year" ? `${today.slice(0, 4)}-01-01` : this.statement_period === "quarter" ? `${frappe.datetime.add_months(today, -2).slice(0, 7)}-01` : `${today.slice(0, 7)}-01`;
-		return sanad.ui
+		return whatsapp.ui
 			.call("billing.statement", { from_date, to_date: today })
 			.then((v) => {
 				state.hide();
@@ -1776,19 +1776,19 @@ class SettingsView {
 	}
 
 	draw_statement($body, v) {
-		const esc = frappe.utils.escape_html;
-		const day = (d) => esc(frappe.datetime.str_to_user(d));
+		const escape_html = frappe.utils.escape_html;
+		const format_statement_day = (d) => escape_html(frappe.datetime.str_to_user(d));
 		$body.append(`
-			<p class="wa-settings__note">${esc(__("From {0} to {1}", [frappe.datetime.str_to_user(v.from_date), frappe.datetime.str_to_user(v.to_date)]))}</p>
-			<div class="wa-settings__facts3 wa-settings__facts3--4">
-				<div><span>${esc(__("Opening balance"))}</span><strong class="sanad-tabular">${this.money(v.opening, v.currency)}</strong></div>
-				<div><span>${esc(__("Came in"))}</span><strong class="sanad-tabular">${this.money(v.total_in, v.currency)}</strong></div>
-				<div><span>${esc(__("Charged"))}</span><strong class="sanad-tabular">${this.money(v.total_out, v.currency)}</strong></div>
-				<div><span>${esc(__("Closing balance"))}</span><strong class="sanad-tabular">${this.money(v.closing, v.currency)}</strong></div>
+			<p class="whatsapp-settings__note">${escape_html(__("From {0} to {1}", [frappe.datetime.str_to_user(v.from_date), frappe.datetime.str_to_user(v.to_date)]))}</p>
+			<div class="whatsapp-settings__facts-row whatsapp-settings__facts-row--4">
+				<div><span>${escape_html(__("Opening balance"))}</span><strong class="whatsapp-kit-tabular">${this.money(v.opening, v.currency)}</strong></div>
+				<div><span>${escape_html(__("Came in"))}</span><strong class="whatsapp-kit-tabular">${this.money(v.total_in, v.currency)}</strong></div>
+				<div><span>${escape_html(__("Charged"))}</span><strong class="whatsapp-kit-tabular">${this.money(v.total_out, v.currency)}</strong></div>
+				<div><span>${escape_html(__("Closing balance"))}</span><strong class="whatsapp-kit-tabular">${this.money(v.closing, v.currency)}</strong></div>
 			</div>`);
 		if (!(v.rows || []).length) {
-			new sanad.ui.EmptyState({
-				wrapper: $('<div class="wa-bill__empty"></div>').appendTo($body),
+			new whatsapp.ui.EmptyState({
+				wrapper: $('<div class="whatsapp-billing__empty"></div>').appendTo($body),
 				state: "empty",
 				size: "sm",
 				title: __("Nothing in this period"),
@@ -1797,18 +1797,18 @@ class SettingsView {
 			return;
 		}
 		$body.append(`
-			<div class="wa-bill__table-wrap" tabindex="0" role="region" aria-label="${esc(__("Account statement"))}">
-				<table class="wa-bill__table">
-					<thead><tr><th scope="col">${esc(__("Date"))}</th><th scope="col">${esc(__("Details", null, "Statement"))}</th><th scope="col" class="is-num">${esc(__("Money in"))}</th><th scope="col" class="is-num">${esc(__("Money out"))}</th><th scope="col" class="is-num">${esc(__("Balance"))}</th></tr></thead>
+			<div class="whatsapp-billing__table-wrap" tabindex="0" role="region" aria-label="${escape_html(__("Account statement"))}">
+				<table class="whatsapp-billing__table">
+					<thead><tr><th scope="col">${escape_html(__("Date"))}</th><th scope="col">${escape_html(__("Details", null, "Statement"))}</th><th scope="col" class="is-num">${escape_html(__("Money in"))}</th><th scope="col" class="is-num">${escape_html(__("Money out"))}</th><th scope="col" class="is-num">${escape_html(__("Balance"))}</th></tr></thead>
 					<tbody>
-						<tr class="is-opening"><td>${day(v.from_date)}</td><td colspan="3">${esc(__("Opening balance"))}</td><td class="is-num">${this.money(v.opening, v.currency)}</td></tr>
+						<tr class="is-opening"><td>${format_statement_day(v.from_date)}</td><td colspan="3">${escape_html(__("Opening balance"))}</td><td class="is-num">${this.money(v.opening, v.currency)}</td></tr>
 						${v.rows
 							.map(
-								(r) => `<tr><td>${day(r.date)}</td><td><b>${esc(this.statement_line(r))}</b><em><bdi>${esc(r.invoice || r.document)}</bdi>${r.reference ? ` · ${esc(__("Ref."))} <bdi>${esc(r.reference)}</bdi>` : ""}</em></td><td class="is-num is-in">${r.money_in ? this.money(r.money_in, v.currency) : ""}</td><td class="is-num">${r.money_out ? this.money(r.money_out, v.currency) : ""}</td><td class="is-num"><b>${this.money(r.balance, v.currency)}</b></td></tr>`
+								(r) => `<tr><td>${format_statement_day(r.date)}</td><td><b>${escape_html(this.statement_line(r))}</b><em><bdi>${escape_html(r.invoice || r.document)}</bdi>${r.reference ? ` · ${escape_html(__("Ref."))} <bdi>${escape_html(r.reference)}</bdi>` : ""}</em></td><td class="is-num is-in">${r.money_in ? this.money(r.money_in, v.currency) : ""}</td><td class="is-num">${r.money_out ? this.money(r.money_out, v.currency) : ""}</td><td class="is-num"><b>${this.money(r.balance, v.currency)}</b></td></tr>`
 							)
 							.join("")}
 					</tbody>
-					<tfoot><tr><th scope="row" colspan="2">${esc(__("Closing balance"))}</th><td class="is-num">${this.money(v.total_in, v.currency)}</td><td class="is-num">${this.money(v.total_out, v.currency)}</td><td class="is-num">${this.money(v.closing, v.currency)}</td></tr></tfoot>
+					<tfoot><tr><th scope="row" colspan="2">${escape_html(__("Closing balance"))}</th><td class="is-num">${this.money(v.total_in, v.currency)}</td><td class="is-num">${this.money(v.total_out, v.currency)}</td><td class="is-num">${this.money(v.closing, v.currency)}</td></tr></tfoot>
 				</table>
 			</div>`);
 	}
@@ -1816,14 +1816,14 @@ class SettingsView {
 	/** A spreadsheet of the statement (UTF-8 with a byte-order mark, so Excel reads Arabic). */
 	statement_csv(v) {
 		const plain = (n) => (flt(n) ? flt(n).toFixed(2) : "");
-		const cell = (x) => `"${String(x == null ? "" : x).replace(/"/g, '""')}"`;
+		const quote_csv_cell = (x) => `"${String(x == null ? "" : x).replace(/"/g, '""')}"`;
 		const lines = [
 			[__("Date"), __("Details", null, "Statement"), __("Document"), __("Ref."), __("Money in"), __("Money out"), __("Balance")],
 			[v.from_date, __("Opening balance"), "", "", "", "", flt(v.opening).toFixed(2)],
 			...(v.rows || []).map((r) => [r.date, this.statement_line(r), r.invoice || r.document, r.reference, plain(r.money_in), plain(r.money_out), flt(r.balance).toFixed(2)]),
 			[v.to_date, __("Closing balance"), "", "", plain(v.total_in), plain(v.total_out), flt(v.closing).toFixed(2)],
 		];
-		const url = URL.createObjectURL(new Blob(["﻿" + lines.map((l) => l.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
+		const url = URL.createObjectURL(new Blob(["﻿" + lines.map((l) => l.map(quote_csv_cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
 		const a = Object.assign(document.createElement("a"), { href: url, download: `statement-${v.from_date}-${v.to_date}.csv` });
 		document.body.appendChild(a);
 		a.click();
@@ -1833,20 +1833,20 @@ class SettingsView {
 
 	/** Print the statement alone, on a page of its own. */
 	statement_print($body, v) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const win = window.open("", "_blank", "noopener=no,width=900,height=700");
-		if (!win) return sanad.ui.Toast.error(__("Allow pop-ups for this site to print."));
+		if (!win) return whatsapp.ui.Toast.error(__("Allow pop-ups for this site to print."));
 		const rtl = frappe.utils.is_rtl();
-		win.document.write(`<!doctype html><html dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${esc(__("Account statement"))}</title><style>
+		win.document.write(`<!doctype html><html dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${escape_html(__("Account statement"))}</title><style>
 			body{font:13px/1.5 system-ui,sans-serif;color:#111;margin:24px}
 			h1{font-size:20px;margin:0 0 4px}p{margin:0 0 12px;color:#555}
-			.wa-settings__facts3{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
-			.wa-settings__facts3>div{border:1px solid #ddd;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column}
-			.wa-settings__facts3 span{color:#666;font-size:12px}.wa-settings__facts3 strong{font-size:16px}
+			.whatsapp-settings__facts-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+			.whatsapp-settings__facts-row>div{border:1px solid #ddd;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column}
+			.whatsapp-settings__facts-row span{color:#666;font-size:12px}.whatsapp-settings__facts-row strong{font-size:16px}
 			table{width:100%;border-collapse:collapse}th,td{padding:6px 8px;border-bottom:1px solid #e5e5e5;text-align:start;vertical-align:top}
 			thead th{background:#f5f5f5;font-size:12px}.is-num{text-align:end;white-space:nowrap}td em{display:block;color:#666;font-style:normal;font-size:11px}
-			tfoot th,tfoot td{font-weight:700;border-top:2px solid #999}.wa-settings__note{display:none}
-		</style></head><body><h1>${esc(__("Account statement"))}</h1><p>${esc(__("From {0} to {1}", [frappe.datetime.str_to_user(v.from_date), frappe.datetime.str_to_user(v.to_date)]))}</p>${$body.html()}</body></html>`);
+			tfoot th,tfoot td{font-weight:700;border-top:2px solid #999}.whatsapp-settings__note{display:none}
+		</style></head><body><h1>${escape_html(__("Account statement"))}</h1><p>${escape_html(__("From {0} to {1}", [frappe.datetime.str_to_user(v.from_date), frappe.datetime.str_to_user(v.to_date)]))}</p>${$body.html()}</body></html>`);
 		win.document.close();
 		win.focus();
 		win.setTimeout(() => win.print(), 200);
@@ -1858,7 +1858,7 @@ class SettingsView {
 		this.state.hide();
 		$el.empty();
 		this.usage_days = this.usage_days || 14;
-		const $seg = $('<div class="wa-settings__period" role="radiogroup"></div>')
+		const $seg = $('<div class="whatsapp-settings__period" role="radiogroup"></div>')
 			.attr("aria-label", __("Period"))
 			.appendTo($el);
 		[7, 14, 30].forEach((d) => {
@@ -1871,17 +1871,17 @@ class SettingsView {
 				})
 				.appendTo($seg);
 		});
-		const $body = $('<div class="wa-settings__usage"></div>').appendTo($el);
+		const $body = $('<div class="whatsapp-settings__usage"></div>').appendTo($el);
 		return this.load_usage($body, this.usage_days);
 	}
 
 	/** Counted from this site's own outbound log, so it is there whether or not the platform reports. */
 	load_usage($el, days) {
-		const state = new sanad.ui.EmptyState({ wrapper: $el, state: "loading", rows: 4, size: "sm" });
+		const state = new whatsapp.ui.EmptyState({ wrapper: $el, state: "loading", rows: 4, size: "sm" });
 		// the site's day, not the viewer's: the log is counted by the day it was written on the server
 		const to_date = SITE_TODAY();
 		const from_date = frappe.datetime.add_days(to_date, -(days - 1));
-		return sanad.ui
+		return whatsapp.ui
 			.call("settings.get_site_usage", { from_date, to_date })
 			.then((r) => {
 				const rows = (r && r.rows) || [];
@@ -1902,7 +1902,7 @@ class SettingsView {
 	}
 
 	draw_usage($el, rows) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const max = Math.max(1, ...rows.map((r) => cint(r.sent) + cint(r.failed)));
 		const total = rows.reduce((n, r) => n + cint(r.sent), 0);
 		const failed = rows.reduce((n, r) => n + cint(r.failed), 0);
@@ -1910,31 +1910,31 @@ class SettingsView {
 		const peak = rows.reduce((best, r) => (cint(r.sent) > cint(best.sent) ? r : best), rows[0]);
 		const delivered = rows.reduce((n, r) => n + cint(r.delivered), 0);
 		const read = rows.reduce((n, r) => n + cint(r.read), 0);
-		const pct = (n) => (total ? `${Math.round((n / total) * 100)}%` : "—");
+		const format_sent_share = (n) => (total ? `${Math.round((n / total) * 100)}%` : "—");
 		$el.html(`
-			<div class="wa-settings__facts3 wa-settings__facts3--4">
-				<div><span>${esc(__("Sent"))}</span><strong class="sanad-tabular" dir="ltr">${esc(
-					sanad.ui.format_int(total)
-				)}</strong><em>${esc(__("{0} a day on average", [sanad.ui.format_int(average)]))}</em></div>
-				<div><span>${esc(__("Delivered", null, "campaign"))}</span><strong class="sanad-tabular" dir="ltr">${esc(
-					pct(delivered)
-				)}</strong><em>${esc(__("{0} messages", [sanad.ui.format_int(delivered)]))}</em></div>
-				<div><span>${esc(__("Read", null, "campaign"))}</span><strong class="sanad-tabular" dir="ltr">${esc(
-					pct(read)
-				)}</strong><em>${esc(__("{0} messages", [sanad.ui.format_int(read)]))}</em></div>
-				<div><span>${esc(__("Failed"))}</span><strong class="sanad-tabular${failed ? " is-bad" : ""}" dir="ltr">${esc(
-					sanad.ui.format_int(failed)
-				)}</strong><em>${esc(total + failed ? __("{0}% of attempts", [Math.round((failed / (total + failed)) * 100)]) : "—")}</em></div>
+			<div class="whatsapp-settings__facts-row whatsapp-settings__facts-row--4">
+				<div><span>${escape_html(__("Sent"))}</span><strong class="whatsapp-kit-tabular" dir="ltr">${escape_html(
+					whatsapp.ui.format_integer(total)
+				)}</strong><em>${escape_html(__("{0} a day on average", [whatsapp.ui.format_integer(average)]))}</em></div>
+				<div><span>${escape_html(__("Delivered", null, "campaign"))}</span><strong class="whatsapp-kit-tabular" dir="ltr">${escape_html(
+					format_sent_share(delivered)
+				)}</strong><em>${escape_html(__("{0} messages", [whatsapp.ui.format_integer(delivered)]))}</em></div>
+				<div><span>${escape_html(__("Read", null, "campaign"))}</span><strong class="whatsapp-kit-tabular" dir="ltr">${escape_html(
+					format_sent_share(read)
+				)}</strong><em>${escape_html(__("{0} messages", [whatsapp.ui.format_integer(read)]))}</em></div>
+				<div><span>${escape_html(__("Failed"))}</span><strong class="whatsapp-kit-tabular${failed ? " is-bad" : ""}" dir="ltr">${escape_html(
+					whatsapp.ui.format_integer(failed)
+				)}</strong><em>${escape_html(total + failed ? __("{0}% of attempts", [Math.round((failed / (total + failed)) * 100)]) : "—")}</em></div>
 			</div>
-			<p class="wa-settings__note">${esc(
+			<p class="whatsapp-settings__note">${escape_html(
 				__("Counted from this site's own message log. Busiest day: {0}.", [frappe.datetime.str_to_user(peak.key)])
 			)}</p>
-			${sanad.ui.SettingsWindow.section_html(__("Messages per day"))}
-			<div class="wa-settings__chart" role="img" aria-label="${esc(
+			${whatsapp.ui.SettingsWindow.section_html(__("Messages per day"))}
+			<div class="whatsapp-settings__chart" role="img" aria-label="${escape_html(
 				__("{0} messages over {1} days, {2} a day on average", [
-					sanad.ui.format_int(total),
+					whatsapp.ui.format_integer(total),
 					rows.length,
-					sanad.ui.format_int(average),
+					whatsapp.ui.format_integer(average),
 				])
 			)}">
 				${rows
@@ -1942,24 +1942,24 @@ class SettingsView {
 						const all = cint(r.sent) + cint(r.failed);
 						const h = Math.max(2, Math.round((all / max) * 100));
 						const fh = all ? Math.round((cint(r.failed) / all) * h) : 0;
-						return `<span class="wa-settings__bar" title="${esc(
+						return `<span class="whatsapp-settings__bar" title="${escape_html(
 							__("{0}: {1} sent, {2} failed", [frappe.datetime.str_to_user(r.key), cint(r.sent), cint(r.failed)])
 						)}">
-								<span class="wa-settings__bar-col${all ? "" : " is-zero"}" style="block-size: ${h}%">
-									${fh ? `<span class="wa-settings__bar-fail" style="block-size: ${Math.round((fh / h) * 100)}%"></span>` : ""}
+								<span class="whatsapp-settings__bar-column${all ? "" : " is-zero"}" style="block-size: ${h}%">
+									${fh ? `<span class="whatsapp-settings__bar-fail" style="block-size: ${Math.round((fh / h) * 100)}%"></span>` : ""}
 								</span>
-								<span class="wa-settings__bar-label">${esc(String(r.key).slice(-2))}</span>
+								<span class="whatsapp-settings__bar-label">${escape_html(String(r.key).slice(-2))}</span>
 							</span>`;
 					})
 					.join("")}
 			</div>
-			<div class="wa-settings__legend"><span><i class="is-sent"></i>${esc(__("Sent"))}</span><span><i class="is-fail"></i>${esc(
+			<div class="whatsapp-settings__legend"><span><i class="is-sent"></i>${escape_html(__("Sent"))}</span><span><i class="is-fail"></i>${escape_html(
 				__("Failed")
 			)}</span></div>
-			<table class="sanad-visually-hidden"><caption>${esc(__("Messages per day"))}</caption>
-				<thead><tr><th>${esc(__("Day"))}</th><th>${esc(__("Sent"))}</th><th>${esc(__("Failed"))}</th></tr></thead>
+			<table class="whatsapp-kit-visually-hidden"><caption>${escape_html(__("Messages per day"))}</caption>
+				<thead><tr><th>${escape_html(__("Day"))}</th><th>${escape_html(__("Sent"))}</th><th>${escape_html(__("Failed"))}</th></tr></thead>
 				<tbody>${rows
-					.map((r) => `<tr><td>${esc(r.key)}</td><td>${cint(r.sent)}</td><td>${cint(r.failed)}</td></tr>`)
+					.map((r) => `<tr><td>${escape_html(r.key)}</td><td>${cint(r.sent)}</td><td>${cint(r.failed)}</td></tr>`)
 					.join("")}</tbody></table>`);
 	}
 
@@ -1970,14 +1970,14 @@ class SettingsView {
 		this.audit_page = 1;
 		this.state.hide();
 		$el.empty();
-		this.$audit_filters = $('<div class="wa-settings__audit-filters"></div>').appendTo($el);
-		this.$audit_body = $('<div class="wa-settings__audit"></div>').appendTo($el);
-		$(`<button type="button" class="btn btn-xs btn-default wa-settings__audit-open">${frappe.utils.escape_html(
+		this.$audit_filters = $('<div class="whatsapp-settings__audit-filters"></div>').appendTo($el);
+		this.$audit_body = $('<div class="whatsapp-settings__audit"></div>').appendTo($el);
+		$(`<button type="button" class="btn btn-xs btn-default whatsapp-settings__audit-open">${frappe.utils.escape_html(
 			__("Open the full audit log")
 		)}</button>`)
 			.on("click", () => frappe.set_route("List", "WhatsApp Audit Log"))
 			.appendTo($el);
-		return sanad.ui.meta.with_doctype("WhatsApp Audit Log").then((meta) => {
+		return whatsapp.ui.meta.with_doctype("WhatsApp Audit Log").then((meta) => {
 			this.make_audit_filters(meta);
 			return this.load_audit();
 		});
@@ -2011,10 +2011,10 @@ class SettingsView {
 	}
 
 	load_audit() {
-		const state = new sanad.ui.EmptyState({ wrapper: this.$audit_body, state: "loading", rows: 5, size: "sm" });
+		const state = new whatsapp.ui.EmptyState({ wrapper: this.$audit_body, state: "loading", rows: 5, size: "sm" });
 		const filters = {};
 		Object.entries(this.audit_filters).forEach(([k, v]) => v && (filters[k] = v));
-		return sanad.ui
+		return whatsapp.ui
 			.call("settings.list_audit_log", { filters, page: this.audit_page, page_length: 20 })
 			.then((r) => {
 				const rows = (r && r.rows) || [];
@@ -2032,40 +2032,40 @@ class SettingsView {
 	}
 
 	draw_audit(rows, total) {
-		const esc = frappe.utils.escape_html;
+		const escape_html = frappe.utils.escape_html;
 		const TONE = { Info: "gray", Warning: "orange", Critical: "red" };
 		const pages = Math.max(1, Math.ceil(total / 20));
-		this.$audit_body.html(`<div class="sanad-table-wrap"><table class="sanad-table">
+		this.$audit_body.html(`<div class="whatsapp-kit-table-wrap"><table class="whatsapp-kit-table">
 			<thead><tr>
-				<th scope="col">${esc(__("Action"))}</th>
-				<th scope="col">${esc(__("Record"))}</th>
-				<th scope="col">${esc(__("User"))}</th>
-				<th scope="col">${esc(__("When"))}</th>
+				<th scope="col">${escape_html(__("Action"))}</th>
+				<th scope="col">${escape_html(__("Record"))}</th>
+				<th scope="col">${escape_html(__("User"))}</th>
+				<th scope="col">${escape_html(__("When"))}</th>
 			</tr></thead><tbody>${rows
 				.map(
 					(row) => `<tr>
-					<td>${sanad.ui.StatusBadge.html({
+					<td>${whatsapp.ui.StatusBadge.html({
 						label: __(row.action),
 						colour: TONE[row.severity] || "gray",
 					})}</td>
 					<td>${this.audit_record(row)}</td>
-					<td>${esc(row.user || "—")}</td>
-					<td class="wa-settings__nowrap">${esc(frappe.datetime.str_to_user(row.timestamp))}</td>
+					<td>${escape_html(row.user || "—")}</td>
+					<td class="whatsapp-settings__no-wrap">${escape_html(frappe.datetime.str_to_user(row.timestamp))}</td>
 				</tr>`
 				)
 				.join("")}</tbody></table></div>
-			<div class="wa-settings__pager">
-				<span role="status">${esc(
-					sanad.ui.plural(total, { one: __("{0} entry"), other: __("{0} entries") })
+			<div class="whatsapp-settings__pager">
+				<span role="status">${escape_html(
+					whatsapp.ui.plural(total, { one: __("{0} entry"), other: __("{0} entries") })
 				)}</span>
 				<span>
 					<button type="button" class="btn btn-xs btn-default" data-page="prev" ${
 						this.audit_page <= 1 ? "disabled" : ""
-					}>${esc(__("Previous"))}</button>
-					<span class="sanad-tabular">${esc(__("Page {0} of {1}", [this.audit_page, pages]))}</span>
+					}>${escape_html(__("Previous"))}</button>
+					<span class="whatsapp-kit-tabular">${escape_html(__("Page {0} of {1}", [this.audit_page, pages]))}</span>
 					<button type="button" class="btn btn-xs btn-default" data-page="next" ${
 						this.audit_page >= pages ? "disabled" : ""
-					}>${esc(__("Next"))}</button>
+					}>${escape_html(__("Next"))}</button>
 				</span>
 			</div>`);
 		this.$audit_body.find("[data-page]").on("click", (e) => {
@@ -2079,21 +2079,21 @@ class SettingsView {
 
 	/** What an audit row acted on: the record it references, else what it wrote, else its reason. */
 	audit_record(row) {
-		const esc = frappe.utils.escape_html;
-		const label = (doctype, name) =>
-			frappe.utils.get_form_link(doctype, name, true, esc(`${__(doctype)} · ${name}`));
-		if (row.reference_doctype && row.reference_name) return label(row.reference_doctype, row.reference_name);
-		if (row.target_doctype && row.target_name) return label(row.target_doctype, row.target_name);
-		if (row.fields_written) return `<span class="wa-settings__muted">${esc(row.fields_written)}</span>`;
-		if (row.count != null) return esc(sanad.ui.plural(row.count, { one: __("{0} row"), other: __("{0} rows") }));
-		return `<span class="wa-settings__muted">${esc(row.reason || "—")}</span>`;
+		const escape_html = frappe.utils.escape_html;
+		const render_record_link = (doctype, name) =>
+			frappe.utils.get_form_link(doctype, name, true, escape_html(`${__(doctype)} · ${name}`));
+		if (row.reference_doctype && row.reference_name) return render_record_link(row.reference_doctype, row.reference_name);
+		if (row.target_doctype && row.target_name) return render_record_link(row.target_doctype, row.target_name);
+		if (row.fields_written) return `<span class="whatsapp-settings__muted">${escape_html(row.fields_written)}</span>`;
+		if (row.count != null) return escape_html(whatsapp.ui.plural(row.count, { one: __("{0} row"), other: __("{0} rows") }));
+		return `<span class="whatsapp-settings__muted">${escape_html(row.reason || "—")}</span>`;
 	}
 
 	// ---- realtime ---------------------------------------------------------------------------------
 
 	bind_realtime() {
 		if (this.on_device) return;
-		this.on_device = sanad.ui.throttle(() => {
+		this.on_device = whatsapp.ui.throttle(() => {
 			if (this.win.open && ["provider", "webhook"].includes(this.current)) this.show(this.current);
 		}, 5000);
 		frappe.realtime.on("wa:device:status", this.on_device);

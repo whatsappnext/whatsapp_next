@@ -10,32 +10,20 @@
 // page mode. The scripts come whole from `functions.get_catalog`, so this screen owns the rows, the
 // filtering, the sorting and the paging and hands the table one page at a time.
 //
-// The function opens as the prototype's function window (`sanad.ui.FunctionDetail`, D-133); its
+// The function opens as the prototype's function window (`whatsapp.ui.FunctionDetail`, D-133); its
 // header is drawn as variables · options · outputs by `whatsapp_next.functions` (screens/
 // function_spec.js). A form is an `OverlayPanel`: the diff before install or update, the values
 // form (built from the header's parameters, a message text per language) and the "Try" run. Every
-// read and write goes through `sanad.ui.call` to `functions.*` / `commands.*`.
+// read and write goes through `whatsapp.ui.call` to `functions.*` / `commands.*`.
 
 (() => {
 	const ROUTE = "wa-functions-center";
-	const ui = sanad.ui;
-	const kit = sanad.kit;
-	const esc = (v) => ui.escape(v == null ? "" : v);
-	const fmt_int = (v) => ui.format_int(v);
+	const ui = whatsapp.ui;
+	const kit = whatsapp.kit;
+	const escape_html = (v) => ui.escape(v == null ? "" : v);
+	const format_integer = (v) => ui.format_integer(v);
 	const is_manager = () => frappe.user.has_role("WhatsApp Manager") || frappe.user.has_role("System Manager");
 	const command_list = (entry) => frappe.set_route("List", "WhatsApp Command", entry ? { function: entry.function_key } : {});
-
-	/** `1.10.0` sorts after `1.9.0`: compare versions the way the server does. */
-	const version_tuple = (v) => cstr(v).split(/[.-]/).map((p) => (/^\d+$/.test(p) ? cint(p) : 0));
-	const version_cmp = (a, b) => {
-		const ta = version_tuple(a);
-		const tb = version_tuple(b);
-		for (let i = 0; i < Math.max(ta.length, tb.length); i++) {
-			const d = (ta[i] || 0) - (tb[i] || 0);
-			if (d) return d;
-		}
-		return 0;
-	};
 
 	// ---- cell badges (the table keeps the kit's StatusBadge like every other list) ------------
 
@@ -48,7 +36,7 @@
 	const status_badge = (e) =>
 		e.installed
 			? ui.StatusBadge.html({ label: __(e.status || "Active"), colour: e.status === "Active" ? "green" : "gray" })
-			: `<span class="text-muted" aria-hidden="true">—</span><span class="sanad-visually-hidden">${esc(__("Not installed"))}</span>`;
+			: `<span class="text-muted" aria-hidden="true">—</span><span class="whatsapp-kit-visually-hidden">${escape_html(__("Not installed"))}</span>`;
 
 	/** Installed, or why it cannot be: an invalid header, a site that lacks what it needs, a lost script. */
 	const install_badge = (e) => {
@@ -59,7 +47,7 @@
 	};
 
 	/** "12 ms" — the average run of the installed handler; a dash while it has never run. */
-	const ms_text = (value) => (cint(value) ? __("{0} ms", [fmt_int(value)]) : "—");
+	const ms_text = (value) => (cint(value) ? __("{0} ms", [format_integer(value)]) : "—");
 
 	// ---- data ---------------------------------------------------------------------------------
 
@@ -105,7 +93,7 @@
 		const title = installing ? __("Install {0}?", [entry.function_name]) : __("Update {0}?", [entry.function_name]);
 		const chips = (keys, tone) => (keys || []).map((k) => kit.badge(k, tone, { dot: false })).join("");
 		const moved = (rows, key) => (rows || []).map((r) => kit.badge(`${r[key]} · ${Object.keys(r.fields || {}).join(", ")}`, "warn", { dot: false })).join("");
-		const area = (label, d, key) => {
+		const build_diff_section = (label, d, key) => {
 			const lines = [
 				[__("Added"), chips(d.added, "ok")],
 				[__("Removed"), chips(d.removed, "danger")],
@@ -117,7 +105,7 @@
 				render: ($el) =>
 					$el.html(
 						lines
-							.map((l) => `<div class="wa-fn-diff__line"><span class="wa-fn-diff__what">${esc(l[0])}</span><span class="wa-fn-diff__keys">${l[1]}</span></div>`)
+							.map((l) => `<div class="whatsapp-function-diff__line"><span class="whatsapp-function-diff__what">${escape_html(l[0])}</span><span class="whatsapp-function-diff__keys">${l[1]}</span></div>`)
 							.join("")
 					),
 			};
@@ -129,8 +117,8 @@
 				const count = (x) => (x.added || []).length + (x.removed || []).length + (x.changed || []).length;
 				const moving = count(diff.params || {}) + count(diff.replies || {});
 				const blocks = [
-					area(__("Parameters"), diff.params || {}, "name"),
-					area(__("Replies"), diff.replies || {}, "key"),
+					build_diff_section(__("Parameters"), diff.params || {}, "name"),
+					build_diff_section(__("Replies"), diff.replies || {}, "key"),
 					{
 						label: __("Commands that use this function"),
 						list: impacted.map((c) => ({ text: c, badge: __("Command"), badge_tone: "muted" })),
@@ -160,7 +148,7 @@
 							{ k: __("Server Script"), v: entry.server_script, mono: true },
 							{ k: __("Installed version"), v: entry.installed_version || __("None"), mono: !!entry.installed_version },
 							{ k: __("Version in the script"), v: diff.target_version || "—", mono: true },
-							{ k: __("Commands that benefit"), v: fmt_int(impacted.length), mono: true, tone: impacted.length ? "ok" : undefined },
+							{ k: __("Commands that benefit"), v: format_integer(impacted.length), mono: true, tone: impacted.length ? "ok" : undefined },
 						],
 						blocks: moving ? blocks : blocks.slice(-1).concat([{ label: __("Parameters and replies"), text: __("Nothing changes in the parameters or the replies.") }]),
 					},
@@ -281,14 +269,14 @@
 							if (p.fieldtype === "Template") {
 								const texts = {};
 								["", ...text_languages(p)].forEach((lang) => {
-									const v = values[`${p.name}::${lang}`];
-									if (cstr(v).trim()) texts[lang] = v;
+									const language_text = values[`${p.name}::${lang}`];
+									if (cstr(language_text).trim()) texts[lang] = language_text;
 								});
 								payload[p.name] = Object.keys(texts).length ? texts : null;
 								return;
 							}
-							const v = values[p.name];
-							payload[p.name] = p.fieldtype === "Check" ? (v ? 1 : 0) : v == null ? "" : v;
+							const value = values[p.name];
+							payload[p.name] = p.fieldtype === "Check" ? (value ? 1 : 0) : value == null ? "" : value;
 						});
 						return ui.call("functions.save_values", { function_key: entry.function_key, values: payload }, { silent: true }).then(() => {
 							changed = true;
@@ -365,11 +353,11 @@
 									? r.messages
 											.map((m) =>
 												m.type === "text"
-													? `<div class="wa-fn-try__msg"><span class="wa-fn-try__key">${esc(m.reply)}</span><pre class="wa-fn-try__text">${esc(m.text)}</pre></div>`
-													: `<div class="wa-fn-try__msg"><span class="wa-fn-try__key">${esc(m.reply)}</span><span>${esc(__("File {0} from report {1}", [m.file_name || "", m.report_name]))}</span></div>`
+													? `<div class="whatsapp-function-try__message"><span class="whatsapp-function-try__key">${escape_html(m.reply)}</span><pre class="whatsapp-function-try__text">${escape_html(m.text)}</pre></div>`
+													: `<div class="whatsapp-function-try__message"><span class="whatsapp-function-try__key">${escape_html(m.reply)}</span><span>${escape_html(__("File {0} from report {1}", [m.file_name || "", m.report_name]))}</span></div>`
 											)
 											.join("")
-									: `<span class="text-muted">${esc(r.error || __("No message."))}</span>`
+									: `<span class="text-muted">${escape_html(r.error || __("No message."))}</span>`
 							),
 					},
 				],
@@ -381,7 +369,7 @@
 
 	// ---- the function, as a document ---------------------------------------------------------
 
-	/** The header from `functions.get_manifest` in the shape `sanad.ui.FunctionDetail` draws. */
+	/** The header from `functions.get_manifest` in the shape `whatsapp.ui.FunctionDetail` draws. */
 	function window_data(entry, detail) {
 		const params = detail.params || [];
 		const typed = params.filter((p) => p.fieldtype !== "Template");
@@ -433,7 +421,7 @@
 	}
 
 	/**
-	 * The function as the prototype's window (`sanad.ui.FunctionDetail`, D-133): the header read
+	 * The function as the prototype's window (`whatsapp.ui.FunctionDetail`, D-133): the header read
 	 * once, the verbs mapped onto this screen's forms. The preview runs the function on a throw-away
 	 * command draft through `commands.preview_command` — nothing saved, nothing sent.
 	 */
@@ -444,38 +432,38 @@
 		}
 
 		show() {
-			const e = this.entry;
+			const entry = this.entry;
 			const page = this.page;
 			const manager = is_manager();
-			if (e.state === "invalid" || e.state === "missing") return Promise.resolve(page.show_problem(e));
-			const args = e.installed ? { function_key: e.function_key } : { server_script: e.server_script };
+			if (entry.state === "invalid" || entry.state === "missing") return Promise.resolve(page.show_problem(entry));
+			const args = entry.installed ? { function_key: entry.function_key } : { server_script: entry.server_script };
 			return ui
 				.call("functions.get_manifest", args, { silent: true })
 				.catch(() => null)
 				.then((detail) => {
-					const data = window_data(e, detail || { params: [] });
+					const data = window_data(entry, detail || { params: [] });
 					this.manifest = data.manifest;
-					const linked = (e.linked_commands || []).length;
+					const linked = (entry.linked_commands || []).length;
 					const more = [];
-					if (manager && e.installed) {
-						more.push({ label: e.status === "Active" ? __("Deactivate") : __("Activate"), handler: () => page.set_status(e, e.status === "Active" ? "Inactive" : "Active") });
-						if ((this.manifest.params || []).length) more.push({ label: __("Edit values"), handler: () => page.edit_values(e, this.manifest) });
-						more.push({ label: __("Try"), handler: () => page.try_function(e, this.manifest) });
-						if (!linked) more.push({ label: __("Link a command"), handler: () => page.new_command(e) });
+					if (manager && entry.installed) {
+						more.push({ label: entry.status === "Active" ? __("Deactivate") : __("Activate"), handler: () => page.set_status(entry, entry.status === "Active" ? "Inactive" : "Active") });
+						if ((this.manifest.params || []).length) more.push({ label: __("Edit values"), handler: () => page.edit_values(entry, this.manifest) });
+						more.push({ label: __("Try"), handler: () => page.try_function(entry, this.manifest) });
+						if (!linked) more.push({ label: __("Link a command"), handler: () => page.new_command(entry) });
 					}
-					more.push({ label: __("Open the Server Script"), handler: () => frappe.set_route("Form", "Server Script", e.server_script) });
+					more.push({ label: __("Open the Server Script"), handler: () => frappe.set_route("Form", "Server Script", entry.server_script) });
 					this.view = new ui.FunctionDetail({
 						entry: data.entry,
 						manifest: this.manifest,
-						form: e.installed ? { doctype: "WhatsApp Function", name: e.function_key } : null,
+						form: entry.installed ? { doctype: "WhatsApp Function", name: entry.function_key } : null,
 						party_types: PREVIEW_PARTY_TYPES.map((k) => ({ key: k, label: __(k) })),
-						preview: manager && e.installed ? (a) => this.preview(a) : null,
+						preview: manager && entry.installed ? (a) => this.preview_command_draft(a) : null,
 						search_contacts: manager ? (txt, party_type) => ui.call("commands.search_contacts", { txt, party_type }) : null,
-						on_update: manager && e.update_available ? () => page.change(e) : null,
-						on_toggle_install: manager && (e.installed || e.available) ? () => (e.installed ? page.remove(e) : page.change(e)) : null,
+						on_update: manager && entry.update_available ? () => page.change(entry) : null,
+						on_toggle_install: manager && (entry.installed || entry.available) ? () => (entry.installed ? page.remove_installed_function(entry) : page.change(entry)) : null,
 						on_open_commands: () => {
 							this.view && this.view.close();
-							command_list(e);
+							command_list(entry);
 						},
 						more,
 						on_close: () => {
@@ -487,7 +475,7 @@
 				});
 		}
 
-		preview({ code, settings, outputs, values, sender }) {
+		preview_command_draft({ code, settings, outputs, values, sender }) {
 			const payload = whatsapp_next.functions.payload_of(
 				{ code, function: this.entry.function_key, allowed_party_types: [], requires_linked_contact: 0, settings_overrides: settings, outputs },
 				this.manifest.outputs,
@@ -512,19 +500,19 @@
 	 * eight facts beside it; the description is searched but drawn in the drawer, not here.
 	 */
 	const columns = () => [
-		{ fieldname: "function_name", label: __("Function"), width: 160, sortable: true, format: (v) => `<strong>${esc(v || "")}</strong>` },
-		{ fieldname: "server_script", label: __("Server Script"), width: 150, sortable: true, format: (v) => `<span class="sanad-tabular" dir="ltr">${esc(v || "")}</span>` },
+		{ fieldname: "function_name", label: __("Function"), width: 160, sortable: true, format: (v) => `<strong>${escape_html(v || "")}</strong>` },
+		{ fieldname: "server_script", label: __("Server Script"), width: 150, sortable: true, format: (v) => `<span class="whatsapp-kit-tabular" dir="ltr">${escape_html(v || "")}</span>` },
 		{
 			fieldname: "installed_version",
 			label: __("Version"),
 			width: 84,
 			sortable: true,
-			format: (v, doc) => `<span class="sanad-tabular" dir="ltr">${esc(v || doc.version || "")}</span>`,
+			format: (v, doc) => `<span class="whatsapp-kit-tabular" dir="ltr">${escape_html(v || doc.version || "")}</span>`,
 		},
 		{ fieldname: "update_available", label: __("Update"), width: 112, sortable: true, format: (v, doc) => (doc.installed && doc.state !== "missing" ? update_badge(doc) : "") },
-		{ fieldname: "commands_count", label: __("Linked commands"), type: "number", align: "end", width: 104, sortable: true, format: (v) => fmt_int(v) },
-		{ fieldname: "calls_30d", label: __("Calls (30d)"), type: "number", align: "end", width: 96, sortable: true, format: (v) => fmt_int(v) },
-		{ fieldname: "avg_ms", label: __("Average run"), type: "number", align: "end", width: 98, sortable: true, hidden_xs: true, format: (v) => (cint(v) ? esc(ms_text(v)) : "") },
+		{ fieldname: "commands_count", label: __("Linked commands"), type: "number", align: "end", width: 104, sortable: true, format: (v) => format_integer(v) },
+		{ fieldname: "calls_30d", label: __("Calls (30d)"), type: "number", align: "end", width: 96, sortable: true, format: (v) => format_integer(v) },
+		{ fieldname: "avg_ms", label: __("Average run"), type: "number", align: "end", width: 98, sortable: true, hidden_xs: true, format: (v) => (cint(v) ? escape_html(ms_text(v)) : "") },
 		{ fieldname: "status", label: __("Status"), width: 94, sortable: true, format: (v, doc) => (doc.installed ? status_badge(doc) : "") },
 		{ fieldname: "installed", label: __("Install"), width: 98, sortable: true, format: (v, doc) => install_badge(doc) },
 	];
@@ -555,25 +543,25 @@
 			this.filters = {};
 			this.search = "";
 			this.sort = { fieldname: "calls_30d", order: "desc" };
-			this.$main = $(page.main).addClass("sanad-kit wa-functions");
-			this.$head = $('<div class="wa-functions__head"></div>').appendTo(this.$main);
+			this.$main = $(page.main).addClass("whatsapp-kit whatsapp-functions");
+			this.$head = $('<div class="whatsapp-functions__head"></div>').appendTo(this.$main);
 			// the toolbar, the selection and the table are one panel, exactly a Desk list's
-			this.$panel = $('<div class="wa-functions__panel sanad-list-card"></div>').appendTo(this.$main);
-			this.$toolbar = $('<div class="wa-functions__toolbar"></div>').appendTo(this.$panel);
-			this.$bulk = $('<div class="wa-functions__bulk" hidden></div>').appendTo(this.$panel);
-			this.$body = $('<div class="wa-functions__body"></div>').appendTo(this.$panel);
+			this.$panel = $('<div class="whatsapp-functions__panel whatsapp-kit-list-card"></div>').appendTo(this.$main);
+			this.$toolbar = $('<div class="whatsapp-functions__toolbar"></div>').appendTo(this.$panel);
+			this.$bulk = $('<div class="whatsapp-functions__bulk" hidden></div>').appendTo(this.$panel);
+			this.$body = $('<div class="whatsapp-functions__body"></div>').appendTo(this.$panel);
 			this.state = new ui.EmptyState({ wrapper: this.$body, state: "loading", rows: 6 });
-			this.loaded = this.load();
+			this.loaded = this.load_function_catalog();
 			// the WhatsApp hub: ready-made functions from the platform (owner, 2026-10-29)
 			if (frappe.user.has_role(["WhatsApp Manager", "System Manager"]))
 				page.add_inner_button(__("Hub"), () => whatsapp_next.hub.open("Function", { on_installed: () => this.reload() }));
 			// the filters stay under Desk's strip while the functions scroll beneath, as on a list
-			ui.pin_stack(this.$main, [".wa-functions__toolbar"]);
+			ui.pin_stack(this.$main, [".whatsapp-functions__toolbar"]);
 		}
 
 		// ---- data -----------------------------------------------------------------------------
 
-		load() {
+		load_function_catalog() {
 			if (!this.table) this.state.loading({ rows: 6 });
 			return Promise.all([
 				ui.call("functions.get_catalog"),
@@ -596,32 +584,32 @@
 					if (this.table) return ui.Toast.error(err);
 					this.state.error(err, {
 						title: __("Could not load the functions"),
-						action: { label: __("Retry"), on_click: () => this.load() },
+						action: { label: __("Retry"), on_click: () => this.load_function_catalog() },
 					});
 				});
 		}
 
 		/** Re-read after install / update / remove, keeping the filters and the page. */
 		reload() {
-			return this.load();
+			return this.load_function_catalog();
 		}
 
-		entry(key) {
+		find_catalog_entry(key) {
 			return this.entries.find((e) => e.function_key === key) || null;
 		}
 
 		// ---- the screen's own numbers ----------------------------------------------------------
 
 		counters() {
-			const all = this.entries;
+			const entries = this.entries;
 			return {
-				total: all.length,
-				problems: all.filter((e) => ["invalid", "unavailable", "missing"].includes(e.state)).length,
-				installed: all.filter((e) => e.installed).length,
-				active: all.filter((e) => e.installed && e.status === "Active").length,
-				inactive: all.filter((e) => e.installed && e.status !== "Active").length,
-				outdated: all.filter((e) => e.update_available).length,
-				calls: all.reduce((n, e) => n + cint(e.calls_30d), 0),
+				total: entries.length,
+				problems: entries.filter((e) => ["invalid", "unavailable", "missing"].includes(e.state)).length,
+				installed: entries.filter((e) => e.installed).length,
+				active: entries.filter((e) => e.installed && e.status === "Active").length,
+				inactive: entries.filter((e) => e.installed && e.status !== "Active").length,
+				outdated: entries.filter((e) => e.update_available).length,
+				calls: entries.reduce((n, e) => n + cint(e.calls_30d), 0),
 			};
 		}
 
@@ -657,7 +645,7 @@
 				density: "compact",
 				handlers: {
 					open_commands: () => command_list(null),
-					show_updates: () => this.filter_bar && this.filter_bar.set("update_state", "available"),
+					show_updates: () => this.filter_bar && this.filter_bar.set_filter_value("update_state", "available"),
 				},
 				sections: [
 					{
@@ -667,7 +655,7 @@
 								kind: "stat",
 								icon: "sigma",
 								label: __("Functions"),
-								value: fmt_int(c.total),
+								value: format_integer(c.total),
 								note: c.problems ? ui.plural(c.problems, { one: __("{0} cannot run here"), other: __("{0} cannot run here") }) : __("Every script can run here"),
 							},
 							{
@@ -675,15 +663,15 @@
 								icon: "check",
 								tone: "ok",
 								label: __("Active"),
-								value: fmt_int(c.active),
-								note: __("{0} installed · {1} inactive", [fmt_int(c.installed), fmt_int(c.inactive)]),
+								value: format_integer(c.active),
+								note: __("{0} installed · {1} inactive", [format_integer(c.installed), format_integer(c.inactive)]),
 							},
 							{
 								kind: "stat",
 								icon: "chart",
 								tone: "info",
 								label: __("Calls (30d)"),
-								value: fmt_int(c.calls),
+								value: format_integer(c.calls),
 								note: ui.plural(this.commands_total, { one: __("Through {0} linked command"), other: __("Through {0} linked commands") }),
 								action: "open_commands",
 							},
@@ -692,7 +680,7 @@
 								icon: "warn",
 								tone: c.outdated ? "warn" : undefined,
 								label: __("Updates available"),
-								value: fmt_int(c.outdated),
+								value: format_integer(c.outdated),
 								note: c.outdated ? __("Scripts whose header changed since install") : __("Every function matches its script"),
 								action: c.outdated ? "show_updates" : undefined,
 							},
@@ -785,7 +773,7 @@
 					this.filters = values || {};
 					this.search = cstr(search || "").toLowerCase();
 					if (this.table) this.table.page = 0;
-					this.apply();
+					this.show_filtered_page();
 				},
 			});
 		}
@@ -795,11 +783,6 @@
 		/** Client-side, because the catalog is a file the API returns whole (a few dozen rows). */
 		visible() {
 			const f = this.filters || {};
-			const has = (value, picked) => {
-				if (picked == null || picked === "") return true;
-				const list = Array.isArray(picked) ? picked : [picked];
-				return !list.length || list.map(cstr).includes(cstr(value));
-			};
 			const rows = this.entries.filter((e) => {
 				if (f.state && !(f.state === "available" ? ["available", "update"].includes(e.state) : e.state === f.state)) return false;
 				if (f.update_state === "available" && !e.update_available) return false;
@@ -845,9 +828,9 @@
 					on_row_click: (doc) => this.open(doc),
 					on_sort: (fieldname, order) => {
 						this.sort = { fieldname, order };
-						this.apply();
+						this.show_filtered_page();
 					},
-					on_page: () => this.apply(),
+					on_page: () => this.show_filtered_page(),
 					on_select: (rows) => this.render_bulk(rows),
 					footer: { count: (total) => ui.plural(total, { one: __("{0} function"), other: __("{0} functions") }) },
 					empty: {
@@ -860,11 +843,11 @@
 				});
 				this.$body.on("change", ".list-row-checkbox", () => this.render_bulk(this.table.get_selected()));
 			}
-			this.apply();
+			this.show_filtered_page();
 		}
 
 		/** One page of the filtered, sorted catalog handed to the table. */
-		apply() {
+		show_filtered_page() {
 			if (!this.table) return;
 			const rows = this.visible();
 			const start = cint(this.table.page) * cint(this.table.page_length);
@@ -884,19 +867,19 @@
 			const updatable = picked.filter((e) => e.update_available).length;
 			const installed = picked.filter((e) => e.installed).length;
 			this.$bulk.removeAttr("hidden").html(`
-				<span class="wa-functions__bulk-count">
-					<span role="status" aria-atomic="true">${esc(ui.plural(picked.length, { one: __("{0} selected"), other: __("{0} selected") }))}</span>
-					<button type="button" class="wa-functions__bulk-clear" aria-label="${esc(__("Clear selection"))}">&times;</button>
+				<span class="whatsapp-functions__bulk-count">
+					<span role="status" aria-atomic="true">${escape_html(ui.plural(picked.length, { one: __("{0} selected"), other: __("{0} selected") }))}</span>
+					<button type="button" class="whatsapp-functions__bulk-clear" aria-label="${escape_html(__("Clear selection"))}">&times;</button>
 				</span>
-				${updatable ? kit.btn({ label: __("Update {0}", [fmt_int(updatable)]), variant: "tonal", attrs: { "data-bulk": "update" } }) : ""}
+				${updatable ? kit.button_html({ label: __("Update {0}", [format_integer(updatable)]), variant: "tonal", attrs: { "data-bulk": "update" } }) : ""}
 				${
 					installed
-						? kit.btn({ label: __("Activate {0}", [fmt_int(installed)]), variant: "tonal", attrs: { "data-bulk": "Active" } }) +
-						  kit.btn({ label: __("Deactivate {0}", [fmt_int(installed)]), variant: "tonal", attrs: { "data-bulk": "Inactive" } })
-						: `<span class="wa-functions__bulk-note">${esc(__("Install a function before activating or deactivating it."))}</span>`
+						? kit.button_html({ label: __("Activate {0}", [format_integer(installed)]), variant: "tonal", attrs: { "data-bulk": "Active" } }) +
+						  kit.button_html({ label: __("Deactivate {0}", [format_integer(installed)]), variant: "tonal", attrs: { "data-bulk": "Inactive" } })
+						: `<span class="whatsapp-functions__bulk-note">${escape_html(__("Install a function before activating or deactivating it."))}</span>`
 				}`);
-			this.$bulk.find("[data-bulk]").on("click", (ev) => this.bulk($(ev.currentTarget).data("bulk"), picked));
-			this.$bulk.find(".wa-functions__bulk-clear").on("click", () => {
+			this.$bulk.find("[data-bulk]").on("click", (ev) => this.run_bulk_action($(ev.currentTarget).data("bulk"), picked));
+			this.$bulk.find(".whatsapp-functions__bulk-clear").on("click", () => {
 				this.table.clear_selection();
 				this.render_bulk([]);
 			});
@@ -912,10 +895,10 @@
 		}
 
 		/** After a form or a change: the screen's truth again, then the same function again. */
-		back(changed) {
+		reopen_function_window(changed) {
 			const key = this.detail_key;
 			return (changed ? this.reload() : Promise.resolve()).then(() => {
-				const entry = key && this.entry(key);
+				const entry = key && this.find_catalog_entry(key);
 				if (entry) return this.open(entry);
 				this.detail = null;
 			});
@@ -923,15 +906,15 @@
 
 		/** A drawer verb that opens a form: the form takes the overlay, and the drawer returns after it. */
 		change(entry) {
-			return confirm_change(entry, { on_close: (changed) => this.back(changed) });
+			return confirm_change(entry, { on_close: (changed) => this.reopen_function_window(changed) });
 		}
 
 		edit_values(entry, manifest) {
-			return edit_values(entry, manifest, { on_close: (changed) => this.back(changed) });
+			return edit_values(entry, manifest, { on_close: (changed) => this.reopen_function_window(changed) });
 		}
 
 		try_function(entry, manifest) {
-			return try_function(entry, manifest, { on_close: () => this.back(false) });
+			return try_function(entry, manifest, { on_close: () => this.reopen_function_window(false) });
 		}
 
 		/** A script that cannot be read (its header error, with the line) or an installed function that lost it. */
@@ -948,7 +931,7 @@
 				actions: [
 					{ key: "close", label: __("Close"), close: true },
 					remove
-						? { key: "remove", label: __("Remove"), variant: "danger", close: true, handler: () => this.remove(entry) }
+						? { key: "remove", label: __("Remove"), variant: "danger", close: true, handler: () => this.remove_installed_function(entry) }
 						: { key: "open", label: __("Open the Server Script"), variant: "primary", close: true, handler: () => frappe.set_route("Form", "Server Script", entry.server_script) },
 				],
 			}).show();
@@ -964,20 +947,20 @@
 				.call("functions.set_status", { function_key: entry.function_key, status })
 				.then(() => {
 					ui.Toast.success(status === "Active" ? __("{0} is active", [entry.function_name]) : __("{0} is inactive", [entry.function_name]));
-					return this.back(true);
+					return this.reopen_function_window(true);
 				})
 				.catch((err) => ui.Toast.error(err));
 		}
 
 		/** Removing is refused while a command still runs on the function (409) — say so plainly. */
-		remove(entry) {
+		remove_installed_function(entry) {
 			const linked = (entry.linked_commands || []).length;
-			return ui.ConfirmDialog.ask({
+			return ui.ConfirmDialog.ask_for_confirmation({
 				title: __("Remove {0}?", [frappe.utils.escape_html(entry.function_name)]),
 				message: __("The installed record and the site's values are deleted. The Server Script stays, so the function can be installed again."),
 				impact: [
 					{ label: __("Installed version"), value: entry.installed_version || "—" },
-					{ label: __("Linked commands"), value: fmt_int(linked), tone: linked ? "red" : null },
+					{ label: __("Linked commands"), value: format_integer(linked), tone: linked ? "red" : null },
 				],
 				danger: true,
 				confirm_label: __("Remove"),
@@ -994,40 +977,40 @@
 
 		// ---- bulk -------------------------------------------------------------------------------
 
-		bulk(what, picked) {
+		run_bulk_action(what, picked) {
 			if (what === "update") {
 				const targets = picked.filter((e) => e.update_available);
 				const impacted = targets.reduce((n, e) => n + (e.linked_commands || []).length, 0);
 				const left = this.entries.filter((e) => e.update_available).length - targets.length;
-				ui.ConfirmDialog.ask({
+				ui.ConfirmDialog.ask_for_confirmation({
 					title: ui.plural(targets.length, { one: __("Update {0} function?"), other: __("Update {0} functions?") }),
 					message: __("Each function takes its script's current header. Commands, their words and their permissions stay as they are."),
 					impact: [
-						{ label: __("Functions to update"), value: fmt_int(targets.length) },
-						{ label: __("Commands that benefit"), value: fmt_int(impacted), tone: "green" },
-						{ label: __("Left without update"), value: fmt_int(left) },
+						{ label: __("Functions to update"), value: format_integer(targets.length) },
+						{ label: __("Commands that benefit"), value: format_integer(impacted), tone: "green" },
+						{ label: __("Left without update"), value: format_integer(left) },
 					],
 					confirm_label: __("Update"),
 					on_confirm: () => ui.call("functions.update_many", { function_keys: targets.map((e) => e.function_key) }),
 				})
-					.then((r) => this.after_bulk(r, __("{0} functions updated", [fmt_int((r && r.count) || 0)])))
+					.then((r) => this.after_bulk(r, __("{0} functions updated", [format_integer((r && r.count) || 0)])))
 					.catch(() => {});
 				return;
 			}
 			const status = what;
 			const targets = picked.filter((e) => e.installed);
 			if (!targets.length) return ui.Toast.warning(__("Only installed functions can be activated or deactivated."));
-			ui.ConfirmDialog.ask({
+			ui.ConfirmDialog.ask_for_confirmation({
 				title:
 					status === "Active"
 						? ui.plural(targets.length, { one: __("Activate {0} function?"), other: __("Activate {0} functions?") })
 						: ui.plural(targets.length, { one: __("Deactivate {0} function?"), other: __("Deactivate {0} functions?") }),
 				message: status === "Active" ? __("Linked commands run again from their next message.") : __("Linked commands still match the text, but they will not run."),
 				impact: [
-					{ label: __("Functions"), value: fmt_int(targets.length) },
+					{ label: __("Functions"), value: format_integer(targets.length) },
 					{
 						label: __("Linked commands"),
-						value: fmt_int(targets.reduce((n, e) => n + (e.linked_commands || []).length, 0)),
+						value: format_integer(targets.reduce((n, e) => n + (e.linked_commands || []).length, 0)),
 						tone: status === "Active" ? "green" : "amber",
 					},
 				],
@@ -1038,7 +1021,7 @@
 				.then((r) =>
 					this.after_bulk(
 						r,
-						status === "Active" ? __("{0} functions activated", [fmt_int((r && r.count) || 0)]) : __("{0} functions deactivated", [fmt_int((r && r.count) || 0)])
+						status === "Active" ? __("{0} functions activated", [format_integer((r && r.count) || 0)]) : __("{0} functions deactivated", [format_integer((r && r.count) || 0)])
 					)
 				)
 				.catch(() => {});
@@ -1047,7 +1030,7 @@
 		after_bulk(result, message) {
 			const failed = ((result || {}).failed || []).length;
 			const skipped = ((result || {}).skipped || []).length;
-			if (failed) ui.Toast.warning(__("{0} could not be done", [fmt_int(failed)]));
+			if (failed) ui.Toast.warning(__("{0} could not be done", [format_integer(failed)]));
 			else if (skipped && !cint((result || {}).count)) ui.Toast.info(__("Nothing to do"));
 			else ui.Toast.success(message);
 			if (this.table) {
@@ -1071,15 +1054,15 @@
 		if (!(window.whatsapp_next && whatsapp_next.functions && whatsapp_next.functions.editor_spec)) {
 			let first = true;
 			try {
-				first = !sessionStorage.getItem("wa-functions-reloaded");
-				sessionStorage.setItem("wa-functions-reloaded", "1");
+				first = !sessionStorage.getItem("whatsapp-functions-reloaded");
+				sessionStorage.setItem("whatsapp-functions-reloaded", "1");
 			} catch (e) {
 				first = true;
 			}
 			if (first) return window.location.reload();
 		}
 		try {
-			sessionStorage.removeItem("wa-functions-reloaded");
+			sessionStorage.removeItem("whatsapp-functions-reloaded");
 		} catch (e) {
 			// storage blocked: nothing to forget
 		}
@@ -1093,14 +1076,14 @@
 		const screen = wrapper.whatsapp_next;
 		if (!screen) return;
 		// coming back from a command or a form: the install state may have moved meanwhile
-		const ready = screen.entries.length ? screen.reload() : screen.loaded || screen.load();
+		const ready = screen.entries.length ? screen.reload() : screen.loaded || screen.load_function_catalog();
 		// `?function=<key>` or `frappe.route_options.function` (the native Function form, a command's
 		// "Open function"): open that function's record once the catalog is in.
 		const key = (frappe.route_options && frappe.route_options.function) || frappe.utils.get_url_arg("function");
 		if (!key) return;
 		frappe.route_options = null;
 		Promise.resolve(ready).then(() => {
-			const entry = screen.entry(key);
+			const entry = screen.find_catalog_entry(key);
 			if (entry) screen.open(entry);
 			else ui.Toast.info(__("Function {0} is not on this site.", [key]));
 		});

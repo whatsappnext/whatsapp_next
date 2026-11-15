@@ -107,7 +107,7 @@ What the matrix says by design:
 - **`WhatsApp Function` has no C/D.** Functions come from the catalog install flow
   (`services/functions_catalog`); managers only toggle status and settings.
 - **`WhatsApp Audit Log` is `in_create`**: no New button, and no role can write or delete rows.
-  Rows come only from `services/audit.log` ([§10](#10-audit-log)).
+  Rows come only from `services/audit.record_audit_entry` ([§10](#10-audit-log)).
 - **Webhook Event payloads carry PII** (full bodies) and are readable by System Manager and
   WhatsApp Manager only. Terminal `message.*` payloads are blanked after processing.
 - The app declares no `permission_query_conditions` or `has_permission` hooks for its DocTypes.
@@ -221,8 +221,7 @@ The wrapper is marked `__wa_api_endpoint__ = True` and keeps its role tuple in `
 which the surface tests read.
 
 Error classes (`whatsapp_next/exceptions.py`) and their HTTP codes: `WAPermissionError` 403,
-`WANotFoundError` 404, `WAStateConflictError` 409 (and `WADeviceOfflineError`,
-`WAQueuePausedError`), `WAValidationError` 417 (and `WAInvalidPhoneError`, `WABlacklistedError`,
+`WANotFoundError` 404, `WAStateConflictError` 409 (and `WADeviceOfflineError`), `WAValidationError` 417 (and `WAInvalidPhoneError`, `WABlacklistedError`,
 `WAUnknownNumberPolicyError`, `WAFileError`), `WAProviderRejectedError` 422,
 `WANotSupportedError` 422, `WARateLimitError` 429, `WAProviderAuthError` 424,
 `WAProviderUnavailableError` 503.
@@ -401,7 +400,7 @@ Adding `allow_guest=True` anywhere else fails the suite. The decorator's docstri
 
 ## 10. Audit log
 
-`services/audit.log(action, *, reference=None, target=None, fields_written=(), reason=None, count=None, details=None, severity=None, summary=None, summary_args=None, user=None) -> str`
+`services/audit.record_audit_entry(action, *, reference=None, target=None, fields_written=(), reason=None, count=None, details=None, severity=None, summary=None, summary_args=None, user=None) -> str`
 is the one insert function for `WhatsApp Audit Log`.
 
 - It writes under `frappe.session.user`, or under `user` when a service passes it. In a scheduler
@@ -444,4 +443,4 @@ Who reads the log: System Manager and WhatsApp Manager (DocType read / report / 
   declared field set, `EXISTS` filters and `_audit_read` / `_audit_write`. Do not read `Contact`
   with `ignore_permissions` anywhere else.
 - A secret: a Password field at permlevel 1 in Settings, read only through `registry.credentials()`.
-- A privileged action: call `audit.log` from the service that performs it.
+- A privileged action: call `audit.record_audit_entry` from the service that performs it.

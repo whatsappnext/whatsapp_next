@@ -1,10 +1,10 @@
-// sanad.ui core — the namespace, host configuration and the small helpers every kit component
+// whatsapp.ui core — the namespace, host configuration and the small helpers every kit component
 // shares (escaping, icons, RTL, indicator colours, a11y announcer, API calls). Portable: nothing
-// here knows the host app; the host fills `sanad.ui.config.api` with its dotted method paths.
+// here knows the host app; the host fills `whatsapp.ui.config.api` with its dotted method paths.
 
-frappe.provide("sanad.ui");
+frappe.provide("whatsapp.ui");
 
-const ui = sanad.ui;
+const ui = whatsapp.ui;
 
 ui.version = "1.0.0";
 ui.config = ui.config || { api: {}, defaults: {} };
@@ -12,14 +12,14 @@ ui.config = ui.config || { api: {}, defaults: {} };
 /**
  * Merge host configuration:
  * `{ api: {key: "dotted.method"}, defaults: {...}, renderers: {doctypes, profiles, kinds, fields} }`.
- * The `renderers` block is handed to `sanad.ui.Render` — see its README for the spec.
+ * The `renderers` block is handed to `whatsapp.ui.Render` — see its README for the spec.
  */
 ui.configure = function (opts = {}) {
 	ui.config.api = Object.assign(ui.config.api || {}, opts.api || {});
 	ui.config.defaults = Object.assign(ui.config.defaults || {}, opts.defaults || {});
 	if (opts.renderers) {
 		ui.config.renderers = Object.assign(ui.config.renderers || {}, opts.renderers);
-		if (sanad.ui.Render) sanad.ui.Render.configure(opts.renderers);
+		if (whatsapp.ui.Render) whatsapp.ui.Render.configure(opts.renderers);
 	}
 	return ui.config;
 };
@@ -33,7 +33,7 @@ ui.api = function (key) {
 	const method = (ui.config.api || {})[key];
 	if (method) return method;
 	if (key.split(".").length >= 3) return key;
-	throw new Error(__("sanad.ui: API method '{0}' is not configured", [key]));
+	throw new Error(__("whatsapp.ui: API method '{0}' is not configured", [key]));
 };
 
 /**
@@ -118,7 +118,7 @@ ui.icon = (name, size = "sm", cls = "") => (name ? frappe.utils.icon(name, size,
 ui.is_rtl = () =>
 	typeof frappe.utils.is_rtl === "function" ? frappe.utils.is_rtl() : document.dir === "rtl";
 
-ui.uid = (prefix = "sanad") => `${prefix}-${frappe.utils.get_random(8)}`;
+ui.unique_dom_id = (prefix = "whatsapp") => `${prefix}-${frappe.utils.get_random(8)}`;
 
 /**
  * A link or media address safe to put in `href` / `src`: this site's own paths, http(s) and blob
@@ -134,7 +134,7 @@ ui.safe_url = (value) => {
 
 /** A window's «Open form» button (owner, 2026-10-28): `data-act="open_form"`, handled by `ui.open_form`. */
 ui.form_button_html = (cls = "") =>
-	`<button type="button" class="wa-btn wa-btn--secondary wa-btn--sm sanad-open-form ${cls}" data-act="open_form" title="${ui.escape(__("Open the record's full form"))}">${ui.escape(__("Open form"))}</button>`;
+	`<button type="button" class="whatsapp-button whatsapp-button--secondary whatsapp-button--sm whatsapp-kit-open-form ${cls}" data-act="open_form" title="${ui.escape(__("Open the record's full form"))}">${ui.escape(__("Open form"))}</button>`;
 
 /**
  * Leave a window for the record's Desk form: the window closes first (asking before it drops
@@ -142,12 +142,12 @@ ui.form_button_html = (cls = "") =>
  */
 ui.open_form = (win, doctype, name) => {
 	if (!doctype || !name) return;
-	const go = () => {
+	const close_and_open_form = () => {
 		win.close(true);
 		frappe.set_route("Form", doctype, name);
 	};
-	if (typeof win.is_dirty === "function" && win.is_dirty()) return frappe.confirm(__("Discard unsaved changes?"), go);
-	go();
+	if (typeof win.is_dirty === "function" && win.is_dirty()) return frappe.confirm(__("Discard unsaved changes?"), close_and_open_form);
+	close_and_open_form();
 };
 
 ui.debounce = (fn, wait = 250) => frappe.utils.debounce(fn, wait);
@@ -171,12 +171,12 @@ ui.listen = function (event, handler, { on_connect } = {}) {
  * the moments an event may have been missed. Returns a function that stops it.
  */
 ui.on_reconnect = function (reread) {
-	const sock = frappe.realtime.socket;
+	const socket = frappe.realtime.socket;
 	const on_visible = () => !document.hidden && reread();
-	if (sock) sock.on("connect", reread);
+	if (socket) socket.on("connect", reread);
 	document.addEventListener("visibilitychange", on_visible);
 	return () => {
-		if (sock) sock.off("connect", reread);
+		if (socket) socket.off("connect", reread);
 		document.removeEventListener("visibilitychange", on_visible);
 	};
 };
@@ -213,7 +213,7 @@ ui.open_file_in_tab = async (load) => {
 };
 
 /** "3 hours ago" for a stored time, `fallback` when there is none. */
-ui.ago = (value, fallback = "") => (value ? frappe.datetime.prettyDate(value) : fallback);
+ui.format_time_ago = (value, fallback = "") => (value ? frappe.datetime.prettyDate(value) : fallback);
 
 /**
  * The templates an editor's message can come from, as cards (the notification and alert editors
@@ -225,34 +225,34 @@ ui.ago = (value, fallback = "") => (value ? frappe.datetime.prettyDate(value) : 
  *   body}], chosen, query, can_open, new_note, empty_note}`
  */
 ui.template_cards = (o) => {
-	const esc = ui.escape;
+	const escape_html = ui.escape;
 	const all = o.templates || [];
 	const q = String(o.query || "").trim().toLowerCase();
 	const rows = all.filter((t) => !q || `${t.template_name || t.name} ${t.category || ""} ${t.body || ""}`.toLowerCase().includes(q));
-	const card = (t) => {
+	const render_template_card = (t) => {
 		const on = t.name === o.chosen;
-		return `<button type="button" class="sanad-ne__tpl${on ? " is-on" : ""}" data-act="template" data-value="${esc(t.name)}" aria-pressed="${on}" title="${esc(o.can_open ? __("Double-click to edit the template") : "")}">
-			<span class="sanad-ne__tpl-head">
-				<strong>${esc(t.template_name || t.name)}</strong>
-				${on ? `<span class="sanad-ne__tpl-tick" aria-hidden="true">${ui.ico("tick", "xs")}</span>` : ""}
+		return `<button type="button" class="whatsapp-kit-notification-editor__template${on ? " is-on" : ""}" data-act="template" data-value="${escape_html(t.name)}" aria-pressed="${on}" title="${escape_html(o.can_open ? __("Double-click to edit the template") : "")}">
+			<span class="whatsapp-kit-notification-editor__template-head">
+				<strong>${escape_html(t.template_name || t.name)}</strong>
+				${on ? `<span class="whatsapp-kit-notification-editor__template-tick" aria-hidden="true">${ui.inline_icon_html("tick", "xs")}</span>` : ""}
 			</span>
-			<span class="sanad-ne__tpl-meta">${t.category ? `<span class="wa-badge wa-badge--muted wa-badge--nodot">${esc(t.category)}</span>` : ""}${
-				t.reference_doctype ? `<span>${esc(__("For {0}", [__(t.reference_doctype)]))}</span>` : `<span>${esc(__("Any document"))}</span>`
-			}${t.message_type && t.message_type !== "Text" ? `<span>${esc(__(t.message_type))}</span>` : ""}</span>
-			<span class="sanad-ne__tpl-body" dir="auto">${esc(t.body || "")}</span>
+			<span class="whatsapp-kit-notification-editor__template-meta">${t.category ? `<span class="whatsapp-badge whatsapp-badge--muted whatsapp-badge--no-dot">${escape_html(t.category)}</span>` : ""}${
+				t.reference_doctype ? `<span>${escape_html(__("For {0}", [__(t.reference_doctype)]))}</span>` : `<span>${escape_html(__("Any document"))}</span>`
+			}${t.message_type && t.message_type !== "Text" ? `<span>${escape_html(__(t.message_type))}</span>` : ""}</span>
+			<span class="whatsapp-kit-notification-editor__template-body" dir="auto">${escape_html(t.body || "")}</span>
 		</button>`;
 	};
 	const chosen = all.find((t) => t.name === o.chosen);
 	return `
-		${all.length > 6 ? `<input type="search" class="wa-input sanad-ne__filter" data-in="tpl_q" value="${esc(o.query || "")}" placeholder="${esc(__("Filter templates…"))}" aria-label="${esc(__("Filter templates"))}">` : ""}
-		<div class="sanad-ne__tpls" role="group" aria-label="${esc(__("Templates"))}">
-			${o.can_open ? `<button type="button" class="sanad-ne__tpl sanad-ne__tpl--new" data-act="tpl_new">${ui.ico("plus", "sm")}<strong>${esc(__("New template"))}</strong><span>${esc(o.new_note || __("Opens the template editor"))}</span></button>` : ""}
-			${rows.map(card).join("")}
+		${all.length > 6 ? `<input type="search" class="whatsapp-input whatsapp-kit-notification-editor__filter" data-in="tpl_q" value="${escape_html(o.query || "")}" placeholder="${escape_html(__("Filter templates…"))}" aria-label="${escape_html(__("Filter templates"))}">` : ""}
+		<div class="whatsapp-kit-notification-editor__templates" role="group" aria-label="${escape_html(__("Templates"))}">
+			${o.can_open ? `<button type="button" class="whatsapp-kit-notification-editor__template whatsapp-kit-notification-editor__template--new" data-act="tpl_new">${ui.inline_icon_html("plus", "sm")}<strong>${escape_html(__("New template"))}</strong><span>${escape_html(o.new_note || __("Opens the template editor"))}</span></button>` : ""}
+			${rows.map(render_template_card).join("")}
 		</div>
-		${!all.length && o.empty_note ? `<p class="sanad-ae__hint">${esc(o.empty_note)}</p>` : ""}
-		${all.length && !rows.length ? `<p class="sanad-ae__hint">${esc(__("No template matches."))}</p>` : ""}
-		${o.chosen && !chosen ? `<p class="sanad-ae__hint">${esc(__("Uses {0}", [o.chosen]))}</p>` : ""}
-		${o.chosen && o.can_open ? `<div class="sanad-ne__tpl-actions"><button type="button" class="sanad-ae__link" data-act="tpl_edit">${ui.ico("note", "xs")} ${esc(__("Edit this template"))}</button></div>` : ""}`;
+		${!all.length && o.empty_note ? `<p class="whatsapp-kit-alert-editor__hint">${escape_html(o.empty_note)}</p>` : ""}
+		${all.length && !rows.length ? `<p class="whatsapp-kit-alert-editor__hint">${escape_html(__("No template matches."))}</p>` : ""}
+		${o.chosen && !chosen ? `<p class="whatsapp-kit-alert-editor__hint">${escape_html(__("Uses {0}", [o.chosen]))}</p>` : ""}
+		${o.chosen && o.can_open ? `<div class="whatsapp-kit-notification-editor__template-actions"><button type="button" class="whatsapp-kit-alert-editor__link" data-act="tpl_edit">${ui.inline_icon_html("note", "xs")} ${escape_html(__("Edit this template"))}</button></div>` : ""}`;
 };
 
 /**
@@ -262,7 +262,7 @@ ui.template_cards = (o) => {
  * simply does not remember it.
  */
 ui.test_phone = {
-	key: () => `sanad_test_phone:${(frappe.session && frappe.session.user) || ""}`,
+	key: () => `whatsapp_test_phone:${(frappe.session && frappe.session.user) || ""}`,
 	get() {
 		try {
 			return window.localStorage.getItem(ui.test_phone.key()) || "";
@@ -301,23 +301,23 @@ ui.link_html = (doctype, name, display, doc) => {
 };
 
 /**
- * Pin a page's header band while the page scrolls: `ui.pin_stack($root, [".sanad-pagehead__row",
+ * Pin a page's header band while the page scrolls: `ui.pin_stack($root, [".whatsapp-kit-page-header__row",
  * ".my-toolbar"])`. Each element found under `$root` sticks under the ones before it (its offset is
  * their heights, re-measured whenever any of them changes size), on the page's own background so
- * the cards scroll away beneath it. The total height is published on `$root` as `--sanad-pin-h`,
+ * the cards scroll away beneath it. The total height is published on `$root` as `--whatsapp-kit-pin-height`,
  * and a table under the band scrolls inside itself below it, so its sticky head stays in view too.
  * Returns a function that unpins.
  */
 ui.pin_stack = function ($root, selectors) {
 	const root = $($root)[0];
 	if (!root) return () => {};
-	root.classList.add("sanad-pinned-page");
-	const items = () => selectors.map((s) => root.querySelector(s)).filter((el) => el && el.offsetParent !== null);
+	root.classList.add("whatsapp-kit-pinned-page");
+	const find_pinned_elements = () => selectors.map((s) => root.querySelector(s)).filter((el) => el && el.offsetParent !== null);
 	// the band is painted with whatever the page is painted with, so nothing shows through it
 	const backdrop = () => {
 		for (let el = root; el; el = el.parentElement) {
-			const bg = getComputedStyle(el).backgroundColor;
-			if (bg && bg !== "transparent" && !/rgba\(.*,\s*0\)$/.test(bg)) return bg;
+			const background_color = getComputedStyle(el).backgroundColor;
+			if (background_color && background_color !== "transparent" && !/rgba\(.*,\s*0\)$/.test(background_color)) return background_color;
 		}
 		return "var(--surface-base)";
 	};
@@ -330,13 +330,13 @@ ui.pin_stack = function ($root, selectors) {
 	const layout = () => {
 		let top = strip();
 		const bg = backdrop();
-		items().forEach((el) => {
-			el.classList.add("sanad-pin");
+		find_pinned_elements().forEach((el) => {
+			el.classList.add("whatsapp-kit-pin");
 			el.style.insetBlockStart = `${top}px`;
-			el.style.setProperty("--sanad-pin-bg", bg);
+			el.style.setProperty("--whatsapp-kit-pin-background", bg);
 			top += el.getBoundingClientRect().height;
 		});
-		root.style.setProperty("--sanad-pin-h", `${Math.round(top)}px`);
+		root.style.setProperty("--whatsapp-kit-pin-height", `${Math.round(top)}px`);
 		fit_tables(top);
 	};
 	// The page scrolls inside Desk's `.main-section`, not the window. A table under the band is
@@ -344,13 +344,13 @@ ui.pin_stack = function ($root, selectors) {
 	// bottom padding), so scrolled to the end it sits right under the band and scrolls inside
 	// itself — with its sticky head in view — instead of sliding its head under the band.
 	const scroller = (() => {
-		for (let el = root.parentElement; el; el = el.parentElement) {
-			if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el;
+		for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+			if (/(auto|scroll)/.test(getComputedStyle(ancestor).overflowY)) return ancestor;
 		}
 		return document.scrollingElement;
 	})();
 	const fit_tables = (band) => {
-		root.querySelectorAll(".sanad-datalist__wrap").forEach((wrap) => {
+		root.querySelectorAll(".whatsapp-kit-datalist__wrap").forEach((wrap) => {
 			if (!wrap.offsetParent) return;
 			const view = scroller.getBoundingClientRect();
 			const content_end = view.top + scroller.scrollHeight - scroller.scrollTop;
@@ -360,12 +360,12 @@ ui.pin_stack = function ($root, selectors) {
 			// In a list panel the table also reaches the bottom of the screen, so a short one does not
 			// lift the footer to the middle of the page (owner, 2026-10-26): at the top of the page,
 			// the table ends where what follows it (the footer) still ends on the screen's bottom edge.
-			if (wrap.closest(".sanad-list-card")) {
+			if (wrap.closest(".whatsapp-kit-list-card")) {
 				const sc = root.closest(".main-section") || scroller;
 				const sv = sc.getBoundingClientRect();
 				const top_at_start = wrap.getBoundingClientRect().top - sv.top + sc.scrollTop;
 				// what follows the table inside its panel (the footer), not the page's own filler
-				const tail = wrap.closest(".sanad-list-card").getBoundingClientRect().bottom - wrap.getBoundingClientRect().bottom;
+				const tail = wrap.closest(".whatsapp-kit-list-card").getBoundingClientRect().bottom - wrap.getBoundingClientRect().bottom;
 				const fill = Math.round(sc.clientHeight - top_at_start - tail);
 				wrap.style.minBlockSize = `${Math.max(0, fill)}px`;
 			} else {
@@ -374,7 +374,7 @@ ui.pin_stack = function ($root, selectors) {
 		});
 	};
 	const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => layout()) : null;
-	const watch = () => items().forEach((el) => ro && ro.observe(el));
+	const watch = () => find_pinned_elements().forEach((el) => ro && ro.observe(el));
 	layout();
 	watch();
 	// elements drawn later (a filter bar that loads its options) join the band when they appear
@@ -386,16 +386,16 @@ ui.pin_stack = function ($root, selectors) {
 	// a theme switched while the page is open repaints the page: the band takes the new background
 	const theme = new MutationObserver(() => layout());
 	theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-	$(window).on("resize.sanadpin", layout);
+	$(window).on("resize.whatsapppin", layout);
 	return () => {
 		ro && ro.disconnect();
 		mo.disconnect();
 		theme.disconnect();
-		$(window).off("resize.sanadpin", layout);
+		$(window).off("resize.whatsapppin", layout);
 	};
 };
 
-ui.num_align = (fieldtype) => ({ Int: "center", Float: "end", Currency: "end", Percent: "end" })[fieldtype] || null;
+ui.number_alignment = (fieldtype) => ({ Int: "center", Float: "end", Currency: "end", Percent: "end" })[fieldtype] || null;
 
 ui.throttle = (fn, wait = 1000) => frappe.utils.throttle(fn, wait);
 
@@ -411,17 +411,17 @@ ui.plural = function (n, forms) {
 		category = cint(n) === 1 ? "one" : "other";
 	}
 	const form = forms[category] || forms.other || forms.one || "";
-	return form.replace("{0}", ui.format_int(n));
+	return form.replace("{0}", ui.format_integer(n));
 };
 
 /** Run `fn(listview)` after every list render (paging, filters, realtime) — one wrapper per list. */
 ui.on_list_render = function (listview, fn) {
-	if (!listview._sanad_render_hooks) {
-		listview._sanad_render_hooks = [];
+	if (!listview._whatsapp_render_hooks) {
+		listview._whatsapp_render_hooks = [];
 		const original = listview.render_list.bind(listview);
 		listview.render_list = function (...args) {
 			const out = original(...args);
-			listview._sanad_render_hooks.forEach((hook) => {
+			listview._whatsapp_render_hooks.forEach((hook) => {
 				try {
 					hook(listview);
 				} catch (e) {
@@ -431,15 +431,15 @@ ui.on_list_render = function (listview, fn) {
 			return out;
 		};
 	}
-	listview._sanad_render_hooks.push(fn);
+	listview._whatsapp_render_hooks.push(fn);
 	return () => {
-		listview._sanad_render_hooks = listview._sanad_render_hooks.filter((h) => h !== fn);
+		listview._whatsapp_render_hooks = listview._whatsapp_render_hooks.filter((h) => h !== fn);
 	};
 };
 
 /** Refresh a list on a realtime event, throttled, only while that list is the current route. */
 ui.bind_list_realtime = function (listview, event, wait = 2000) {
-	const key = `_sanad_rt_${event}`;
+	const key = `_whatsapp_rt_${event}`;
 	if (listview[key]) return listview[key];
 	const refresh = ui.throttle(() => {
 		const route = frappe.get_route();
@@ -513,7 +513,7 @@ ui.icons = {
 
 // Frappe's Int formatter is `cint()` — no separator — and this product prints large counts on
 // every screen ("3,540 of 6,000"), so the kit groups them in the reader's own locale.
-ui.format_int = (value) => (typeof format_number === "function" ? format_number(cint(value), null, 0) : String(cint(value)));
+ui.format_integer = (value) => (typeof format_number === "function" ? format_number(cint(value), null, 0) : String(cint(value)));
 
 /** Avatar initials: first letter of the first two words, upper-cased (`"Sales device"` → `"SD"`). */
 ui.initials = (text) => {
@@ -532,7 +532,7 @@ ui.docname_of_row = ($row) => {
 	return $r.find(".list-row-checkbox").data("name") || $r.find("a[data-name]").first().data("name");
 };
 
-// Frappe indicator colours → the Espresso triplet used by `.sanad-tone--*` classes.
+// Frappe indicator colours → the Espresso triplet used by `.whatsapp-kit-tone--*` classes.
 const TONES = {
 	green: "green",
 	blue: "blue",
@@ -551,7 +551,7 @@ const TONES = {
 	pink: "pink",
 };
 
-ui.tone = (colour) => TONES[String(colour || "gray").toLowerCase()] || "gray";
+ui.tone_for_colour = (colour) => TONES[String(colour || "gray").toLowerCase()] || "gray";
 
 /** `{label, colour, tone}` for a document, from `frappe.get_indicator` (listview_settings aware). */
 ui.indicator_for = (doctype, doc) => {
@@ -566,17 +566,17 @@ ui.indicator_for = (doctype, doc) => {
 	} catch (e) {
 		// meta not loaded yet — neutral badge
 	}
-	return { label: label || "", colour, tone: ui.tone(colour) };
+	return { label: label || "", colour, tone: ui.tone_for_colour(colour) };
 };
 
 /** Announce a message to assistive technology without moving focus. */
 ui.announce = function (text, { assertive = false } = {}) {
 	if (!text) return;
-	const id = assertive ? "sanad-live-assertive" : "sanad-live-polite";
+	const id = assertive ? "whatsapp-kit-live-assertive" : "whatsapp-kit-live-polite";
 	let $region = $(`#${id}`);
 	if (!$region.length) {
 		$region = $(
-			`<div id="${id}" class="sanad-visually-hidden" role="${
+			`<div id="${id}" class="whatsapp-kit-visually-hidden" role="${
 				assertive ? "alert" : "status"
 			}" aria-live="${assertive ? "assertive" : "polite"}" aria-atomic="true"></div>`
 		).appendTo(document.body);
@@ -585,35 +585,67 @@ ui.announce = function (text, { assertive = false } = {}) {
 	window.setTimeout(() => $region.text(text), 30);
 };
 
+const FOCUSABLE =
+	'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** One keydown: a Tab off the last focusable element of `$root` wraps to the first, and back.
+ * For a window with a key handler of its own; `trap_focus` binds the same rule by itself. */
+ui.keep_tab_inside = function (e, $root) {
+	if (e.key !== "Tab") return;
+	const items = $root.find(FOCUSABLE).filter(":visible").toArray();
+	if (!items.length) return;
+	const first = items[0];
+	const last = items[items.length - 1];
+	if (e.shiftKey && document.activeElement === first) {
+		e.preventDefault();
+		last.focus();
+	} else if (!e.shiftKey && document.activeElement === last) {
+		e.preventDefault();
+		first.focus();
+	}
+};
+
 /** Keep Tab inside `$root` (dialogs handled by Bootstrap; drawers and sheets use this). */
 ui.trap_focus = function ($root) {
-	const selector =
-		'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-	const handler = (e) => {
-		if (e.key !== "Tab") return;
-		const items = $root.find(selector).filter(":visible").toArray();
-		if (!items.length) return;
-		const first = items[0];
-		const last = items[items.length - 1];
-		if (e.shiftKey && document.activeElement === first) {
-			e.preventDefault();
-			last.focus();
-		} else if (!e.shiftKey && document.activeElement === last) {
-			e.preventDefault();
-			first.focus();
+	const handler = (e) => ui.keep_tab_inside(e, $root);
+	$root.on("keydown.whatsapptrap", handler);
+	return () => $root.off("keydown.whatsapptrap", handler);
+};
+
+/** Before a window re-renders its markup: the focused control (by its `data-f`), its selection and
+ * the offset of every `[data-scroll]`. Call the returned function once the new markup is in. */
+ui.hold_focus = function ($root) {
+	const root = $root.get(0);
+	const active = document.activeElement;
+	const key = active && root && root.contains(active) ? active.getAttribute("data-f") : null;
+	const sel = key && "selectionStart" in active ? [active.selectionStart, active.selectionEnd] : null;
+	const scrolls = {};
+	$root.find("[data-scroll]").each((_, el) => (scrolls[el.getAttribute("data-scroll")] = el.scrollTop));
+	return () => {
+		Object.keys(scrolls).forEach((k) => {
+			const el = $root.find(`[data-scroll="${k}"]`).get(0);
+			if (el) el.scrollTop = scrolls[k];
+		});
+		const el = key && $root.find(`[data-f="${key}"]`).get(0);
+		if (!el) return;
+		el.focus();
+		if (sel && "setSelectionRange" in el) {
+			try {
+				el.setSelectionRange(sel[0], sel[1]);
+			} catch (e) {
+				// number inputs do not support a selection
+			}
 		}
 	};
-	$root.on("keydown.sanadtrap", handler);
-	return () => $root.off("keydown.sanadtrap", handler);
 };
 
 /** Skeleton rows markup (loading state — never a spinner). */
 ui.skeleton = (rows = 3, { lines = 2 } = {}) => {
-	let html = '<div class="sanad-skeleton" aria-hidden="true">';
+	let html = '<div class="whatsapp-kit-skeleton" aria-hidden="true">';
 	for (let i = 0; i < rows; i++) {
-		html += '<div class="sanad-skeleton__row">';
+		html += '<div class="whatsapp-kit-skeleton__row">';
 		for (let j = 0; j < lines; j++) {
-			html += `<div class="sanad-skeleton__line" style="width:${j === 0 ? 60 : 85}%"></div>`;
+			html += `<div class="whatsapp-kit-skeleton__line" style="width:${j === 0 ? 60 : 85}%"></div>`;
 		}
 		html += "</div>";
 	}

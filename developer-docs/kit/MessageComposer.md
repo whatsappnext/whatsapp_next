@@ -1,4 +1,4 @@
-# `sanad.ui.MessageComposer`
+# `whatsapp.ui.MessageComposer`
 
 An editor for the ordered messages a record sends, mounted over a Desk form's **Table** field. It
 replaces the child grid with a rail of messages (order, type, one-line summary, a "missing" dot,
@@ -38,10 +38,10 @@ this app's `campaigns.preview_message` returns.
 - `refresh()` — re-read the child meta and redraw; returns `this`.
 - `render()` — redraw count, header action, rail and editor; returns `this`.
 - `select(name)` — make a row (by child `name`) the one being edited, and focus its first input.
-- `add(type?)` — append a row of `type` (default: first Select option, else `"Text"`) and select it.
+- `add_message(type?)` — append a row of `type` (default: first Select option, else `"Text"`) and select it.
 - `duplicate(row)` — copy a row (system keys stripped) and select the copy.
-- `remove(row)` — remove a row; asks via `sanad.ui.ConfirmDialog.ask` unless it is empty.
-- `move(row, delta)` — move a row up (`-1`) or down (`1`) and renumber `idx`.
+- `remove_message(row)` — remove a row; asks via `whatsapp.ui.ConfirmDialog.ask_for_confirmation` unless it is empty.
+- `move_message(row, delta)` — move a row up (`-1`) or down (`1`) and renumber `idx`.
 - `ask_delay(row)` — open the "Wait before this message" dialog for `delay_field`.
 - `load_variables()` — (re)load variables; returns a Promise of the list.
 - `destroy()` — close menus, unbind document handlers, remove the element and the host class.
@@ -70,7 +70,7 @@ Nothing else; row changes go through `frappe.model`.
 ```js
 frappe.ui.form.on("WhatsApp Campaign", {
   refresh(frm) {
-    frm.composer = new sanad.ui.MessageComposer({
+    frm.composer = new whatsapp.ui.MessageComposer({
       frm,
       fieldname: "messages",
       type_field: "message_type",
@@ -88,25 +88,25 @@ frappe.ui.form.on("WhatsApp Campaign", {
 
 ## CSS hooks
 
-- Root `.sanad-kit.sanad-mc[data-fieldname]`; the field wrapper gets `.sanad-mc-host`, which hides
+- Root `.whatsapp-kit.whatsapp-kit-message-composer[data-fieldname]`; the field wrapper gets `.whatsapp-kit-message-composer-host`, which hides
   the native grid, its label, buttons and help.
-- Head: `__head`, `__title`, `__count`, `__head-actions`, `__add`, `__addwrap`.
-- Rail: `__split`, `__rail`, `__raillist`, `__railitem` (`--on`, `--problem`), `__railtop`,
-  `__order`, `__railtype`, `__raildot`, `__railactions`, `__icon-btn`, `__railbtn`, `__railline`,
-  `__railwait`, `__delay`, `__railadd`, `__railaddbtn`.
-- Type chooser: `__typewrap`, `__typepick` (`-icon`, `-text`, `-caption`, `-name`, `-caret`),
-  `__typemenu`, `__typegroup`, `__typeopt` (`--on`, `-icon`, `-text`, `-name`, `-hint`, `-tick`).
-- Editor: `__editor`, `__etop`, `__toggle-preview`, `__egrid` (`--nopreview`), `__eform`,
-  `__field--<fieldtype>`, `__more`, `__toolbar`, `__mark`, `__varpick`, `__varbtn`, `__varmenu`,
-  `__varopt`, `__delayline`.
-- Preview: `__epreview`, `__pane-label`, `__chat`, `__bubble`, `__text` (`--empty`), `__var`,
+- Head: `__head`, `__title`, `__count`, `__head-actions`, `__add`, `__add-wrap`.
+- Rail: `__split`, `__rail`, `__rail-list`, `__rail-item` (`--on`, `--problem`), `__rail-top`,
+  `__order`, `__rail-type`, `__rail-dot`, `__rail-actions`, `__icon-button`, `__rail-button`, `__rail-line`,
+  `__rail-wait`, `__delay`, `__rail-add`, `__rail-add-button`.
+- Type chooser: `__type-wrap`, `__type-picker` (`-icon`, `-text`, `-caption`, `-name`, `-caret`),
+  `__type-menu`, `__type-group`, `__type-option` (`--on`, `-icon`, `-text`, `-name`, `-hint`, `-tick`).
+- Editor: `__editor`, `__editor-top`, `__toggle-preview`, `__editor-grid` (`--no-preview`), `__editor-form`,
+  `__field--<fieldtype>`, `__more`, `__toolbar`, `__mark`, `__variable-picker`, `__variable-button`, `__variable-menu`,
+  `__variable-option`, `__delay-line`.
+- Preview: `__editor-preview`, `__pane-label`, `__chat`, `__bubble`, `__text` (`--empty`), `__variable`,
   `__thumb`, `__file` (`--under`), `__poll`, `__poll-q`, `__poll-o`, `__poll-note`, `__meta`,
   `__errors`.
 - Layout is container-query driven: rail beside editor at ≥760px, preview beside fields at ≥820px.
 
 ## Notes
 
-- **Empty:** the rail shows a `sanad.ui.EmptyState` (`size: "sm"`) with "Add the first message"
+- **Empty:** the rail shows a `whatsapp.ui.EmptyState` (`size: "sm"`) with "Add the first message"
   when editable.
 - **Problems** per row: no type, empty text, poll without question or with fewer than two answers,
   media without a file (a Document may use `print_format` instead). Shown as a dot with a title.

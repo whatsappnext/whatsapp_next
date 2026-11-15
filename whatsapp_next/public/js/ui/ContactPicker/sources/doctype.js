@@ -15,26 +15,26 @@ export class DoctypeSource extends BaseSource {
 		return "DocType";
 	}
 
-	static label() {
+	static default_tab_label() {
 		return __("System screen");
 	}
 
 	render() {
 		this.page_length = 50;
 		this.doctypes = this.entry.doctypes || [];
-		const $head = $('<div class="sanad-picker__head"></div>');
-		const select_id = ui.uid("dt");
-		const $row = $(`<div class="sanad-picker__field"><label for="${select_id}">${ui.escape(__("Screen"))}</label></div>`);
+		const $head = $('<div class="whatsapp-kit-picker__head"></div>');
+		const select_id = ui.unique_dom_id("dt");
+		const $row = $(`<div class="whatsapp-kit-picker__field"><label for="${select_id}">${ui.escape(__("Screen"))}</label></div>`);
 		this.$select = $(`<select class="form-control" id="${select_id}"><option value="">${ui.escape(__("Choose a screen"))}</option></select>`);
 		this.doctypes.forEach((d) => this.$select.append(`<option value="${ui.escape(d.document_type)}">${ui.escape(__(d.label || d.document_type))}</option>`));
 		this.$select.on("change", () => this.set_doctype(this.$select.val()));
 		$row.append(this.$select);
 		$head.append($row);
-		this.$filters = $('<div class="sanad-picker__filters"></div>');
-		this.$results = $('<div class="sanad-picker__results"></div>');
+		this.$filters = $('<div class="whatsapp-kit-picker__filters"></div>');
+		this.$results = $('<div class="whatsapp-kit-picker__results"></div>');
 		this.$pager = this.pager((p) => this.reload(p));
-		this.$foot = $('<div class="sanad-picker__foot"></div>');
-		this.$progress = $('<span class="sanad-picker__note" aria-live="polite"></span>');
+		this.$foot = $('<div class="whatsapp-kit-picker__foot"></div>');
+		this.$progress = $('<span class="whatsapp-kit-picker__note" aria-live="polite"></span>');
 		this.$pane.append($head, this.$filters, this.$results, this.$pager, this.$foot, this.$progress);
 		this.state = this.state_for(this.$results);
 		this.state.empty({ title: __("Choose a screen"), description: __("Then filter its records like any list and add the matching ones.") });
@@ -77,7 +77,7 @@ export class DoctypeSource extends BaseSource {
 		this.state.loading();
 		this.$foot.empty();
 		const seq = (this._seq = (this._seq || 0) + 1);
-		return this.call("picker.list_doctype_rows", { document_type: this.document_type, filters: this.get_filters(), page: this.page, page_length: this.page_length }, { silent: true })
+		return this.call_picker_api("picker.list_doctype_rows", { document_type: this.document_type, filters: this.get_filters(), page: this.page, page_length: this.page_length }, { silent: true })
 			.then((r) => {
 				if (seq !== this._seq) return;
 				this.rows = (r && r.rows) || [];
@@ -90,9 +90,9 @@ export class DoctypeSource extends BaseSource {
 				this.state.hide();
 				const $table = this.candidate_table(this.rows, { extra_columns: [{ label: __("Record"), format: (row) => ui.escape(row.source_name || "") }] });
 				this.$results.html($table);
-				const matching_label = this.total != null ? __("Add all {0} matching", [ui.format_int(this.total)]) : __("Add all matching");
+				const matching_label = this.total != null ? __("Add all {0} matching", [ui.format_integer(this.total)]) : __("Add all matching");
 				const $matching = $(`<button type="button" class="btn btn-default btn-sm">${ui.escape(matching_label)}</button>`).on("click", () => this.add_all_matching());
-				this.$progress.text(this.total != null ? __("{0} matching records", [ui.format_int(this.total)]) : "");
+				this.$progress.text(this.total != null ? __("{0} matching records", [ui.format_integer(this.total)]) : "");
 				this.$foot.append($matching, this.add_selected_button($table, { source_type: this.key, source_ref: this.document_type }));
 			})
 			.catch((err) => {
@@ -111,24 +111,24 @@ export class DoctypeSource extends BaseSource {
 		let seen = 0;
 		try {
 			for (;;) {
-				this.$progress.text(this.total != null ? __("Loading matching records… {0} of {1}", [ui.format_int(seen), ui.format_int(this.total)]) : __("Loading matching records… {0}", [ui.format_int(seen)]));
-				const r = await this.call("picker.list_doctype_rows", { document_type: this.document_type, filters, page, page_length: BULK_PAGE }, { silent: true });
+				this.$progress.text(this.total != null ? __("Loading matching records… {0} of {1}", [ui.format_integer(seen), ui.format_integer(this.total)]) : __("Loading matching records… {0}", [ui.format_integer(seen)]));
+				const r = await this.call_picker_api("picker.list_doctype_rows", { document_type: this.document_type, filters, page, page_length: BULK_PAGE }, { silent: true });
 				const rows = (r && r.rows) || [];
 				if (r && r.total != null) this.total = cint(r.total);
 				seen += rows.length;
 				added += this.picker.add_rows(rows, { source_type: this.key, source_ref: this.document_type, quiet: true });
 				if (rows.length < BULK_PAGE || (this.total != null && seen >= this.total)) break;
 				if (seen >= MAX_MATCHING) {
-					sanad.ui.Toast.warning(__("Stopped at {0} records. Narrow the filters to add the rest.", [ui.format_int(MAX_MATCHING)]));
+					whatsapp.ui.Toast.warning(__("Stopped at {0} records. Narrow the filters to add the rest.", [ui.format_integer(MAX_MATCHING)]));
 					break;
 				}
 				page += 1;
 			}
-			this.$progress.text(__("Added {0} records", [ui.format_int(added)]));
+			this.$progress.text(__("Added {0} records", [ui.format_integer(added)]));
 			this.picker.notify_added(added);
 		} catch (err) {
 			this.$progress.text("");
-			sanad.ui.Toast.error(err);
+			whatsapp.ui.Toast.error(err);
 		}
 		this.busy = false;
 		this.$foot.find(".btn").prop("disabled", false);

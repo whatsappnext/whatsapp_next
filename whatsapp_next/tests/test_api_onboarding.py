@@ -101,12 +101,12 @@ class TestApiOnboarding(IntegrationTestCase):
 		finished, every user is sent back to the setup; whoever cannot run it is told instead."""
 		from whatsapp_next.boot import boot_session
 
-		def state(**values):
+		def set_settings_values(**values):
 			frappe.db.set_single_value(SETTINGS, values)
 			frappe.clear_document_cache(SETTINGS, SETTINGS)
 
 		# never registered
-		state(redirect_unregistered_to_wizard=1, setup_completed=0)
+		set_settings_values(redirect_unregistered_to_wizard=1, setup_completed=0)
 		for f in SECRETS:
 			remove_encrypted_password(SETTINGS, SETTINGS, f)
 		frappe.clear_document_cache(SETTINGS, SETTINGS)
@@ -125,12 +125,12 @@ class TestApiOnboarding(IntegrationTestCase):
 			self.assertTrue(api.get_status()["needs_setup"])
 
 		# the setting switches it off
-		state(redirect_unregistered_to_wizard=0)
+		set_settings_values(redirect_unregistered_to_wizard=0)
 		with as_user("System Manager"):
 			self.assertFalse(svc.should_redirect_to_wizard(), "the setting switches it off")
 
 		# signed in, but the wizard never finished: still sent back
-		state(
+		set_settings_values(
 			redirect_unregistered_to_wizard=1,
 			platform_base_url="https://platform.example.com",
 			setup_completed=0,
@@ -142,7 +142,7 @@ class TestApiOnboarding(IntegrationTestCase):
 			self.assertTrue(svc.should_redirect_to_wizard(), "an unfinished setup still sends back")
 
 		# signed in and finished: the product opens
-		state(setup_completed=1)
+		set_settings_values(setup_completed=1)
 		with as_user("WhatsApp Agent"):
 			self.assertFalse(svc.should_redirect_to_wizard(), "a finished setup lets everyone in")
 			self.assertFalse(api.get_status()["needs_setup"])
@@ -155,7 +155,8 @@ class TestApiOnboarding(IntegrationTestCase):
 
 		foreign = Fernet(Fernet.generate_key()).encrypt(b"other-site-key").decode()
 		saved = {
-			f: secrets.read(f) for f in ("customer_api_key", "api_key", "api_secret", "customer_api_secret")
+			f: secrets.read_password_field(f)
+			for f in ("customer_api_key", "api_key", "api_secret", "customer_api_secret")
 		}
 		try:
 			# written through the query builder (not MariaDB's ON DUPLICATE KEY), so it runs on both
@@ -168,7 +169,7 @@ class TestApiOnboarding(IntegrationTestCase):
 					SETTINGS, SETTINGS, f, foreign, 1
 				).run()
 			frappe.local.message_log = []
-			self.assertIsNone(secrets.read("customer_api_key"))
+			self.assertIsNone(secrets.read_password_field("customer_api_key"))
 			self.assertFalse(set(saved) & set(registry.credentials()))  # every foreign key reads as missing
 			self.assertFalse(svc.has_credentials())
 			with as_user("System Manager"):
@@ -194,13 +195,13 @@ class TestApiOnboarding(IntegrationTestCase):
 			with self.assertRaises(WAValidationError):
 				api.start_signup(
 					plan_code="trial",
-					mobile="+966500910001",
+					mobile="+967784499996",
 					full_name="Api Test",
 					email="a@b.c",
 					channel="fax",
 				)
 			started = api.start_signup(
-				plan_code="trial", mobile="0500910001", full_name="Api Test", email="a@b.c", channel="sms"
+				plan_code="trial", mobile="+967784499996", full_name="Api Test", email="a@b.c", channel="sms"
 			)
 			self.assertEqual(started["request_key"], "req-1")
 			self.assertEqual(api.get_signup_status(request_key="req-1")["status"], "Pending")
@@ -262,7 +263,7 @@ class TestApiOnboarding(IntegrationTestCase):
 			self.assertTrue(settings_api.test_connection()["ok"])
 			with self.assertRaises(WAStateConflictError):
 				api.complete_setup()  # device (unless another test left one Connected) or webhook
-			ensure_device("ApiTest Onboarding Device", DEVICE, status="Connected", phone="+966500910002")
+			ensure_device("ApiTest Onboarding Device", DEVICE, status="Connected", phone="+967784499996")
 			with self.assertRaises(WAStateConflictError) as ctx:
 				api.complete_setup()
 			self.assertIn("webhook", str(ctx.exception))
@@ -321,11 +322,11 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 				}
 			).insert(ignore_permissions=True)
 		# the person's own number is not the account's: the number comes from the company's contact
-		frappe.db.set_value("User", user, "mobile_no", "+967777000111")
+		frappe.db.set_value("User", user, "mobile_no", "+967784499996")
 		out = svc.signup_prefill(user)
 		self.assertEqual(out["person"], "Prefill Person")
 		self.assertEqual(out["email"], user)
-		self.assertNotEqual(out.get("phone"), "+967777000111")
+		self.assertNotEqual(out.get("phone"), "+967784499996")
 		# the Administrator account names no real person
 		self.assertNotIn("person", svc.signup_prefill("Administrator"))
 		with fake_provider(), as_user("System Manager"):
@@ -358,7 +359,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 		"""The email is optional: the platform gives the account a placeholder, and it signs in by
 		mobile number or username."""
 		with fake_provider() as provider, as_user("System Manager"):
-			out = api.start_signup(mobile="0500910009", full_name="No Mail Tenant", channel="sms")
+			out = api.start_signup(mobile="+967784499996", full_name="No Mail Tenant", channel="sms")
 			self.assertEqual(out["request_key"], "req-1")
 			self.assertIn("start_signup", dict(provider.calls))
 
@@ -368,7 +369,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 		for f in SECRETS:
 			remove_encrypted_password(SETTINGS, SETTINGS, f)
 		with fake_provider() as provider, as_user("System Manager"):
-			started = api.start_password_reset(identifier="+966500910001")
+			started = api.start_password_reset(identifier="+967784499996")
 			# nothing is sent on WhatsApp: the page shows the code and the person sends it
 			self.assertEqual(
 				{
@@ -400,9 +401,9 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 		user to SEND the code from that number (WhatsApp) or mailed it (its device offline)."""
 		self.assertEqual(
 			svc.verification_route(
-				{"verification_channel": "WhatsApp", "code": "123456", "device_phone": "967779770054"}
+				{"verification_channel": "WhatsApp", "code": "123456", "device_phone": "967784499996"}
 			),
-			{"channel": "whatsapp", "code": "123456", "platform_phone": "+967779770054"},
+			{"channel": "whatsapp", "code": "123456", "platform_phone": "+967784499996"},
 		)
 		# the platform's WhatsApp username, when its settings name one, travels with the number
 		self.assertEqual(
@@ -410,7 +411,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 				{
 					"verification_channel": "WhatsApp",
 					"code": "123456",
-					"device_phone": "967779770054",
+					"device_phone": "967784499996",
 					"device_username": "@whatsappnext",
 				}
 			)["platform_username"],
@@ -434,7 +435,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 		for sent in ("free", "free_trial", None):
 			with fake_provider() as provider, as_user("System Manager"):
 				args = {
-					"mobile": "0500910008",
+					"mobile": "+967784499996",
 					"full_name": "Plan Tenant",
 					"email": "p@b.c",
 					"channel": "sms",
@@ -450,7 +451,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 		with fake_provider() as provider, as_user("System Manager"):
 			api.start_signup(
 				plan_code="trial",
-				mobile="0500910007",
+				mobile="+967784499996",
 				full_name="Coupon Tenant",
 				email="c@b.c",
 				channel="sms",
@@ -662,7 +663,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 			provider.devices["WAD-ONB-LINK1"] = DeviceState(
 				platform_device="WAD-ONB-LINK1",
 				device_name="Front desk",
-				phone_e164="+966500910077",
+				phone_e164="+967784499996",
 				status="Connected",
 			)
 			try:
@@ -687,7 +688,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 				)
 				self.assertEqual(
 					(device.device_name, device.status, device.phone_e164),
-					("Front desk", "Connected", "+966500910077"),
+					("Front desk", "Connected", "+967784499996"),
 				)
 				# signing in again adopts nothing twice
 				self.assertEqual(
@@ -730,7 +731,7 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 		}
 		with fake_provider() as provider, as_user("System Manager"):
 			with patch.object(type(provider), "login", return_value=answer):
-				out = api.login(platform_base_url="", email="967770000741", password="right-password")
+				out = api.login(platform_base_url="", email="967784499996", password="right-password")
 		self.assertEqual(out["ok"], False)
 		self.assertTrue(out["verification_required"])
 		self.assertEqual(

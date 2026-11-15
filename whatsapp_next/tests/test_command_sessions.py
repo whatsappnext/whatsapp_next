@@ -18,7 +18,7 @@ from whatsapp_next.tests.conftest_frappe import ensure_device, ensure_settings
 CODE = "tsess"
 
 
-def plan(interactive: bool) -> None:
+def set_plan_allows_interactive(interactive: bool) -> None:
 	"""The synced plan, with or without buttons and lists."""
 	frappe.db.set_single_value(
 		"WhatsApp Settings", "plan_features", frappe.as_json({"allow_interactive": interactive})
@@ -31,7 +31,7 @@ class TestCommandSessions(IntegrationTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		ff.drop_all()
-		cls.device = ensure_device("Session Device", "WAD-TEST-SS01", phone="+966500950001")
+		cls.device = ensure_device("Session Device", "WAD-TEST-SS01", phone="+967784499996")
 		ensure_settings(
 			enable_commands=1, command_service_user=ff.ensure_service_user(), main_menu_mode="Off"
 		)
@@ -45,12 +45,14 @@ class TestCommandSessions(IntegrationTestCase):
 		self.assertIsNone(command_sessions.relative_date("2026-10-31"))
 		cmd = frappe._dict(function="_test_ason")
 		self.assertEqual(
-			command_router._coerce("last_month_start", "as_on", cmd),
+			command_router._coerce_input_to_parameter_type("last_month_start", "as_on", cmd),
 			str(get_first_day(add_months(today, -1))),
 		)
-		self.assertEqual(command_router._coerce("2026-02-03", "as_on", cmd), "2026-02-03")
+		self.assertEqual(
+			command_router._coerce_input_to_parameter_type("2026-02-03", "as_on", cmd), "2026-02-03"
+		)
 		with self.assertRaises(ValueError):
-			command_router._coerce("someday", "as_on", cmd)
+			command_router._coerce_input_to_parameter_type("someday", "as_on", cmd)
 
 	def test_ask_specs(self):
 		cmd = frappe._dict(ask_inputs="months: 1, 3=Three months, 6\nas_on")
@@ -61,11 +63,11 @@ class TestCommandSessions(IntegrationTestCase):
 
 	def _setup(self):
 		self.command = ff.make_command(CODE, "_test_ason", ask_inputs="as_on")
-		plan(True)
+		set_plan_allows_interactive(True)
 		self.phone = "+9677700" + frappe.generate_hash(length=5)[:5].translate(
 			str.maketrans("abcdef", "123456")
 		)
-		self.addCleanup(command_sessions.clear, self.device, self.phone)
+		self.addCleanup(command_sessions.clear_question_session, self.device, self.phone)
 
 	def _inbound(self, body, selected=None):
 		doc = frappe.get_doc(
@@ -84,7 +86,7 @@ class TestCommandSessions(IntegrationTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
-	def _route(self, name):
+	def _route_and_capture_replies(self, name):
 		sent, runs = [], []
 		with (
 			patch.object(
@@ -101,56 +103,60 @@ class TestCommandSessions(IntegrationTestCase):
 			patch.object(command_router, "check_access", return_value=None),
 		):
 			frappe.db.set_single_value("WhatsApp Settings", "enable_commands", 1)
-			res = command_router.route(name)
+			res = command_router.route_inbound_message(name)
 		return res, sent, runs
 
 	def test_missing_date_is_asked_then_the_command_runs(self):
 		self._setup()
-		res, sent, runs = self._route(self._inbound(CODE))
+		res, sent, runs = self._route_and_capture_replies(self._inbound(CODE))
 		self.assertEqual((res.status, runs), ("Awaiting Input", []))
 		self.assertEqual(sent[0]["message_type"], "List")
 		ids = [r["id"] for r in sent[0]["interactive"]["sections"][0]["rows"]]
 		self.assertIn(command_sessions.ARG_PREFIX + "month_start", ids)
-		res, sent, runs = self._route(
+		res, sent, runs = self._route_and_capture_replies(
 			self._inbound("بداية هذا الشهر", selected=command_sessions.ARG_PREFIX + "month_start")
 		)
 		self.assertEqual(res.status, "Executed")
 		self.assertEqual(runs, [{"as_on": str(get_first_day(getdate(nowdate())))}])
-		self.assertIsNone(command_sessions.load(self.device, self.phone))
+		self.assertIsNone(command_sessions.load_question_session(self.device, self.phone))
 
 	def test_typed_command_with_the_value_is_not_asked(self):
 		self._setup()
-		res, _sent, runs = self._route(self._inbound(f"{CODE} 2026-01-31"))
+		res, _sent, runs = self._route_and_capture_replies(self._inbound(f"{CODE} 2026-01-31"))
 		self.assertEqual((res.status, runs), ("Executed", [{"as_on": "2026-01-31"}]))
 
 	def test_cancel_and_bad_value(self):
 		self._setup()
-		self._route(self._inbound(CODE))
-		res, sent, runs = self._route(self._inbound("not a date"))
+		self._route_and_capture_replies(self._inbound(CODE))
+		res, sent, runs = self._route_and_capture_replies(self._inbound("not a date"))
 		self.assertEqual((res.status, runs), ("Awaiting Input", []))
 		self.assertEqual(sent[-1]["message_type"], "List")  # asked again
-		res, sent, runs = self._route(self._inbound("إلغاء"))
+		res, sent, runs = self._route_and_capture_replies(self._inbound("إلغاء"))
 		self.assertEqual((res.status, runs), ("Executed", []))
-		self.assertIsNone(command_sessions.load(self.device, self.phone))
+		self.assertIsNone(command_sessions.load_question_session(self.device, self.phone))
 
 	def test_menu_tap_title_words_are_not_arguments(self):
 		self._setup()
 		# a menu row titled "tsess العميل": "العميل" is a label, so the date is asked, not refused
-		res, _sent, runs = self._route(self._inbound(f"{CODE} العميل", selected="svc_balance"))
+		res, _sent, runs = self._route_and_capture_replies(
+			self._inbound(f"{CODE} العميل", selected="svc_balance")
+		)
 		self.assertEqual((res.status, runs), ("Awaiting Input", []))
-		command_sessions.clear(self.device, self.phone)
+		command_sessions.clear_question_session(self.device, self.phone)
 		# a row whose id is a command line runs it with the id's arguments
-		res, _sent, runs = self._route(self._inbound(f"{CODE} أول الشهر", selected=f"{CODE} month_start"))
+		res, _sent, runs = self._route_and_capture_replies(
+			self._inbound(f"{CODE} أول الشهر", selected=f"{CODE} month_start")
+		)
 		self.assertEqual(
 			(res.status, runs), ("Executed", [{"as_on": str(get_first_day(getdate(nowdate())))}])
 		)
 
 	def test_without_the_plan_questions_are_numbered_text(self):
 		self._setup()
-		plan(False)
-		res, sent, runs = self._route(self._inbound(CODE))
+		set_plan_allows_interactive(False)
+		res, sent, runs = self._route_and_capture_replies(self._inbound(CODE))
 		self.assertEqual((res.status, sent[0]["message_type"]), ("Awaiting Input", "Text"))
 		self.assertIn("3. ", sent[0]["body"])
 		# option 3 is the third date preset: the start of this month
-		res, sent, runs = self._route(self._inbound("3"))
+		res, sent, runs = self._route_and_capture_replies(self._inbound("3"))
 		self.assertEqual(runs, [{"as_on": str(get_first_day(getdate(nowdate())))}])

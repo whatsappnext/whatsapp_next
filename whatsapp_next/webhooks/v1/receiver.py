@@ -47,13 +47,15 @@ def _well_formed(value: str) -> bool:
 	return len(value) <= MAX_HEADER_ID and value.isprintable()
 
 
-def _secret() -> str | None:
+def _read_webhook_secret() -> str | None:
 	from whatsapp_next.services import secrets
 
-	return secrets.read("webhook_secret")
+	return secrets.read_password_field("webhook_secret")
 
 
-def handle(headers: Mapping[str, str], raw_body: bytes, *, remote_ip: str | None = None) -> Outcome:
+def handle_webhook_request(
+	headers: Mapping[str, str], raw_body: bytes, *, remote_ip: str | None = None
+) -> Outcome:
 	"""Pure-ish core of the receiver (tests call it directly). Returns HTTP status + JSON body."""
 	envelope = registry.get_provider().webhook_envelope(headers)
 	event_id, event_name = envelope.event_id, envelope.event_name
@@ -65,14 +67,14 @@ def handle(headers: Mapping[str, str], raw_body: bytes, *, remote_ip: str | None
 	if _rate_limited(remote_ip):
 		return Outcome(429, {"ok": False, "error": "rate limited"})
 	# 2. secret
-	secret = _secret()
+	secret = _read_webhook_secret()
 	if not secret:
 		if not frappe.cache.get_value(SECRET_MISSING_LOG_KEY):
 			frappe.cache.set_value(SECRET_MISSING_LOG_KEY, 1, expires_in_sec=600)
 			frappe.log_error(title="WhatsApp webhook: secret not configured", message="receiver returned 503")
 		return Outcome(503, {"ok": False, "error": "webhook secret not configured"})
 	# 3–4. freshness + signature
-	sig = verify.check(headers, raw_body, secret)
+	sig = verify.check_webhook_signature(headers, raw_body, secret)
 	if not sig.valid:
 		# Not stored: anyone can send an unsigned request, and a row per request would let a
 		# guest grow the table without limit. The counter is enough to notice a rotated secret.
@@ -109,7 +111,7 @@ def handle(headers: Mapping[str, str], raw_body: bytes, *, remote_ip: str | None
 				message=f"event={event_name} id={event.event_id}",
 			)
 	# 6 + 8. claim / duplicate
-	c = idempotency.claim(
+	claimed_event = idempotency.claim_webhook_event(
 		event.event_id or event_id,
 		event_name,
 		payload=body,
@@ -123,8 +125,8 @@ def handle(headers: Mapping[str, str], raw_body: bytes, *, remote_ip: str | None
 		status=status,
 		error=error,
 	)
-	if c.duplicate:
-		return Outcome(200, {"ok": True, "duplicate": True}, event=c.name)
+	if claimed_event.duplicate:
+		return Outcome(200, {"ok": True, "duplicate": True}, event=claimed_event.name)
 	frappe.db.set_single_value(
 		"WhatsApp Settings",
 		"webhook_last_event_at",
@@ -132,22 +134,22 @@ def handle(headers: Mapping[str, str], raw_body: bytes, *, remote_ip: str | None
 		update_modified=False,
 	)
 	if status == "Ignored":
-		return Outcome(200, {"ok": True, "ignored": True}, event=c.name)
+		return Outcome(200, {"ok": True, "ignored": True}, event=claimed_event.name)
 	# 9. process in a job
 	frappe.enqueue(
 		"whatsapp_next.webhooks.handlers.process_event",
 		# not `event=`: `frappe.enqueue` keeps that keyword for itself and the job got no row
-		webhook_event=c.name,
+		webhook_event=claimed_event.name,
 		queue="short",
 		# the stored row, not the event id: the platform sends a message's id as the event id, so
 		# its `delivered` and `read` share one, and a `read` arriving while `delivered` was still
 		# queued was dropped as a duplicate job and never handled
-		job_id=f"wa-webhook-{c.name}",
+		job_id=f"wa-webhook-{claimed_event.name}",
 		deduplicate=True,
 		enqueue_after_commit=True,
 		timeout=120,
 	)
-	return Outcome(200, {"ok": True}, event=c.name)
+	return Outcome(200, {"ok": True}, event=claimed_event.name)
 
 
 @api_endpoint(allow_guest=True, methods=("POST",))
@@ -156,6 +158,6 @@ def receive(**_kwargs) -> dict[str, Any]:
 	request = frappe.request
 	raw = request.get_data() if request else b""
 	headers = dict(request.headers) if request else {}
-	outcome = handle(headers, raw, remote_ip=getattr(frappe.local, "request_ip", None))
+	outcome = handle_webhook_request(headers, raw, remote_ip=getattr(frappe.local, "request_ip", None))
 	frappe.local.response["http_status_code"] = outcome.http_status
 	return outcome.body

@@ -15,7 +15,7 @@ from whatsapp_next.services import dispatch, interactive
 from whatsapp_next.tests.conftest_frappe import ensure_device
 
 
-def plan(interactive: bool) -> None:
+def set_plan_allows_interactive(interactive: bool) -> None:
 	"""The synced plan, with or without buttons and lists."""
 	frappe.db.set_single_value(
 		"WhatsApp Settings", "plan_features", frappe.as_json({"allow_interactive": interactive})
@@ -25,10 +25,10 @@ def plan(interactive: bool) -> None:
 
 class TestInteractive(IntegrationTestCase):
 	def setUp(self):
-		plan(True)
+		set_plan_allows_interactive(True)
 
 	def test_buttons_are_validated_and_given_ids(self):
-		d = interactive.normalize(
+		d = interactive.normalize_interactive_definition(
 			"Buttons",
 			{
 				"text": "Continue?",
@@ -47,10 +47,10 @@ class TestInteractive(IntegrationTestCase):
 			{"text": "t", "buttons": [{"type": "nope", "text": "x"}]},
 		):
 			with self.assertRaises(WAValidationError):
-				interactive.normalize("Buttons", bad)
+				interactive.normalize_interactive_definition("Buttons", bad)
 
 	def test_list_needs_rows(self):
-		d = interactive.normalize(
+		d = interactive.normalize_interactive_definition(
 			"List",
 			{
 				"text": "Pick",
@@ -61,14 +61,14 @@ class TestInteractive(IntegrationTestCase):
 			(d["button_text"], [r["id"] for r in d["sections"][0]["rows"]]), ("Options", ["a", "b"])
 		)
 		with self.assertRaises(WAValidationError):
-			interactive.normalize("List", {"text": "Pick", "sections": []})
+			interactive.normalize_interactive_definition("List", {"text": "Pick", "sections": []})
 
 	def test_outbound_stores_and_sends_the_definition(self):
 		device = frappe.db.get_value("WhatsApp Device", {}, "name") or ensure_device()
 		name = dispatch.create_outbound(
 			dispatch.OutboundSpec(
 				device=device,
-				phone="+967770000001",
+				phone="+967784499996",
 				message_type="List",
 				skip_policy=True,
 				interactive={
@@ -94,12 +94,12 @@ class TestInteractive(IntegrationTestCase):
 
 	def test_a_plan_without_buttons_and_lists_refuses_them(self):
 		device = frappe.db.get_value("WhatsApp Device", {}, "name") or ensure_device()
-		plan(False)
+		set_plan_allows_interactive(False)
 		with self.assertRaises(WANotSupportedError):
 			dispatch.create_outbound(
 				dispatch.OutboundSpec(
 					device=device,
-					phone="+967770000001",
+					phone="+967784499996",
 					message_type="Buttons",
 					skip_policy=True,
 					interactive={"text": "Continue?", "buttons": [{"text": "Yes"}]},

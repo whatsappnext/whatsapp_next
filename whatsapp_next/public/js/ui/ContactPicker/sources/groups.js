@@ -16,7 +16,7 @@ export class GroupsSource extends BaseSource {
 		return "Contact Group";
 	}
 
-	static label() {
+	static default_tab_label() {
 		return __("Contact groups");
 	}
 
@@ -24,15 +24,15 @@ export class GroupsSource extends BaseSource {
 		this.kind = "";
 		this.txt = "";
 		this.checked = new Set();
-		const $head = $('<div class="sanad-picker__head"></div>');
+		const $head = $('<div class="whatsapp-kit-picker__head"></div>');
 		$head.append(this.search_box(__("Search groups"), (txt) => this.reload({ txt })));
-		this.$kinds = $('<div class="sanad-picker__head-dd"></div>').appendTo($head);
-		this.$results = $('<div class="sanad-picker__results"></div>');
+		this.$kinds = $('<div class="whatsapp-kit-picker__head-dropdown"></div>').appendTo($head);
+		this.$results = $('<div class="whatsapp-kit-picker__results"></div>');
 		this.names = {}; // docname → group_name for progress text
 		this.$pager = this.pager((p) => this.reload({ page: p }));
-		this.$foot = $('<div class="sanad-picker__foot"></div>');
+		this.$foot = $('<div class="whatsapp-kit-picker__foot"></div>');
 		this.$add = $('<button type="button" class="btn btn-primary btn-sm" disabled></button>').on("click", () => this.add_members());
-		this.$progress = $('<span class="sanad-picker__note" aria-live="polite"></span>');
+		this.$progress = $('<span class="whatsapp-kit-picker__note" aria-live="polite"></span>');
 		this.$foot.append(this.$add, this.$progress);
 		this.$pane.append($head, this.$results, this.$pager, this.$foot);
 		this.state = this.state_for(this.$results);
@@ -59,7 +59,7 @@ export class GroupsSource extends BaseSource {
 		this.page = page || (txt !== undefined || kind !== undefined ? 1 : this.page);
 		this.state.loading();
 		const exclude = this.picker.target_is_group() ? this.picker.target_name : null;
-		return this.call("picker.search_groups", { txt: this.txt || null, kind: this.kind || null, exclude, page: this.page, page_length: this.page_length }, { silent: true })
+		return this.call_picker_api("picker.search_groups", { txt: this.txt || null, kind: this.kind || null, exclude, page: this.page, page_length: this.page_length }, { silent: true })
 			.then((r) => {
 				this.rows = (r && r.rows) || [];
 				this.total = cint(r && r.total);
@@ -83,43 +83,43 @@ export class GroupsSource extends BaseSource {
 	}
 
 	render_rows() {
-		const $list = $('<div class="sanad-picker__list sanad-picker__groups" role="group"></div>');
-		const $rows = $('<div class="sanad-picker__rows"></div>').appendTo($list);
+		const $list = $('<div class="whatsapp-kit-picker__list whatsapp-kit-picker__groups" role="group"></div>');
+		const $rows = $('<div class="whatsapp-kit-picker__rows"></div>').appendTo($list);
 		this.rows.forEach((g) => {
 			const name = g.group_name || g.name;
 			const on = this.checked.has(g.name);
 			const blacklist = g.kind === "Blacklist";
 			const $li = $(`
-				<div class="sanad-picker__group" data-name="${ui.escape(g.name)}">
-					<div class="sanad-picker__row" role="checkbox" aria-checked="${on}" tabindex="0">
-						<span class="sanad-picker__av" aria-hidden="true">${ui.escape(ui.initials(name) || "#")}</span>
-						<span class="sanad-picker__row-text">
-							<span class="sanad-picker__row-name" dir="auto">${ui.escape(name)}</span>
-							<span class="sanad-picker__row-sub">${ui.escape(ui.plural(cint(g.member_count), { one: __("{0} member"), two: __("{0} members"), few: __("{0} members"), many: __("{0} members"), other: __("{0} members") }))}</span>
+				<div class="whatsapp-kit-picker__group" data-name="${ui.escape(g.name)}">
+					<div class="whatsapp-kit-picker__row" role="checkbox" aria-checked="${on}" tabindex="0">
+						<span class="whatsapp-kit-picker__avatar" aria-hidden="true">${ui.escape(ui.initials(name) || "#")}</span>
+						<span class="whatsapp-kit-picker__row-text">
+							<span class="whatsapp-kit-picker__row-name" dir="auto">${ui.escape(name)}</span>
+							<span class="whatsapp-kit-picker__row-subtitle">${ui.escape(ui.plural(cint(g.member_count), { one: __("{0} member"), two: __("{0} members"), few: __("{0} members"), many: __("{0} members"), other: __("{0} members") }))}</span>
 						</span>
-						${g.kind ? `<span class="sanad-picker__row-badge${blacklist ? " sanad-picker__row-badge--warn" : ""}">${ui.escape(__(g.kind))}</span>` : ""}
-						<button type="button" class="sanad-picker__peek">${ui.escape(__("Show members"))}</button>
-						<span class="sanad-picker__mark" aria-hidden="true">${ui.icon("es-line-check", "xs")}</span>
+						${g.kind ? `<span class="whatsapp-kit-picker__row-badge${blacklist ? " whatsapp-kit-picker__row-badge--warn" : ""}">${ui.escape(__(g.kind))}</span>` : ""}
+						<button type="button" class="whatsapp-kit-picker__peek">${ui.escape(__("Show members"))}</button>
+						<span class="whatsapp-kit-picker__mark" aria-hidden="true">${ui.icon("es-line-check", "xs")}</span>
 					</div>
 				</div>`);
-			const $row = $li.find(".sanad-picker__row");
-			const toggle = () => {
+			const $row = $li.find(".whatsapp-kit-picker__row");
+			const toggle_group_checked = () => {
 				if (this.checked.has(g.name)) this.checked.delete(g.name);
 				else this.checked.add(g.name);
 				$row.attr("aria-checked", this.checked.has(g.name));
 				this.update_add();
 			};
 			$row.on("click", (e) => {
-				if ($(e.target).closest(".sanad-picker__peek").length) return;
-				toggle();
+				if ($(e.target).closest(".whatsapp-kit-picker__peek").length) return;
+				toggle_group_checked();
 			});
 			$row.on("keydown", (e) => {
 				if ((e.key === " " || e.key === "Enter") && e.target === $row[0]) {
 					e.preventDefault();
-					toggle();
+					toggle_group_checked();
 				}
 			});
-			$li.find(".sanad-picker__peek").on("click", () => this.open_members(g));
+			$li.find(".whatsapp-kit-picker__peek").on("click", () => this.open_members(g));
 			$rows.append($li);
 		});
 		this.$results.html($list);
@@ -153,26 +153,26 @@ export class GroupsSource extends BaseSource {
 			secondary_action_label: __("Close"),
 			secondary_action: () => dialog.hide(),
 		});
-		dialog.$wrapper.removeClass("fade").addClass("sanad-kit sanad-picker-dialog sanad-picker-members");
+		dialog.$wrapper.removeClass("fade").addClass("whatsapp-kit whatsapp-kit-picker-dialog whatsapp-kit-picker-members");
 		const $primary = dialog.get_primary_btn().prop("disabled", true);
 		const $body = dialog.get_field("body").$wrapper;
 		$body.html(`
-			<div class="sanad-picker__members">
-				<div class="sanad-picker__head">
-					<label class="sanad-picker__search"><span class="sanad-picker__search-icon" aria-hidden="true">${ui.icon("es-line-search", "sm")}</span><input type="search" class="sanad-picker__search-input" placeholder="${ui.escape(__("Search by name or phone"))}" aria-label="${ui.escape(__("Search by name or phone"))}"></label>
+			<div class="whatsapp-kit-picker__members">
+				<div class="whatsapp-kit-picker__head">
+					<label class="whatsapp-kit-picker__search"><span class="whatsapp-kit-picker__search-icon" aria-hidden="true">${ui.icon("es-line-search", "sm")}</span><input type="search" class="whatsapp-kit-picker__search-input" placeholder="${ui.escape(__("Search by name or phone"))}" aria-label="${ui.escape(__("Search by name or phone"))}"></label>
 				</div>
-				<div class="sanad-picker__members-bar">
+				<div class="whatsapp-kit-picker__members-bar">
 					<button type="button" class="btn btn-default btn-xs" data-act="all">${ui.escape(__("Select all"))}</button>
 					<button type="button" class="btn btn-default btn-xs" data-act="matches" hidden>${ui.escape(__("Select the matches"))}</button>
 					<button type="button" class="btn btn-default btn-xs" data-act="none" hidden>${ui.escape(__("Clear selection"))}</button>
-					<button type="button" class="btn btn-default btn-xs sanad-picker__members-show" data-act="show" aria-pressed="false" hidden>${ui.escape(__("Show selected"))} <span class="sanad-tabular" data-n></span></button>
-					<span class="sanad-picker__note sanad-picker__members-count" aria-live="polite"></span>
+					<button type="button" class="btn btn-default btn-xs whatsapp-kit-picker__members-show" data-act="show" aria-pressed="false" hidden>${ui.escape(__("Show selected"))} <span class="whatsapp-kit-tabular" data-n></span></button>
+					<span class="whatsapp-kit-picker__note whatsapp-kit-picker__members-count" aria-live="polite"></span>
 				</div>
-				<div class="sanad-picker__results sanad-picker__members-list"></div>
+				<div class="whatsapp-kit-picker__results whatsapp-kit-picker__members-list"></div>
 			</div>`);
 		const $search = $body.find("input");
-		const $list = $body.find(".sanad-picker__members-list");
-		const $count = $body.find(".sanad-picker__members-count");
+		const $list = $body.find(".whatsapp-kit-picker__members-list");
+		const $count = $body.find(".whatsapp-kit-picker__members-count");
 		const $show = $body.find('[data-act="show"]');
 		const state = this.state_for($list);
 
@@ -183,12 +183,12 @@ export class GroupsSource extends BaseSource {
 		};
 		const visible = () => rows.filter((r) => (!only_chosen || chosen.has(key_of(r))) && matches(r));
 		const reflect = () => {
-			const n = chosen.size;
-			$primary.text(n ? __("Add {0}", [ui.format_int(n)]) : __("Add")).prop("disabled", !n);
-			$show.prop("hidden", !n && !only_chosen).attr("aria-pressed", only_chosen).find("[data-n]").text(n ? ui.format_int(n) : "");
-			$body.find('[data-act="none"]').prop("hidden", !n);
+			const chosen_count = chosen.size;
+			$primary.text(chosen_count ? __("Add {0}", [ui.format_integer(chosen_count)]) : __("Add")).prop("disabled", !chosen_count);
+			$show.prop("hidden", !chosen_count && !only_chosen).attr("aria-pressed", only_chosen).find("[data-n]").text(chosen_count ? ui.format_integer(chosen_count) : "");
+			$body.find('[data-act="none"]').prop("hidden", !chosen_count);
 			$body.find('[data-act="matches"]').prop("hidden", !query);
-			$count.text(n ? __("{0} selected", [ui.format_int(n)]) : "");
+			$count.text(chosen_count ? __("{0} selected", [ui.format_integer(chosen_count)]) : "");
 		};
 		const render = () => {
 			if (!loaded) return;
@@ -202,25 +202,25 @@ export class GroupsSource extends BaseSource {
 				return state.empty({ title: only_chosen ? __("Nothing selected yet") : __("No match for {0}", [query]), description: only_chosen ? __("Tick members to choose them.") : "" });
 			}
 			state.hide();
-			let html = '<div class="sanad-picker__list" role="group"><div class="sanad-picker__rows">';
+			let html = '<div class="whatsapp-kit-picker__list" role="group"><div class="whatsapp-kit-picker__rows">';
 			shown.slice(0, limit).forEach((r) => {
 				const key = key_of(r);
 				const person = r.display_name || r.source_name || r.contact || "";
 				const phone = ui.phone(r.phone_e164 || r.phone || "");
 				const on = chosen.has(key);
-				html += `<div class="sanad-picker__row" role="checkbox" aria-checked="${on}" tabindex="0" data-key="${ui.escape(key)}">
-					<span class="sanad-picker__av" aria-hidden="true">${ui.escape(ui.initials(person || phone) || "#")}</span>
-					<span class="sanad-picker__row-text">
-						<span class="sanad-picker__row-name" dir="auto">${ui.escape(person || phone)}${ui.group_tag(r.phone_e164 || r.phone)}</span>
-						${person && phone ? `<span class="sanad-picker__row-sub sanad-tabular" dir="ltr">${ui.escape(phone)}</span>` : ""}
+				html += `<div class="whatsapp-kit-picker__row" role="checkbox" aria-checked="${on}" tabindex="0" data-key="${ui.escape(key)}">
+					<span class="whatsapp-kit-picker__avatar" aria-hidden="true">${ui.escape(ui.initials(person || phone) || "#")}</span>
+					<span class="whatsapp-kit-picker__row-text">
+						<span class="whatsapp-kit-picker__row-name" dir="auto">${ui.escape(person || phone)}${ui.group_tag(r.phone_e164 || r.phone)}</span>
+						${person && phone ? `<span class="whatsapp-kit-picker__row-subtitle whatsapp-kit-tabular" dir="ltr">${ui.escape(phone)}</span>` : ""}
 					</span>
-					<span class="sanad-picker__mark" aria-hidden="true">${ui.icon("es-line-check", "xs")}</span>
+					<span class="whatsapp-kit-picker__mark" aria-hidden="true">${ui.icon("es-line-check", "xs")}</span>
 				</div>`;
 			});
 			html += "</div></div>";
 			$list.html(html);
 			if (shown.length > limit) {
-				$(`<button type="button" class="btn btn-default btn-sm sanad-picker__more">${ui.escape(__("Show {0} more", [ui.format_int(Math.min(RENDER_STEP, shown.length - limit))]))}</button>`)
+				$(`<button type="button" class="btn btn-default btn-sm whatsapp-kit-picker__more">${ui.escape(__("Show {0} more", [ui.format_integer(Math.min(RENDER_STEP, shown.length - limit))]))}</button>`)
 					.on("click", () => {
 						limit += RENDER_STEP;
 						render();
@@ -229,7 +229,7 @@ export class GroupsSource extends BaseSource {
 			}
 			reflect();
 		};
-		const toggle = (el) => {
+		const toggle_member_chosen = (el) => {
 			const key = el.dataset.key;
 			const row = rows.find((r) => key_of(r) === key);
 			if (!row) return;
@@ -238,11 +238,11 @@ export class GroupsSource extends BaseSource {
 			el.setAttribute("aria-checked", chosen.has(key) ? "true" : "false");
 			reflect();
 		};
-		$list.on("click", ".sanad-picker__row", (e) => toggle(e.currentTarget));
-		$list.on("keydown", ".sanad-picker__row", (e) => {
+		$list.on("click", ".whatsapp-kit-picker__row", (e) => toggle_member_chosen(e.currentTarget));
+		$list.on("keydown", ".whatsapp-kit-picker__row", (e) => {
 			if (e.key === " " || e.key === "Enter") {
 				e.preventDefault();
-				toggle(e.currentTarget);
+				toggle_member_chosen(e.currentTarget);
 			}
 		});
 		$search.on("input", ui.debounce(() => {
@@ -251,11 +251,11 @@ export class GroupsSource extends BaseSource {
 			render();
 		}, 200));
 		$body.on("click", "[data-act]", (e) => {
-			const act = e.currentTarget.dataset.act;
-			if (act === "all") rows.forEach((r) => chosen.set(key_of(r), r));
-			else if (act === "matches") visible().forEach((r) => chosen.set(key_of(r), r));
-			else if (act === "none") chosen.clear();
-			else if (act === "show") only_chosen = !only_chosen;
+			const action = e.currentTarget.dataset.act;
+			if (action === "all") rows.forEach((r) => chosen.set(key_of(r), r));
+			else if (action === "matches") visible().forEach((r) => chosen.set(key_of(r), r));
+			else if (action === "none") chosen.clear();
+			else if (action === "show") only_chosen = !only_chosen;
 			render();
 		});
 		dialog.show();
@@ -267,8 +267,8 @@ export class GroupsSource extends BaseSource {
 			let total = null;
 			try {
 				for (;;) {
-					$count.text(__("Loading members of {0}: {1} of {2}", [name, ui.format_int(rows.length), total != null ? ui.format_int(total) : "…"]));
-					const r = await this.call("picker.get_group_members", { group: group.name, page, page_length: MEMBER_PAGE }, { silent: true });
+					$count.text(__("Loading members of {0}: {1} of {2}", [name, ui.format_integer(rows.length), total != null ? ui.format_integer(total) : "…"]));
+					const r = await this.call_picker_api("picker.get_group_members", { group: group.name, page, page_length: MEMBER_PAGE }, { silent: true });
 					const got = (r && r.rows) || [];
 					total = cint(r && r.total);
 					rows.push(...got);
@@ -285,8 +285,8 @@ export class GroupsSource extends BaseSource {
 	}
 
 	update_add() {
-		const n = this.checked.size;
-		this.$add.prop("disabled", !n).text(ui.plural(n, { one: __("Add members of {0} group"), two: __("Add members of {0} groups"), few: __("Add members of {0} groups"), many: __("Add members of {0} groups"), other: __("Add members of {0} groups") }));
+		const checked_group_count = this.checked.size;
+		this.$add.prop("disabled", !checked_group_count).text(ui.plural(checked_group_count, { one: __("Add members of {0} group"), two: __("Add members of {0} groups"), few: __("Add members of {0} groups"), many: __("Add members of {0} groups"), other: __("Add members of {0} groups") }));
 	}
 
 	async add_members() {
@@ -299,8 +299,8 @@ export class GroupsSource extends BaseSource {
 				let page = 1;
 				let total = null;
 				for (;;) {
-					this.$progress.text(__("Loading members of {0}: {1} of {2}", [this.names[group] || group, ui.format_int(total != null ? Math.min((page - 1) * MEMBER_PAGE, total) : 0), total != null ? ui.format_int(total) : "…"]));
-					const r = await this.call("picker.get_group_members", { group, page, page_length: MEMBER_PAGE }, { silent: true });
+					this.$progress.text(__("Loading members of {0}: {1} of {2}", [this.names[group] || group, ui.format_integer(total != null ? Math.min((page - 1) * MEMBER_PAGE, total) : 0), total != null ? ui.format_integer(total) : "…"]));
+					const r = await this.call_picker_api("picker.get_group_members", { group, page, page_length: MEMBER_PAGE }, { silent: true });
 					const rows = (r && r.rows) || [];
 					total = cint(r && r.total);
 					added += this.picker.add_rows(rows, { source_type: this.key, source_ref: groups.length === 1 ? group : null, quiet: true });
@@ -308,13 +308,13 @@ export class GroupsSource extends BaseSource {
 					page += 1;
 				}
 			}
-			this.$progress.text(__("Added {0} members", [ui.format_int(added)]));
+			this.$progress.text(__("Added {0} members", [ui.format_integer(added)]));
 			this.picker.notify_added(added);
 			this.checked.clear();
-			this.$results.find(".sanad-picker__row").attr("aria-checked", "false");
+			this.$results.find(".whatsapp-kit-picker__row").attr("aria-checked", "false");
 		} catch (err) {
 			this.$progress.text("");
-			sanad.ui.Toast.error(err);
+			whatsapp.ui.Toast.error(err);
 		}
 		this.update_add();
 	}

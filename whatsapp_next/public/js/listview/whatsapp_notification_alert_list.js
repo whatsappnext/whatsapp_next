@@ -5,7 +5,7 @@
 // Last updated · View → the alert editor window, D-139). PageHeader / DataList are guarded with `typeof`.
 
 const DOCTYPE = "WhatsApp Notification Alert";
-const has_kit = (name) => typeof sanad.ui[name] === "function";
+const has_kit = (name) => typeof whatsapp.ui[name] === "function";
 
 // a row, "View" and "New alert" open the alert editor window (D-139); the form stays one click away in it
 function open_form(doc) {
@@ -17,34 +17,21 @@ function new_alert() {
 }
 
 function toggle_enabled(doc, listview) {
-	const enable = !cint(doc.enabled);
-	const title = doc.alert_name || doc.name;
-	return sanad.ui.ConfirmDialog.ask({
-		title: enable ? __("Enable {0}?", [title]) : __("Disable {0}?", [title]),
-		message: enable
-			? __("The alert will run on its schedule and send its report or message.")
-			: __("The alert will not run until it is enabled again."),
+	return whatsapp_next.enabled_toggle.confirm_and_toggle_enabled(listview, DOCTYPE, doc, {
+		title: doc.alert_name || doc.name,
+		enable_message: __("The alert will run on its schedule and send its report or message."),
+		disable_message: __("The alert will not run until it is enabled again."),
 		impact: [
 			{ label: __("Periodicity"), value: __(doc.periodicity || "") },
 			{ label: __("Device"), value: doc.device || "—" },
 		],
-		confirm_label: enable ? __("Enable") : __("Disable"),
-		danger: !enable,
-		on_confirm: () => frappe.xcall("frappe.client.set_value", { doctype: DOCTYPE, name: doc.name, fieldname: "enabled", value: enable ? 1 : 0 }),
-	})
-		.then(() => {
-			sanad.ui.Toast.success(enable ? __("Alert enabled") : __("Alert disabled"));
-			listview.refresh();
-			listview._sanad_header && listview._sanad_header.refresh();
-		})
-		.catch(() => {});
+		enabled_toast: __("Alert enabled"),
+		disabled_toast: __("Alert disabled"),
+	});
 }
 
 function status_chip(doc, can_write) {
-	const enabled = !!cint(doc.enabled);
-	const badge = sanad.ui.StatusBadge.html({ label: enabled ? __("Enabled") : __("Disabled"), colour: enabled ? "green" : "gray" });
-	if (!can_write) return badge;
-	return `<button type="button" class="btn btn-link p-0 wa-toggle-enabled" data-name="${frappe.utils.escape_html(doc.name)}" aria-pressed="${enabled}" aria-label="${frappe.utils.escape_html(enabled ? __("Enabled — click to disable") : __("Disabled — click to enable"))}">${badge}</button>`;
+	return whatsapp_next.enabled_toggle.enabled_chip_html(doc, can_write);
 }
 
 /** `[now, now + 24 h]` in the system time zone, as `YYYY-MM-DD HH:mm:ss`. */
@@ -63,7 +50,7 @@ const STATS = () => [
 			Promise.all([frappe.db.count(DOCTYPE), frappe.db.count(DOCTYPE, { filters: { content_type: "Report" } })]).then(
 				([total, reports]) => ({ value: total, reports })
 			),
-		sub: (value, raw) => sanad.ui.plural((raw && raw.reports) || 0, { one: __("{0} report alert"), other: __("{0} report alerts") }),
+		sub: (value, raw) => whatsapp.ui.plural((raw && raw.reports) || 0, { one: __("{0} report alert"), other: __("{0} report alerts") }),
 	},
 	{
 		key: "enabled",
@@ -74,7 +61,7 @@ const STATS = () => [
 			Promise.all([frappe.db.count(DOCTYPE, { filters: { enabled: 1 } }), frappe.db.count(DOCTYPE, { filters: { enabled: 0 } })]).then(
 				([on, off]) => ({ value: on, tone: "green", disabled: off })
 			),
-		sub: (value, raw) => sanad.ui.plural((raw && raw.disabled) || 0, { one: __("{0} disabled"), other: __("{0} disabled") }),
+		sub: (value, raw) => whatsapp.ui.plural((raw && raw.disabled) || 0, { one: __("{0} disabled"), other: __("{0} disabled") }),
 	},
 	{
 		key: "sent",
@@ -136,7 +123,7 @@ frappe.listview_settings[DOCTYPE] = {
 
 		const has_header = has_kit("PageHeader");
 		if (has_header) {
-			listview._sanad_header = new sanad.ui.PageHeader({
+			listview._whatsapp_header = new whatsapp.ui.PageHeader({
 				listview,
 				primary: { label: __("New alert"), icon: "es-line-add", perm: "create", handler: new_alert },
 				stats: STATS(),
@@ -144,7 +131,7 @@ frappe.listview_settings[DOCTYPE] = {
 		}
 
 		if (has_kit("FilterBar")) {
-			new sanad.ui.FilterBar({
+			new whatsapp.ui.FilterBar({
 				listview,
 				actions: ["group_by", "export"],
 				intro: has_header ? null : __("Reports and messages sent on a schedule from a chosen device."),
@@ -159,13 +146,13 @@ frappe.listview_settings[DOCTYPE] = {
 		}
 
 		if (has_kit("DataList")) {
-			listview._sanad_datalist = new sanad.ui.DataList({
+			listview._whatsapp_datalist = new whatsapp.ui.DataList({
 				listview,
 				columns: COLUMNS(can_write),
 				selectable: true,
 				page_length: 20,
 				on_row_click: open_form,
-				footer: { count: (total) => sanad.ui.plural(total, { one: __("{0} alert"), other: __("{0} alerts") }) },
+				footer: { count: (total) => whatsapp.ui.plural(total, { one: __("{0} alert"), other: __("{0} alerts") }) },
 				empty: {
 					title: __("No alerts yet"),
 					description: __("Send a report or a message on a schedule to a group of numbers."),
@@ -174,23 +161,17 @@ frappe.listview_settings[DOCTYPE] = {
 				mobile: "cards",
 			});
 		} else if (has_kit("RowActions")) {
-			new sanad.ui.RowActions({
+			new whatsapp.ui.RowActions({
 				listview,
 				actions: [
 					{ label: __("Enable"), icon: "es-line-success", condition: (doc) => can_write && !cint(doc.enabled), handler: (doc) => toggle_enabled(doc, listview) },
-					{ label: __("Disable"), icon: sanad.ui.icons.cancel, condition: (doc) => can_write && !!cint(doc.enabled), handler: (doc) => toggle_enabled(doc, listview) },
-					{ label: __("Open"), icon: sanad.ui.icons.open, handler: open_form },
+					{ label: __("Disable"), icon: whatsapp.ui.icons.cancel, condition: (doc) => can_write && !!cint(doc.enabled), handler: (doc) => toggle_enabled(doc, listview) },
+					{ label: __("Open"), icon: whatsapp.ui.icons.open, handler: open_form },
 				],
 				on_row_click: open_form,
 			});
 		}
 
-		listview.$result.off("click.waalert").on("click.waalert", ".wa-toggle-enabled", (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			const name = $(e.currentTarget).data("name");
-			const doc = (listview.data || []).find((d) => d.name === name);
-			if (doc) toggle_enabled(doc, listview);
-		});
+		whatsapp_next.enabled_toggle.bind_enabled_toggle(listview, "waalert", toggle_enabled);
 	},
 };

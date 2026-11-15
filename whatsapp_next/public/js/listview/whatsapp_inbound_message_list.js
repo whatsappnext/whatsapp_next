@@ -4,15 +4,15 @@
 // message is — the matched command, the contact link, and the reply that went back.
 
 (function () {
-	const ui = sanad.ui;
+	const ui = whatsapp.ui;
 	const DT = "WhatsApp Inbound Message";
-	const M = whatsapp_next.messages;
-	const fmt = whatsapp_next.fmt;
-	const dl = ui.Render.parts.dl;
-	const is_agent = M.is_agent;
+	const message_helpers = whatsapp_next.messages;
+	const message_formatters = whatsapp_next.message_formatters;
+	const definition_list_html = ui.Render.parts.definition_list_html;
+	const is_agent = message_helpers.is_agent;
 	const DRAWER_FIELDS = ["device", "phone_e164", "display_name", "contact", "is_group", "message_type", "body", "caption", "attachment", "received_at", "is_simulated", "creation"];
 
-	const reply = (doc, after) => M.quick_send(doc, after);
+	const reply = (doc, after) => message_helpers.quick_send(doc, after);
 
 	/** The text, else what the message carried instead (a caption, a photo…), else a muted "empty
 	 * message": the gateway sends some events (an edit, a deletion) as a blank received message,
@@ -49,8 +49,8 @@
 		const s = Number(v) || 0;
 		if (s < 60) return __("{0} s", [(Math.round(s * 10) / 10).toLocaleString(frappe.boot.lang)]);
 		const total = Math.round(s);
-		if (total < 3600) return __("{0} min {1} s", [ui.format_int(Math.floor(total / 60)), ui.format_int(total % 60)]);
-		return __("{0} h {1} min", [ui.format_int(Math.floor(total / 3600)), ui.format_int(Math.round((total % 3600) / 60))]);
+		if (total < 3600) return __("{0} min {1} s", [ui.format_integer(Math.floor(total / 60)), ui.format_integer(total % 60)]);
+		return __("{0} h {1} min", [ui.format_integer(Math.floor(total / 3600)), ui.format_integer(Math.round((total % 3600) / 60))]);
 	};
 
 	/** "Matched command" cell: green "code — function" chip or an amber "No match" chip. */
@@ -68,7 +68,7 @@
 	const render_trace = ($el, doc) => {
 		const t = doc.command_trace || {};
 		const status = t.command_status || "None";
-		const status_badge = fmt.badge(DT, { command_status: status }, status);
+		const status_badge = message_formatters.badge(DT, { command_status: status }, status);
 		if (!t.command && (status === "None" || status === "Not Matched")) {
 			$el.html(`<p class="text-muted">${status_badge} ${ui.escape(__("No command matches this text."))}</p>`);
 			return;
@@ -76,7 +76,7 @@
 		let args = t.command_args;
 		if (args && typeof args === "object") args = JSON.stringify(args);
 		$el.html(
-			dl([
+			definition_list_html([
 				{ label: __("Result"), value: status_badge },
 				{ label: __("Command"), value: t.command ? frappe.utils.get_form_link("WhatsApp Command", t.command, true) : "" },
 				{ label: __("Matched text"), value: t.command_text, text: true },
@@ -88,25 +88,25 @@
 	};
 
 	const render_reply = ($el, doc) => {
-		const r = doc.reply_outbound;
-		if (!r) {
+		const reply_outbound = doc.reply_outbound;
+		if (!reply_outbound) {
 			new ui.EmptyState({ wrapper: $el, state: "empty", title: __("No reply was sent"), size: "sm" });
 			return;
 		}
 		let gap = "";
-		if (doc.received_at && r.sent_at && typeof frappe.utils.get_formatted_duration === "function") {
-			const seconds = moment(r.sent_at).diff(moment(doc.received_at), "seconds");
+		if (doc.received_at && reply_outbound.sent_at && typeof frappe.utils.get_formatted_duration === "function") {
+			const seconds = moment(reply_outbound.sent_at).diff(moment(doc.received_at), "seconds");
 			if (seconds >= 0) gap = frappe.utils.get_formatted_duration(seconds);
 		}
 		// colour from the Outbound DocType's own indicator rule (gray when its list script is not loaded)
 		$el.html(
-			dl([
-				{ label: __("Reply"), value: frappe.utils.get_form_link("WhatsApp Log", r.name, true) },
-				{ label: __("Status"), value: fmt.badge("WhatsApp Log", r, r.status) },
-				{ label: __("Sent at"), value: fmt.dt(r.sent_at) },
+			definition_list_html([
+				{ label: __("Reply"), value: frappe.utils.get_form_link("WhatsApp Log", reply_outbound.name, true) },
+				{ label: __("Status"), value: message_formatters.badge("WhatsApp Log", reply_outbound, reply_outbound.status) },
+				{ label: __("Sent at"), value: message_formatters.format_datetime(reply_outbound.sent_at) },
 				{ label: __("Response time"), value: gap },
-				{ label: __("Error"), value: r.error_code, text: true },
-				{ label: __("Text"), value: r.body, wide: true, text: true },
+				{ label: __("Error"), value: reply_outbound.error_code, text: true },
+				{ label: __("Text"), value: reply_outbound.body, wide: true, text: true },
 			])
 		);
 	};
@@ -142,9 +142,9 @@
 			],
 			actions: [
 				{ label: __("Reply"), icon: "es-line-reply", condition: is_agent, handler: (d) => reply(d, refresh) },
-				{ label: __("Open command"), icon: "es-line-zap", condition: (d) => !!(d.command_trace && d.command_trace.command), handler: (d) => M.open_command(d.command_trace.command) },
-				{ label: __("Add as synonym"), icon: "es-line-add", condition: (d) => M.is_manager() && !(d.command_trace && d.command_trace.command) && !!d.body, handler: (d) => M.add_synonym(d, refresh) },
-				{ label: __("Contact"), icon: "es-line-customer", handler: (d) => M.open_contact(d, refresh) },
+				{ label: __("Open command"), icon: "es-line-zap", condition: (d) => !!(d.command_trace && d.command_trace.command), handler: (d) => message_helpers.open_command(d.command_trace.command) },
+				{ label: __("Add as synonym"), icon: "es-line-add", condition: (d) => message_helpers.is_manager() && !(d.command_trace && d.command_trace.command) && !!d.body, handler: (d) => message_helpers.add_synonym(d, refresh) },
+				{ label: __("Contact"), icon: "es-line-customer", handler: (d) => message_helpers.open_contact(d, refresh) },
 			],
 		}).show();
 
@@ -152,7 +152,7 @@
 		hide_name_column: true,
 		add_fields: ["command_status", "command", "phone", "phone_e164", "jid", "chat_jid", "is_group", "display_name", "contact", "device", "message_type", "body", "caption", "received_at", "is_simulated", "creation"],
 
-		// The one command_status → colour rule; badges read it through `sanad.ui.indicator_for`.
+		// The one command_status → colour rule; badges read it through `whatsapp.ui.indicator_for`.
 		get_indicator(doc) {
 			const status = doc.command_status || "None";
 			const colour = { Matched: "green", Executed: "green", "Not Matched": "orange", None: "gray", Failed: "red", Blocked: "orange" }[status] || "gray";
@@ -162,10 +162,10 @@
 		onload(listview) {
 			whatsapp_next.drop_unreadable_link_titles(listview);
 			const refresh = () => listview.refresh();
-			const open = (doc) => open_drawer(doc, refresh, listview);
+			const open_inbound_message_drawer = (doc) => open_drawer(doc, refresh, listview);
 
 			const datalist = whatsapp_next.screens.message_list(listview, {
-				open,
+				open: open_inbound_message_drawer,
 				realtime: "wa:inbound:received",
 				search: { fields: ["phone_e164", "display_name", "body"], placeholder: __("Search name, number or message text…") },
 				filters: [

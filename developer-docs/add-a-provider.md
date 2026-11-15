@@ -215,7 +215,7 @@ stores it in `WhatsApp Device.platform_device` and resolves webhooks with
 
 | Method | Returns | Contract | Used by |
 |---|---|---|---|
-| `verify_webhook(headers, raw_body: bytes, secret: str, max_skew: int = DEFAULT_MAX_SKEW)` | `SignatureCheck` | Constant-time signature check plus timestamp freshness. **Pure: no DB** | `webhooks/verify.check` |
+| `verify_webhook(headers, raw_body: bytes, secret: str, max_skew: int = DEFAULT_MAX_SKEW)` | `SignatureCheck` | Constant-time signature check plus timestamp freshness. **Pure: no DB** | `webhooks/verify.check_webhook_signature` |
 | `parse_webhook(headers, body: dict)` | `WebhookEvent` | Wire payload → `WebhookEvent`. **Pure.** An unknown event keeps its name, so `is_known` is `False` | receiver and `webhooks/handlers.process_event` |
 | `get_webhook_secret()` | `str` | Fetches the signing secret. The caller stores it with `set_encrypted_password`; never log it | `webhook_setup.fetch_secret` |
 | `configure_webhook(endpoint_url, events: list[str], max_retries: int)` | `WebhookEndpointState` | Registers the receiver URL and its event subscriptions | `services/webhook_setup` |
@@ -240,11 +240,9 @@ stores it in `WhatsApp Device.platform_device` and resolves webhooks with
 All of them are `@dataclass(frozen=True)`. Vocabularies:
 
 ```python
-RECIPIENT_TYPES = ("Individual", "Group")
 MESSAGE_TYPES = ("Text", "Document", "Image", "Video", "Audio", "Sticker",
                  "Location", "Poll", "Template", "Interactive")
 DEVICE_STATUSES = ("Pending QR", "Connected", "Disconnected", "Logged Out")
-WEBHOOK_ENDPOINT_STATUSES = ("Active", "Disabled", "Locked", "Revoked")
 CANONICAL_EVENTS = ("message.received", "message.sent", "message.delivered", "message.read",
                     "message.failed", "message.held", "message.reaction",
                     "connection.connected", "connection.disconnected", "connection.logged_out",
@@ -392,8 +390,8 @@ Refs you return in `unknown_refs` are re-queued once and then marked `Failed`
 **`ProviderContact`**: `jid: str`, `phone_e164: str | None`, `name: str | None`.
 **`ProviderGroup`**: `jid: str`, `name: str | None`, `participants_count: int = 0`.
 
-**`WebhookEndpointState`**: `endpoint_id: str`, `url: str`, `status: str = "Active"` (one of
-`WEBHOOK_ENDPOINT_STATUSES`), `events: tuple[str, ...]`, `max_retries: int = 3`,
+**`WebhookEndpointState`**: `endpoint_id: str`, `url: str`, `status: str = "Active"` (`Active`,
+`Disabled`, `Locked` or `Revoked`), `events: tuple[str, ...]`, `max_retries: int = 3`,
 `consecutive_failures: int = 0`, `locked_at: datetime | None`, `lock_reason: str | None`,
 `last_http_status: int | None`, `lock_after_failures: int | None`, `unlocked_at: datetime | None`.
 
@@ -583,7 +581,7 @@ Non-`ProviderError` exceptions are not mapped and surface as HTTP 500. See
 ## 7. Webhooks end to end
 
 The only guest endpoint of the app is
-`POST /api/method/whatsapp_next.webhooks.v1.receiver.receive` (D-031). `receiver.handle()` calls
+`POST /api/method/whatsapp_next.webhooks.v1.receiver.receive` (D-031). `receiver.handle_webhook_request()` calls
 your provider in this order:
 
 1. `webhook_envelope(headers)`. No `event_id`, or `signed` false → `401 missing headers`.

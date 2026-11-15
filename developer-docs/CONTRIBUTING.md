@@ -30,7 +30,7 @@ ui, platform, layout). Where the two disagree, the rules win. Record every desig
 | No raw `requests` exception leaves `providers/`. Wrap every error in a `providers.exceptions.*` type | `tests/test_snd_platform.py` (error mapping), `tests/test_providers_base.py` (the contract every provider must pass) |
 | **No `frappe.db.sql`** unless `frappe.qb` or `get_all` cannot express the query, and then with a `plan/decisions.md` entry. The codebase currently has none | review |
 | Only `services/read_layer.py` reads outbound and inbound together (the only `UNION`) | review |
-| Every phone goes through `services/phone.normalize`. Phone fields are named `phone` (raw) and `phone_e164` (normalised) | review |
+| Every phone goes through `services/phone.normalize_phone_to_e164`. Phone fields are named `phone` (raw) and `phone_e164` (normalised) | review |
 | Status fields change only inside `services.guards.status_writer()` | controller `validate` guards (D-038) |
 | No HTTP call, PDF render or `frappe.db.commit()` inside a web request or document hook. Background work uses `frappe.enqueue` with an explicit `queue` (`short` / `long`) and `job_id` (D-010) | review |
 | Secrets live in `Password` fields, are read with `get_password()`, and are never logged or returned. Message bodies and phones stay out of error logs | review, `services/errors._strip_pii` |
@@ -98,11 +98,11 @@ bench --site <site> run-tests --app whatsapp_next --module whatsapp_next.tests.t
 The kit must be copy-pasteable into any Frappe app (`.claude/rules/ui.md`, D-056):
 
 - **No reference to `whatsapp_next`** anywhere under `public/js/ui/`. Components call
-  `sanad.ui.call("<area>.<fn>")`, and the host app maps the keys in
-  `public/js/whatsapp_next_setup.js` with `sanad.ui.configure({api, defaults})`.
+  `whatsapp.ui.call("<area>.<fn>")`, and the host app maps the keys in
+  `public/js/whatsapp_next_setup.js` with `whatsapp.ui.configure({api, defaults})`.
 - Every label goes through `__()`. Behaviour comes from DocType meta (`frappe.get_meta`), never
   from hard-coded field lists.
-- Colours come only from tokens. `public/scss/_tokens.scss` (`--wa-*`) is the one place a colour
+- Colours come only from tokens. `public/scss/_tokens.scss` (`--whatsapp-*`) is the one place a colour
   value is written (D-100). Use logical CSS properties only.
 - One folder per component with `index.js`, `style.scss` and `README.md` (a usage snippet, live
   use and design-gate notes). The component must also be imported in `ui/index.js` and the kit

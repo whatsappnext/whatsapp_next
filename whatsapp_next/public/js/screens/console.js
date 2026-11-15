@@ -7,33 +7,33 @@
 frappe.provide("whatsapp_next.console");
 
 (function () {
-	const ui = sanad.ui;
-	const K = whatsapp_next.console;
+	const ui = whatsapp.ui;
+	const operations_console = whatsapp_next.console;
 
 	/**
 	 * One cell of the metric row. `value` and `sub` are HTML (the caller escapes them, because a
 	 * cell may carry a button or a bar); `label` is plain text.
 	 */
-	K.metric = (label, value, sub, opts = {}) => `
-		<div class="wa-ops__metric${opts.wide ? " wa-ops__metric--wide" : ""}${opts.modifier ? ` wa-ops__metric--${opts.modifier}` : ""}">
-			<span class="wa-ops__label">${ui.escape(label)}</span>
-			<span class="wa-ops__value${opts.tone ? ` sanad-tone--${opts.tone}` : ""} sanad-tabular">${value}</span>
-			<span class="wa-ops__sub">${sub || "&nbsp;"}</span>
+	operations_console.metric = (label, value, sub, opts = {}) => `
+		<div class="whatsapp-operations-console__metric${opts.wide ? " whatsapp-operations-console__metric--wide" : ""}${opts.modifier ? ` whatsapp-operations-console__metric--${opts.modifier}` : ""}">
+			<span class="whatsapp-operations-console__label">${ui.escape(label)}</span>
+			<span class="whatsapp-operations-console__value${opts.tone ? ` whatsapp-kit-tone--${opts.tone}` : ""} whatsapp-kit-tabular">${value}</span>
+			<span class="whatsapp-operations-console__subtitle">${sub || "&nbsp;"}</span>
 		</div>`;
 
 	/**
 	 * The first cell of every console: what the screen is doing right now, stated as a word and
 	 * not as a colour, with the verb that changes it beside it — never floating above the screen.
 	 */
-	K.state_metric = ({ label, state, tone = "gray", pulse = false, sub = "", verbs = "" }) => `
-		<div class="wa-ops__metric wa-ops__metric--state">
-			<span class="wa-ops__label">${ui.escape(label)}</span>
-			<div class="wa-ops__state-row">
-				<span class="wa-ops__state sanad-tone--${tone}">
-					${pulse ? '<span class="wa-ops__pulse" aria-hidden="true"></span>' : ""}${ui.escape(state)}
+	operations_console.state_metric = ({ label, state, tone = "gray", pulse = false, sub = "", verbs = "" }) => `
+		<div class="whatsapp-operations-console__metric whatsapp-operations-console__metric--state">
+			<span class="whatsapp-operations-console__label">${ui.escape(label)}</span>
+			<div class="whatsapp-operations-console__state-row">
+				<span class="whatsapp-operations-console__state whatsapp-kit-tone--${tone}">
+					${pulse ? '<span class="whatsapp-operations-console__pulse" aria-hidden="true"></span>' : ""}${ui.escape(state)}
 				</span>
 				${verbs}
 			</div>
-			<span class="wa-ops__sub">${sub || "&nbsp;"}</span>
+			<span class="whatsapp-operations-console__subtitle">${sub || "&nbsp;"}</span>
 		</div>`;
 })();

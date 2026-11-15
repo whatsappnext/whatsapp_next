@@ -11,10 +11,10 @@ frappe.provide("whatsapp_next.groups");
 (function () {
 	const DOCTYPE = "WhatsApp Contact Group";
 	const PAGE = 100;
-	const esc = (v) => sanad.ui.escape(v == null ? "" : v);
-	const fmt = (n) => sanad.ui.format_int(n);
+	const escape_html = (v) => whatsapp.ui.escape(v == null ? "" : v);
+	const format_integer = (n) => whatsapp.ui.format_integer(n);
 	const key_of = (row) => row.phone_e164 || row.phone || "";
-	const call = (method, args) => sanad.ui.call(`groups.${method}`, args || {}, { silent: true });
+	const call_groups_api = (method, args) => whatsapp.ui.call(`groups.${method}`, args || {}, { silent: true });
 
 	// the picker's sources, as the prototype's "add from" tabs; "More" opens the picker on its rail
 	const SOURCES = [
@@ -25,9 +25,9 @@ frappe.provide("whatsapp_next.groups");
 	];
 
 	whatsapp_next.groups.open = function (name, { on_saved, preselect } = {}) {
-		return call("get_editor", name ? { name } : {}).then(
+		return call_groups_api("get_editor", name ? { name } : {}).then(
 			(r) => new GroupEditor(r, { on_saved, preselect }),
-			(err) => sanad.ui.Toast.error(err)
+			(err) => whatsapp.ui.Toast.error(err)
 		);
 	};
 
@@ -44,28 +44,28 @@ frappe.provide("whatsapp_next.groups");
 			this.added = new Map(); // key → picker row, not saved yet
 			this.removed = new Set(); // saved keys marked for removal
 			this.query = "";
-			this.make();
+			this.build_editor_panel();
 			if (this.editing && this.total) this.load_more();
 			else this.render_members();
-			if (preselect && this.can_write) this.pick(preselect);
+			if (preselect && this.can_write) this.open_member_picker(preselect);
 		}
 
-		make() {
-			const g = this.group;
+		build_editor_panel() {
+			const group = this.group;
 			const kind_options = this.kinds.map((k) => ({ value: k, label: __(k) }));
-			this.panel = new sanad.ui.OverlayPanel({
+			this.panel = new whatsapp.ui.OverlayPanel({
 				type: "modal",
 				width: "1080px",
-				title: this.editing ? __("Edit «{0}»", [g.group_name || g.name]) : __("New contact group"),
+				title: this.editing ? __("Edit «{0}»", [group.group_name || group.name]) : __("New contact group"),
 				subtitle: __("Add members from contacts, another group, a file or typed numbers."),
-				badge: this.badge(g.kind, g.disabled),
+				badge: this.badge(group.kind, group.disabled),
 				sections: [
 					{
 						fields: [
-							{ key: "group_name", label: __("Group name"), required: true, value: g.group_name, placeholder: __("Example: Riyadh customers") },
-							{ key: "kind", label: __("Group kind"), type: "select", required: true, value: g.kind, options: kind_options, on_change: (v, p) => this.on_kind(v, p) },
-							{ key: "description", label: __("Note (optional)"), type: "textarea", rows: 3, value: g.description, placeholder: __("Why this group exists and when it is used.") },
-							this.editing ? { key: "disabled", label: __("Disabled — not offered when choosing recipients"), type: "toggle", value: !!cint(g.disabled), on_change: (v, p) => p.set_badge(this.badge(p.get_value("kind"), v)) } : null,
+							{ key: "group_name", label: __("Group name"), required: true, value: group.group_name, placeholder: __("Example: Riyadh customers") },
+							{ key: "kind", label: __("Group kind"), type: "select", required: true, value: group.kind, options: kind_options, on_change: (v, p) => this.on_kind(v, p) },
+							{ key: "description", label: __("Note (optional)"), type: "textarea", rows: 3, value: group.description, placeholder: __("Why this group exists and when it is used.") },
+							this.editing ? { key: "disabled", label: __("Disabled — not offered when choosing recipients"), type: "toggle", value: !!cint(group.disabled), on_change: (v, p) => p.set_badge(this.badge(p.get_value("kind"), v)) } : null,
 							{ key: "summary", type: "html", render: ($el) => (this.$summary = $el) },
 						].filter(Boolean),
 						cols: 1,
@@ -73,17 +73,17 @@ frappe.provide("whatsapp_next.groups");
 					{ fields: [{ key: "members", type: "html", render: ($el) => this.make_members($el) }], cols: 1 },
 				],
 				actions: [
-					this.editing ? { key: "form", label: __("Open full form"), variant: "ghost", align: "start", handler: () => frappe.set_route("Form", DOCTYPE, g.name), validate: false } : null,
+					this.editing ? { key: "form", label: __("Open full form"), variant: "ghost", align: "start", handler: () => frappe.set_route("Form", DOCTYPE, group.name), validate: false } : null,
 					{ key: "cancel", label: __("Cancel"), close: true },
-					this.can_write ? { key: "save", label: this.editing ? __("Save") : __("Create group"), variant: "primary", requires_dirty: this.editing, handler: (values) => this.save(values) } : null,
+					this.can_write ? { key: "save", label: this.editing ? __("Save") : __("Create group"), variant: "primary", requires_dirty: this.editing, handler: (values) => this.save_group(values) } : null,
 				].filter(Boolean),
 			});
-			this.panel.$root.addClass("wa-ge");
-			this.$blacklist = $(`<div class="sanad-op__note sanad-op__note--warn" hidden>${esc(__("A blacklist blocks its members from every command, campaign and quick send."))}</div>`).appendTo(
-				this.panel.field("kind").$el
+			this.panel.$root.addClass("whatsapp-group-editor");
+			this.$blacklist = $(`<div class="whatsapp-kit-overlay-panel__note whatsapp-kit-overlay-panel__note--warn" hidden>${escape_html(__("A blacklist blocks its members from every command, campaign and quick send."))}</div>`).appendTo(
+				this.panel.get_field_entry("kind").$el
 			);
-			this.$blacklist.prop("hidden", g.kind !== "Blacklist");
-			if (!this.can_write) this.panel.$root.find(".sanad-op__body :input").prop("disabled", true);
+			this.$blacklist.prop("hidden", group.kind !== "Blacklist");
+			if (!this.can_write) this.panel.$root.find(".whatsapp-kit-overlay-panel__body :input").prop("disabled", true);
 			this.panel.show();
 		}
 
@@ -100,34 +100,34 @@ frappe.provide("whatsapp_next.groups");
 		// ---- members pane ----------------------------------------------------------------------
 
 		make_members($el) {
-			$el.addClass("wa-ge__members").html(`
-				<div class="wa-ge__bar">
-					<span class="wa-ge__bar-label">${esc(__("Add from"))}</span>
-					<div class="wa-ge__sources"></div>
+			$el.addClass("whatsapp-group-editor__members").html(`
+				<div class="whatsapp-group-editor__bar">
+					<span class="whatsapp-group-editor__bar-label">${escape_html(__("Add from"))}</span>
+					<div class="whatsapp-group-editor__sources"></div>
 				</div>
-				<div class="wa-ge__tools">
-					<input type="search" class="wa-input wa-ge__search" placeholder="${esc(__("Search the members by name or number…"))}" aria-label="${esc(__("Search the members"))}">
+				<div class="whatsapp-group-editor__tools">
+					<input type="search" class="whatsapp-input whatsapp-group-editor__search" placeholder="${escape_html(__("Search the members by name or number…"))}" aria-label="${escape_html(__("Search the members"))}">
 				</div>
-				<div class="wa-ge__list" role="list" aria-live="polite"></div>
-				<div class="wa-ge__foot">
-					<span class="wa-ge__foot-label">${esc(__("Members"))} <span class="wa-ge__foot-count sanad-tabular"></span></span>
-					<span class="wa-ge__foot-note"></span>
-					<span class="wa-ge__foot-actions"></span>
+				<div class="whatsapp-group-editor__list" role="list" aria-live="polite"></div>
+				<div class="whatsapp-group-editor__foot">
+					<span class="whatsapp-group-editor__foot-label">${escape_html(__("Members"))} <span class="whatsapp-group-editor__foot-count whatsapp-kit-tabular"></span></span>
+					<span class="whatsapp-group-editor__foot-note"></span>
+					<span class="whatsapp-group-editor__foot-actions"></span>
 				</div>`);
-			const $sources = $el.find(".wa-ge__sources");
+			const $sources = $el.find(".whatsapp-group-editor__sources");
 			SOURCES.forEach((s) => {
-				$(sanad.kit.btn({ label: s.label, icon: s.icon, variant: "tonal", size: "sm", disabled: !this.can_write }))
-					.on("click", () => this.pick({ source: s.source }))
+				$(whatsapp.kit.button_html({ label: s.label, icon: s.icon, variant: "tonal", size: "sm", disabled: !this.can_write }))
+					.on("click", () => this.open_member_picker({ source: s.source }))
 					.appendTo($sources);
 			});
-			$(sanad.kit.btn({ label: __("More sources"), variant: "ghost", size: "sm", disabled: !this.can_write }))
-				.on("click", () => this.pick())
+			$(whatsapp.kit.button_html({ label: __("More sources"), variant: "ghost", size: "sm", disabled: !this.can_write }))
+				.on("click", () => this.open_member_picker())
 				.appendTo($sources);
-			this.$list = $el.find(".wa-ge__list");
-			this.$count = $el.find(".wa-ge__foot-count");
-			this.$note = $el.find(".wa-ge__foot-note");
-			this.$foot_actions = $el.find(".wa-ge__foot-actions");
-			$el.find(".wa-ge__search").on(
+			this.$list = $el.find(".whatsapp-group-editor__list");
+			this.$count = $el.find(".whatsapp-group-editor__foot-count");
+			this.$note = $el.find(".whatsapp-group-editor__foot-note");
+			this.$foot_actions = $el.find(".whatsapp-group-editor__foot-actions");
+			$el.find(".whatsapp-group-editor__search").on(
 				"input",
 				frappe.utils.debounce((e) => {
 					this.query = String(e.target.value || "").trim().toLowerCase();
@@ -136,14 +136,14 @@ frappe.provide("whatsapp_next.groups");
 			);
 			this.$list.on("click", "[data-act]", (e) => {
 				const $b = $(e.currentTarget);
-				this.act($b.attr("data-act"), $b.closest("[data-key]").attr("data-key"));
+				this.apply_member_action($b.attr("data-act"), $b.closest("[data-key]").attr("data-key"));
 			});
 		}
 
 		load_more() {
 			this.loading = true;
 			this.render_members();
-			return sanad.ui
+			return whatsapp.ui
 				.call("picker.get_group_members", { group: this.group.name, page: this.page + 1, page_length: PAGE }, { silent: true })
 				.then((r) => {
 					this.page += 1;
@@ -158,9 +158,9 @@ frappe.provide("whatsapp_next.groups");
 		}
 
 		/** Open the ContactPicker in local mode; what it hands back joins the unsaved additions. */
-		pick(preselect) {
+		open_member_picker(preselect) {
 			const existing = this.existing.map(key_of).filter((k) => !this.removed.has(k)).concat(Array.from(this.added.keys()));
-			new sanad.ui.ContactPicker({
+			new whatsapp.ui.ContactPicker({
 				title: __("Add members"),
 				existing,
 				preselect,
@@ -177,7 +177,7 @@ frappe.provide("whatsapp_next.groups");
 			});
 		}
 
-		act(action, k) {
+		apply_member_action(action, k) {
 			if (action === "drop") this.added.delete(k);
 			else if (action === "remove") this.removed.add(k);
 			else if (action === "undo") this.removed.delete(k);
@@ -200,14 +200,14 @@ frappe.provide("whatsapp_next.groups");
 		row_html(m, state) {
 			// a number with no name reads as the number itself, under a person icon, not "No name"
 			const name = m.display_name || "";
-			const phone = sanad.ui.phone(key_of(m));
+			const phone = whatsapp.ui.phone(key_of(m));
 			const tag =
 				state === "new"
-					? sanad.kit.badge(__("New"), "ok", { dot: false })
+					? whatsapp.kit.badge(__("New"), "ok", { dot: false })
 					: state === "removed"
-						? sanad.kit.badge(__("Will be removed"), "danger", { dot: false })
+						? whatsapp.kit.badge(__("Will be removed"), "danger", { dot: false })
 						: m.contact
-							? sanad.kit.badge(__("Contact"), "info", { dot: false })
+							? whatsapp.kit.badge(__("Contact"), "info", { dot: false })
 							: "";
 			const act =
 				state === "new"
@@ -215,21 +215,21 @@ frappe.provide("whatsapp_next.groups");
 					: state === "removed"
 						? { act: "undo", label: __("Undo"), title: __("Keep this member") }
 						: { act: "remove", icon: "trash", title: __("Remove from the group") };
-			return `<div class="wa-ge__row wa-ge__row--${state}" role="listitem" data-key="${esc(key_of(m))}">
-				${name ? sanad.kit.avatar({ name, size: "sm", square: true }) : `<span class="wa-avatar wa-avatar--sm wa-avatar--sq" aria-hidden="true">${sanad.kit.ico("user", "sm")}</span>`}
-				<span class="wa-ge__row-main">
-					${name ? `<span class="wa-ge__row-name">${esc(name)}${sanad.ui.group_tag(key_of(m))}</span>` : ""}
-					<span class="wa-ge__row-phone${name ? "" : " wa-ge__row-phone--main"} sanad-tabular" dir="ltr">${esc(phone)}${name ? "" : sanad.ui.group_tag(key_of(m))}</span>
+			return `<div class="whatsapp-group-editor__row whatsapp-group-editor__row--${state}" role="listitem" data-key="${escape_html(key_of(m))}">
+				${name ? whatsapp.kit.avatar({ name, size: "sm", square: true }) : `<span class="whatsapp-avatar whatsapp-avatar--sm whatsapp-avatar--sq" aria-hidden="true">${whatsapp.kit.inline_icon_html("user", "sm")}</span>`}
+				<span class="whatsapp-group-editor__row-main">
+					${name ? `<span class="whatsapp-group-editor__row-name">${escape_html(name)}${whatsapp.ui.group_tag(key_of(m))}</span>` : ""}
+					<span class="whatsapp-group-editor__row-phone${name ? "" : " whatsapp-group-editor__row-phone--main"} whatsapp-kit-tabular" dir="ltr">${escape_html(phone)}${name ? "" : whatsapp.ui.group_tag(key_of(m))}</span>
 				</span>
 				${tag}
-				${this.can_write ? sanad.kit.btn({ label: act.label, icon: act.icon, title: act.title, variant: "ghost", size: "sm", attrs: { "data-act": act.act } }) : ""}
+				${this.can_write ? whatsapp.kit.button_html({ label: act.label, icon: act.icon, title: act.title, variant: "ghost", size: "sm", attrs: { "data-act": act.act } }) : ""}
 			</div>`;
 		}
 
 		render_members() {
 			if (!this.$list) return;
-			const q = this.query;
-			const match = (m) => !q || String(m.display_name || "").toLowerCase().includes(q) || key_of(m).includes(q.replace(/[\s\-()]/g, ""));
+			const query = this.query;
+			const match = (m) => !query || String(m.display_name || "").toLowerCase().includes(query) || key_of(m).includes(query.replace(/[\s\-()]/g, ""));
 			const added = Array.from(this.added.values()).filter(match);
 			const saved = this.existing.filter(match);
 			let html = added.map((m) => this.row_html(m, "new")).join("");
@@ -237,16 +237,16 @@ frappe.provide("whatsapp_next.groups");
 			this.$list.html(html);
 
 			if (this.loading) {
-				this.$list.append(`<div class="wa-ge__more">${sanad.ui.skeleton(3)}</div>`);
+				this.$list.append(`<div class="whatsapp-group-editor__more">${whatsapp.ui.skeleton(3)}</div>`);
 			} else if (this.load_error) {
-				new sanad.ui.EmptyState({ wrapper: $('<div class="wa-ge__more"></div>').appendTo(this.$list), state: "error", size: "sm", description: this.load_error.message, action: { label: __("Retry"), onclick: () => ((this.load_error = null), this.load_more()) } });
+				new whatsapp.ui.EmptyState({ wrapper: $('<div class="whatsapp-group-editor__more"></div>').appendTo(this.$list), state: "error", size: "sm", description: this.load_error.message, action: { label: __("Retry"), onclick: () => ((this.load_error = null), this.load_more()) } });
 			} else if (this.existing.length < this.total) {
-				$(`<div class="wa-ge__more">${sanad.kit.btn({ label: __("Show more members ({0} of {1})", [fmt(this.existing.length), fmt(this.total)]), variant: "secondary", size: "sm" })}</div>`)
+				$(`<div class="whatsapp-group-editor__more">${whatsapp.kit.button_html({ label: __("Show more members ({0} of {1})", [format_integer(this.existing.length), format_integer(this.total)]), variant: "secondary", size: "sm" })}</div>`)
 					.on("click", "button", () => this.load_more())
 					.appendTo(this.$list);
 			} else if (!added.length && !saved.length) {
 				this.$list.html(
-					`<div class="wa-ge__empty">${esc(q ? __("No member matches this search.") : __("No members yet. Add them from contacts, another group, a file or typed numbers."))}</div>`
+					`<div class="whatsapp-group-editor__empty">${escape_html(query ? __("No member matches this search.") : __("No members yet. Add them from contacts, another group, a file or typed numbers."))}</div>`
 				);
 			}
 			this.render_summary();
@@ -256,33 +256,33 @@ frappe.provide("whatsapp_next.groups");
 			const adding = this.added.size;
 			const removing = this.removed.size;
 			const after = this.total + adding - removing;
-			this.$count.text(fmt(after));
+			this.$count.text(format_integer(after));
 			const parts = [];
-			if (adding) parts.push(__("{0} to add", [fmt(adding)]));
-			if (removing) parts.push(__("{0} to remove", [fmt(removing)]));
+			if (adding) parts.push(__("{0} to add", [format_integer(adding)]));
+			if (removing) parts.push(__("{0} to remove", [format_integer(removing)]));
 			this.$note.text(parts.join(" · "));
 			this.$foot_actions.empty();
 			if (this.can_write && after > 0 && this.existing.length >= this.total) {
-				$(sanad.kit.btn({ label: __("Remove all"), variant: "ghost", size: "sm", cls: "wa-ge__clear" }))
+				$(whatsapp.kit.button_html({ label: __("Remove all"), variant: "ghost", size: "sm", cls: "whatsapp-group-editor__clear" }))
 					.on("click", () => this.clear_all())
 					.appendTo(this.$foot_actions);
 			}
 			if (!this.$summary) return;
-			const line = (k, v, cls = "") => `<div class="wa-ge__sum-row ${cls}"><dt>${esc(k)}</dt><dd class="sanad-tabular" dir="ltr">${esc(v)}</dd></div>`;
-			this.$summary.html(`<section class="wa-ge__sum" aria-label="${esc(__("Members summary"))}">
-				<span class="wa-ge__sum-title">${esc(__("Members summary"))}</span>
+			const render_summary_row = (k, v, cls = "") => `<div class="whatsapp-group-editor__summary-row ${cls}"><dt>${escape_html(k)}</dt><dd class="whatsapp-kit-tabular" dir="ltr">${escape_html(v)}</dd></div>`;
+			this.$summary.html(`<section class="whatsapp-group-editor__summary" aria-label="${escape_html(__("Members summary"))}">
+				<span class="whatsapp-group-editor__summary-title">${escape_html(__("Members summary"))}</span>
 				<dl>
-					${this.editing ? line(__("Members now"), fmt(this.total)) : ""}
-					${line(__("To add"), adding ? `+${fmt(adding)}` : "0", adding ? "wa-ge__sum-row--ok" : "")}
-					${this.editing ? line(__("To remove"), removing ? `−${fmt(removing)}` : "0", removing ? "wa-ge__sum-row--dg" : "") : ""}
-					${line(__("After saving"), fmt(after), "wa-ge__sum-row--total")}
+					${this.editing ? render_summary_row(__("Members now"), format_integer(this.total)) : ""}
+					${render_summary_row(__("To add"), adding ? `+${format_integer(adding)}` : "0", adding ? "whatsapp-group-editor__summary-row--ok" : "")}
+					${this.editing ? render_summary_row(__("To remove"), removing ? `−${format_integer(removing)}` : "0", removing ? "whatsapp-group-editor__summary-row--danger" : "") : ""}
+					${render_summary_row(__("After saving"), format_integer(after), "whatsapp-group-editor__summary-row--total")}
 				</dl>
 			</section>`);
 		}
 
 		// ---- save ------------------------------------------------------------------------------
 
-		save(values) {
+		save_group(values) {
 			const payload = {
 				group_name: values.group_name,
 				kind: values.kind,
@@ -291,17 +291,17 @@ frappe.provide("whatsapp_next.groups");
 				remove: Array.from(this.removed),
 			};
 			if (this.editing) Object.assign(payload, { name: this.group.name, modified: this.group.modified, disabled: values.disabled ? 1 : 0 });
-			return call("save_editor", { payload }).then((r) => {
+			return call_groups_api("save_editor", { payload }).then((r) => {
 				const bits = [];
-				if (r.added) bits.push(__("{0} added", [fmt(r.added)]));
-				if (r.removed) bits.push(__("{0} removed", [fmt(r.removed)]));
-				if (r.skipped) bits.push(__("{0} skipped (already in the group or invalid)", [fmt(r.skipped)]));
-				sanad.ui.Toast.success(bits.join(" · ") || __(values.group_name), { title: this.editing ? __("Group saved") : __("Group created") });
+				if (r.added) bits.push(__("{0} added", [format_integer(r.added)]));
+				if (r.removed) bits.push(__("{0} removed", [format_integer(r.removed)]));
+				if (r.skipped) bits.push(__("{0} skipped (already in the group or invalid)", [format_integer(r.skipped)]));
+				whatsapp.ui.Toast.success(bits.join(" · ") || __(values.group_name), { title: this.editing ? __("Group saved") : __("Group created") });
 				if (typeof this.on_saved === "function") this.on_saved(r);
 				const list = typeof cur_list !== "undefined" && cur_list && cur_list.doctype === DOCTYPE ? cur_list : null;
 				if (list) {
 					list.refresh();
-					list.sanad_header && list.sanad_header.refresh(true);
+					list.whatsapp_header && list.whatsapp_header.refresh(true);
 				}
 			});
 		}

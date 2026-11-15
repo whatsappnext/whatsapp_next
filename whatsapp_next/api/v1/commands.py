@@ -64,11 +64,11 @@ def list_commands(filters: dict | None = None, page: int = 1, page_length: int =
 		else {}
 	)
 	counts = command_router.recent_run_counts([r.name for r in rows], days=30)
-	for r in rows:
-		fn = functions.get(r.function)
-		r["function_status"] = fn.status if fn else None
-		r["function_name"] = fn.function_name if fn else None
-		r["run_count_30d"] = counts.get(r.name, 0)
+	for command_row in rows:
+		function_row = functions.get(command_row.function)
+		command_row["function_status"] = function_row.status if function_row else None
+		command_row["function_name"] = function_row.function_name if function_row else None
+		command_row["run_count_30d"] = counts.get(command_row.name, 0)
 	return {"rows": rows, "total": total}
 
 
@@ -86,7 +86,7 @@ def get_defaults(function: str) -> dict[str, Any]:
 @api_endpoint(roles=MANAGER)
 def save_command(payload: dict) -> dict[str, str]:
 	"""Create or update a command (`services.commands.save`). P: Manager."""
-	return {"name": commands.save(payload, user=frappe.session.user)}
+	return {"name": commands.save_command_from_payload(payload, user=frappe.session.user)}
 
 
 @api_endpoint(roles=MANAGER, schema=STATUS_SCHEMA)
@@ -125,12 +125,12 @@ def test_command(text: str, sender_phone: str, device: str | None = None) -> dic
 def set_status_many(names: list[str], status: str) -> dict[str, Any]:
 	"""Bulk start / stop; rows already in `status` are `skipped`. P: Manager."""
 
-	def one(name: str) -> None:
-		if commands.get(name).status == status:
+	def set_status_of_one_command(name: str) -> None:
+		if commands.get_command_doc(name).status == status:
 			raise _bulk.Skip(f"already {status}")
 		commands.set_status(name, status)
 
-	return _bulk.run_bulk(names, one)
+	return _bulk.run_bulk(names, set_status_of_one_command)
 
 
 # ---- the command editor (D-132) --------------------------------------------------------------
@@ -139,7 +139,7 @@ def set_status_many(names: list[str], status: str) -> dict[str, Any]:
 @api_endpoint(roles=MANAGER, methods=("GET", "POST"))
 def get_editor(name: str | None = None) -> dict[str, Any]:
 	"""The editor's opening read (`services.commands.editor`). P: Manager. E: `WANotFoundError`."""
-	return commands.editor(name or None)
+	return commands.get_command_editor_data(name or None)
 
 
 @api_endpoint(roles=MANAGER, methods=("GET", "POST"))
@@ -158,13 +158,13 @@ def save_editor(payload: dict) -> dict[str, str]:
 def preview_command(payload: dict, sender: dict | None = None, values: dict | None = None) -> dict[str, Any]:
 	"""Dry-run the editor's draft for an assumed sender — nothing saved, nothing sent
 	(`services.commands.preview`). P: Manager."""
-	return commands.preview(payload, sender=sender, values=values)
+	return commands.preview_command_draft(payload, sender=sender, values=values)
 
 
 @api_endpoint(roles=MANAGER)
 def delete_command(name: str) -> dict[str, bool]:
 	"""Delete a command without run history (`services.commands.delete`). P: Manager."""
-	commands.delete(name, user=frappe.session.user)
+	commands.delete_command(name, user=frappe.session.user)
 	return {"deleted": True}
 
 

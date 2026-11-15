@@ -30,7 +30,7 @@ def _inline_images(html_text: str) -> str:
 	`<img>` (site URLs are unreachable from workers on many deployments and make wkhtmltopdf fail
 	with "broken image links")."""
 
-	def repl(m: re.Match) -> str:
+	def inline_image_as_data_uri(m: re.Match) -> str:
 		url = m.group(1)
 		try:
 			from whatsapp_next.services import attachments
@@ -41,7 +41,7 @@ def _inline_images(html_text: str) -> str:
 		except Exception:
 			return 'src=""'
 
-	html_text = _IMG_SRC.sub(repl, html_text)
+	html_text = _IMG_SRC.sub(inline_image_as_data_uri, html_text)
 	return _IMG_TAG.sub(lambda m: m.group(0) if 'src="data:' in m.group(0) else "", html_text)
 
 
@@ -61,7 +61,7 @@ def _letter_head_html(letter_head: str | None) -> str:
 	return _inline_images(content)
 
 
-def _cell(value: Any, column: dict[str, Any]) -> str:
+def _format_cell_html(value: Any, column: dict[str, Any]) -> str:
 	if value is None:
 		return ""
 	fieldtype = column.get("fieldtype")
@@ -123,9 +123,9 @@ def report_html(
 	body_rows = []
 	for row in (rows or [])[:MAX_ROWS]:
 		if isinstance(row, dict):
-			cells = [_cell(row.get(c["fieldname"]), c) for c in cols]
+			cells = [_format_cell_html(row.get(c["fieldname"]), c) for c in cols]
 		else:
-			cells = [_cell(row[i] if i < len(row) else None, c) for i, c in enumerate(cols)]
+			cells = [_format_cell_html(row[i] if i < len(row) else None, c) for i, c in enumerate(cols)]
 		body_rows.append(
 			"<tr>"
 			+ "".join(
@@ -215,23 +215,23 @@ def report_png(html_text: str, *, width: int = 1200) -> bytes | None:
 	binary = shutil.which(PNG_BINARY)
 	if not binary:
 		return None
-	with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as src:
-		src.write(html_text)
-		src_path = src.name
-	out_path = src_path[:-5] + ".png"
+	with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as html_file:
+		html_file.write(html_text)
+		html_path = html_file.name
+	out_path = html_path[:-5] + ".png"
 	try:
 		subprocess.run(
-			[binary, "--quiet", "--width", str(width), "--encoding", "utf-8", src_path, out_path],
+			[binary, "--quiet", "--width", str(width), "--encoding", "utf-8", html_path, out_path],
 			check=True,
 			timeout=60,
 			capture_output=True,
 		)
-		with open(out_path, "rb") as fh:
-			return _compact_png(fh.read())
+		with open(out_path, "rb") as png_file:
+			return _compact_png(png_file.read())
 	except (subprocess.SubprocessError, OSError):
 		return None
 	finally:
-		for p in (src_path, out_path):
+		for p in (html_path, out_path):
 			try:
 				import os
 

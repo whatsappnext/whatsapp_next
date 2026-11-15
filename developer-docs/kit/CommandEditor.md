@@ -1,4 +1,4 @@
-# `sanad.ui.CommandEditor`
+# `whatsapp.ui.CommandEditor`
 
 A full-height modal for creating and editing a chat command: a command word (plus synonyms) that
 runs a "function" when an inbound message matches it. Header: command word, "Not saved yet" chip,
@@ -13,7 +13,7 @@ shows the reply in a chat thread. All data comes from host-supplied functions.
 `settings` / `outputs` / `suggested_commands`, party-type keys matching Contact `links[].link_doctype`,
 `access` modes `Allow All` / `Deny All`, preview result `{status, replies, missing, text, reply_sent}`)
 are this app's `WhatsApp Command` / Functions model and its `commands.*` API. It also requires
-`sanad.ui.Toast` and `sanad.ui.ConfirmDialog`, and uses `sanad.ui.ChatThread` when present.
+`whatsapp.ui.Toast` and `whatsapp.ui.ConfirmDialog`, and uses `whatsapp.ui.ChatThread` when present.
 
 ## Options
 
@@ -52,15 +52,15 @@ Picking a function resets inputs, overrides and outputs, fills `allowed_party_ty
 The constructor opens the modal and calls `load`.
 
 - `close(force = false)` — asks "Discard unsaved changes?" when dirty (and not read-only) unless `force`; destroys the thread.
-- `save()` — validates (word, function, ≥1 party type), calls `opts.save`, lowercases the word, toasts.
-- `remove()` — `sanad.ui.ConfirmDialog.ask` (danger) whose `on_confirm` calls `opts.remove`; then closes.
+- `save_command()` — validates (word, function, ≥1 party type), calls `opts.save`, lowercases the word, toasts.
+- `delete_command()` — `whatsapp.ui.ConfirmDialog.ask_for_confirmation` (danger) whose `on_confirm` calls `opts.remove`; then closes.
 - `payload()` — the draft as the payload above. `is_dirty()` — draft differs from last load/save.
 - `render()` — full re-render; keeps focused field, caret and per-column scroll.
 
 ## Events and callbacks
 
 `on_saved`, `on_close`. No custom DOM events and no realtime. Errors surface via
-`sanad.ui.Toast.error`; save/delete success via `Toast.success`. A window `resize.<id>` handler
+`whatsapp.ui.Toast.error`; save/delete success via `Toast.success`. A window `resize.<id>` handler
 re-renders (debounced 150 ms) and is removed on close.
 
 ## Server calls
@@ -81,8 +81,8 @@ None directly — everything goes through the option functions. This app wires t
 ## Usage
 
 ```js
-const call = (m, args) => sanad.ui.call(`commands.${m}`, args);
-new sanad.ui.CommandEditor({
+const call = (m, args) => whatsapp.ui.call(`commands.${m}`, args);
+new whatsapp.ui.CommandEditor({
   name: null,
   read_only: !frappe.user.has_role("WhatsApp Manager"),
   load: (n) => call("get_editor", { name: n }),
@@ -98,12 +98,12 @@ new sanad.ui.CommandEditor({
 
 ## CSS hooks
 
-- Layer: `.sanad-kit.sanad-ce-layer` > `.sanad-ce-backdrop` + `.sanad-ce` (dialog; `.sanad-ce--readonly`). `body.sanad-ce-open` locks scroll.
-- Header: `__head`, `__head-row(--tabs)`, `__code`, `__dirty`, `__status.is-on` (`__track`, `__knob`), `__x`, `__tabs` / `__tab.is-sel`, `__count`, `__runs`, `__fnchip`.
-- Layout: `__grid--setup`, `__grid--preview`, `__col--surface|--bg|--span|--last`, `__col-head`, `__col-body`, `__pane`, `__foot`, `__foot-hint`, `__loading`.
-- Controls: `__combo`, `__pop`, `__opt.is-sel`, `__chip--pri|--ghost|--dg`, `__chip-x`, `__pill.is-on`, `__seg.is-sel`, `__card.is-off|.is-missing`, `__tag--warn|--ok`, `__token`, `__callout--warn|--danger|--muted`, `__note--warn|--danger`.
-- Preview: `__phone`, `__phone-head`, `__thread.is-running`, `__bubble--in|--out` (fallback without ChatThread), `__sim`.
-- Buttons: `__btn`, `__btn--pri`, `__btn--danger`, `__link`.
+- Layer: `.whatsapp-kit.whatsapp-kit-command-editor-layer` > `.whatsapp-kit-command-editor-backdrop` + `.whatsapp-kit-command-editor` (dialog; `.whatsapp-kit-command-editor--readonly`). `body.whatsapp-kit-command-editor-open` locks scroll.
+- Header: `__head`, `__head-row(--tabs)`, `__code`, `__dirty`, `__status.is-on` (`__track`, `__knob`), `__x`, `__tabs` / `__tab.is-sel`, `__count`, `__runs`, `__function-chip`.
+- Layout: `__grid--setup`, `__grid--preview`, `__column--surface|--background|--span|--last`, `__column-head`, `__column-body`, `__pane`, `__foot`, `__foot-hint`, `__loading`.
+- Controls: `__combo`, `__popover`, `__option.is-sel`, `__chip--primary|--ghost|--danger`, `__chip-x`, `__pill.is-on`, `__segment.is-sel`, `__card.is-off|.is-missing`, `__tag--warn|--ok`, `__token`, `__callout--warn|--danger|--muted`, `__note--warn|--danger`.
+- Preview: `__phone`, `__phone-head`, `__thread.is-running`, `__bubble--in|--out` (fallback without ChatThread), `__simulator`.
+- Buttons: `__button`, `__button--primary`, `__button--danger`, `__link`.
 - Breakpoints (`$ce-narrow` / `$ce-mobile` in `style.scss`): narrower grid, then stacked and full-screen; entry animation off under `prefers-reduced-motion`.
 
 ## Notes

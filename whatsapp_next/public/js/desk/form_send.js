@@ -15,7 +15,7 @@
 		const meta = frm.meta || {};
 		if (frm.is_new() || meta.issingle || meta.istable) return false;
 		if (meta.module === "WhatsApp Next") return false;
-		if (typeof sanad === "undefined" || !sanad.ui || typeof sanad.ui.QuickSend !== "function") return false;
+		if (typeof whatsapp === "undefined" || !whatsapp.ui || typeof whatsapp.ui.QuickSend !== "function") return false;
 		return frappe.user.has_role(AGENT_ROLES) && frappe.model.can_email(null, frm);
 	}
 
@@ -35,7 +35,7 @@
 			timeline.wa_send_button = timeline.add_action_button(
 				__("New WhatsApp message"),
 				() =>
-					new sanad.ui.QuickSend(
+					new whatsapp.ui.QuickSend(
 						Object.assign(recipient_of(timeline.frm.doc), {
 							reference_doctype: timeline.frm.doctype,
 							reference_name: timeline.frm.docname,
@@ -49,7 +49,7 @@
 		// shown per document: a new one, or one this user may not email, has none
 		timeline.wa_send_button.toggle(offered(frm));
 		// adding a button shows Frappe's row of them; alone and hidden, the row goes again
-		const $row = timeline.timeline_actions_wrapper;
-		if ($row) $row.toggle($row.find(".action-btn").filter((_, el) => el.style.display !== "none").length > 0);
+		const timeline_actions_wrapper = timeline.timeline_actions_wrapper;
+		if (timeline_actions_wrapper) timeline_actions_wrapper.toggle(timeline_actions_wrapper.find(".action-btn").filter((_, el) => el.style.display !== "none").length > 0);
 	});
 })();

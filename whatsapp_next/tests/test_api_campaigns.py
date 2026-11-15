@@ -29,7 +29,7 @@ from whatsapp_next.tests.conftest_frappe import (
 	fake_provider,
 )
 
-P1, P2 = "+966500920401", "+966500920402"
+P1, P2 = "+967784499996", "+967777667663"
 NAME = "ApiTest Campaign"
 TAG = "ApiTest camp"
 
@@ -38,19 +38,19 @@ class TestApiCampaigns(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		cls.device = ensure_device("ApiTest Device CP", "WAD-TEST-API24", phone="+966500920004")
+		cls.device = ensure_device("ApiTest Device CP", "WAD-TEST-API24", phone="+967777999579")
 		ensure_settings(default_device=cls.device, queue_paused=0, send_only_to_known_numbers=0)
 
 	@classmethod
 	def tearDownClass(cls):
-		cls._clean()
+		cls._delete_test_campaigns()
 		super().tearDownClass()
 
 	def setUp(self):
-		self._clean()
+		self._delete_test_campaigns()
 
 	@staticmethod
-	def _clean():
+	def _delete_test_campaigns():
 		campaigns = frappe.get_all(
 			"WhatsApp Campaign", filters={"campaign_name": ("like", f"{NAME}%")}, pluck="name"
 		)
@@ -90,11 +90,11 @@ class TestApiCampaigns(IntegrationTestCase):
 	def _running(self, **values):
 		name = self._campaign(**values)
 		with patch.object(frappe, "enqueue"):
-			runner.start(name)
+			runner.start_campaign(name)
 		runner.materialize(name)
 		return name
 
-	def _status(self, name):
+	def _get_campaign_status(self, name):
 		return frappe.db.get_value("WhatsApp Campaign", name, "status")
 
 	# -- gates -------------------------------------------------------------------------
@@ -230,7 +230,7 @@ class TestApiCampaigns(IntegrationTestCase):
 			self.assertEqual(api.get_recipients_page(name=name, status="Queued")["total"], 2)
 			self.assertEqual(api.get_recipients_page(name=name, status="Failed")["total"], 0)
 			self.assertEqual(api.get_recipients_page(name=name, source_type="Contact")["total"], 1)
-			self.assertEqual(api.get_recipients_page(name=name, search="920402")["rows"][0]["phone_e164"], P2)
+			self.assertEqual(api.get_recipients_page(name=name, search="667663")["rows"][0]["phone_e164"], P2)
 			self.assertEqual(api.get_recipients_page(name=name, search="R1")["total"], 1)
 			self.assertEqual(len(api.get_recipients_page(name=name, page=2, page_length=1)["rows"]), 1)
 			self.assertEqual(len(api.get_recipients_page(name=name, page_length="9999")["rows"]), 2)  # capped
@@ -291,13 +291,16 @@ class TestApiCampaigns(IntegrationTestCase):
 			self.assertEqual((res["count"], res["done"]), (1, [running]))
 			self.assertEqual(res["skipped"], [{"name": draft, "reason": "Draft"}])
 			self.assertEqual([f["name"] for f in res["failed"]], ["no-such-ApiTest"])
-			self.assertEqual(self._status(running), "Paused")
+			self.assertEqual(self._get_campaign_status(running), "Paused")
 			res = api.resume_many(names=[running, draft])
 			self.assertEqual((res["count"], [s["name"] for s in res["skipped"]]), (1, [draft]))
-			self.assertEqual(self._status(running), "Running")
+			self.assertEqual(self._get_campaign_status(running), "Running")
 			res = api.cancel_many(names=[running, draft], reason="ApiTest bulk cancel")
 			self.assertEqual((res["count"], res["skipped"]), (2, []))
-			self.assertEqual((self._status(running), self._status(draft)), ("Cancelled", "Cancelled"))
+			self.assertEqual(
+				(self._get_campaign_status(running), self._get_campaign_status(draft)),
+				("Cancelled", "Cancelled"),
+			)
 			res = api.cancel_many(names=[running])
 			self.assertEqual((res["count"], res["skipped"]), (0, [{"name": running, "reason": "Cancelled"}]))
 

@@ -110,8 +110,8 @@ def as_bytes(file_url: str | None) -> bytes:
 	# the stored file is always read from disk in binary mode.
 	try:
 		doc.validate_file_url()
-		with open(doc.get_full_path(), "rb") as fh:
-			content = fh.read()
+		with open(doc.get_full_path(), "rb") as file_handle:
+			content = file_handle.read()
 	except Exception as exc:
 		frappe.throw(_("Cannot read file {0}: {1}").format(file_url, cstr(exc)[:200]), WAFileError)
 	if isinstance(content, str):
@@ -193,7 +193,7 @@ def render_print_pdf(
 	if language:
 		frappe.local.lang = language
 
-	def render(engine: str | None):
+	def render_print_with_engine(engine: str | None):
 		# wkhtmltopdf reads the page size only from Print Settings: the format's own size is
 		# handed to it here. Chrome reads the format's size itself.
 		wkhtmltopdf = (engine or pdf_engine(print_format)) == "wkhtmltopdf"
@@ -212,7 +212,7 @@ def render_print_pdf(
 	try:
 		with _css_imports_completed():
 			try:
-				pdf = render(None)
+				pdf = render_print_with_engine(None)
 			except Exception as first:
 				if pdf_engine(print_format) == "wkhtmltopdf":
 					raise
@@ -220,7 +220,7 @@ def render_print_pdf(
 					f"PDF engine of {print_format!r} failed ({_render_error(first)}); retried with wkhtmltopdf"
 				)
 				try:
-					pdf = render("wkhtmltopdf")
+					pdf = render_print_with_engine("wkhtmltopdf")
 				except Exception as second:
 					raise frappe.ValidationError(
 						f"{_render_error(first)} — wkhtmltopdf: {_render_error(second)}"
@@ -257,16 +257,18 @@ def page_options(print_format: str | None) -> dict[str, str]:
 	`landscape`. `{}` when it sets none, and Print Settings decides as before."""
 	if not print_format or not frappe.db.exists("Print Format", print_format):
 		return {}
-	pf = frappe.get_cached_doc("Print Format", print_format)
-	paper = pf.get("paper_size")
+	print_format_doc = frappe.get_cached_doc("Print Format", print_format)
+	paper = print_format_doc.get("paper_size")
 	if paper in _RECEIPT_WIDTHS:
 		return {"page-size": "Custom", "page-width": _RECEIPT_WIDTHS[paper], "page-height": "297mm"}
 	if paper and paper.lower() in _PAGE_NAMES:
 		return {"page-size": _PAGE_NAMES[paper.lower()]}
-	if builder := _builder_page(pf.get("format_data")):
+	if builder := _builder_page(print_format_doc.get("format_data")):
 		return builder
 	size = None
-	for rule in _PAGE_RULE.findall(f"{pf.get('css') or ''}\n{pf.get('html') or ''}"):
+	for rule in _PAGE_RULE.findall(
+		f"{print_format_doc.get('css') or ''}\n{print_format_doc.get('html') or ''}"
+	):
 		for value in _PAGE_SIZE.findall(rule):
 			size = value.strip()  # the last one wins, as in CSS
 	if not size:
@@ -323,7 +325,7 @@ def complete_css_imports(html: str) -> str:
 	the site's own address. A full or `data:` link is left as it is."""
 	site = frappe.utils.get_url().rstrip("/")
 
-	def full(match: re.Match) -> str:
+	def complete_css_import_link(match: re.Match) -> str:
 		link = match.group(2)
 		if re.match(r"^[a-z][a-z0-9+.-]*:", link, re.IGNORECASE):
 			return match.group(0)
@@ -333,7 +335,7 @@ def complete_css_imports(html: str) -> str:
 			link = f"{site}/{link.lstrip('/')}"
 		return match.group(1) + link
 
-	return _CSS_IMPORT.sub(full, html or "")
+	return _CSS_IMPORT.sub(complete_css_import_link, html or "")
 
 
 class _css_imports_completed:
@@ -378,21 +380,6 @@ def _pymupdf():
 			frappe.logger("whatsapp_next").warning(
 				"PyMuPDF is not installed: one-page PDFs are sent as PDFs. Run `bench setup requirements`."
 			)
-		return None
-
-
-def pdf_first_page_png(pdf_bytes: bytes) -> bytes | None:
-	"""PNG of the first page (PyMuPDF). `None` when PyMuPDF is missing or the PDF is unreadable."""
-	fitz = _pymupdf()
-	if fitz is None:
-		return None
-	try:
-		with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-			if doc.page_count == 0:
-				return None
-			pix = doc[0].get_pixmap(matrix=fitz.Matrix(PNG_ZOOM, PNG_ZOOM), alpha=False)
-			return pix.tobytes("png")
-	except Exception:
 		return None
 
 

@@ -1,4 +1,4 @@
-# `sanad.ui` — portable Desk component kit
+# `whatsapp.ui` — portable Desk component kit
 
 A set of Frappe Desk components that any Frappe app can copy and use. Everything is driven by
 DocType meta (`frappe.get_meta`, `frappe.model.with_doctype`) and by a small API map the host app
@@ -12,20 +12,18 @@ loading (skeleton) / empty / error states, and every panel is keyboard-accessibl
 
 | Component | What it does | Live use in this app |
 |---|---|---|
-| `_core` | namespace, `sanad.ui.configure`, `call`, escaping, icons, tones, announcer, focus trap, skeleton, meta helpers | everything |
+| `_core` | namespace, `whatsapp.ui.configure`, `call`, escaping, icons, tones, announcer, focus trap, skeleton, meta helpers | everything |
 | `Render` | one presentation layer: values, records and links at five display levels | every list cell, the drawer, Collection |
 | `StatusBadge` | status pill coloured by the DocType's own indicator rules | Outbound / Numbers lists |
 | `EmptyState` | loading (skeleton) · empty · error · offline | every panel |
 | `Toast` | tone + timing + aria-live wrapper over `frappe.show_alert` | QuickSend, bulk actions |
 | `ConfirmDialog` | impact rows, reason, acknowledgement, danger | pause/cancel flows, picker confirm |
 | `FilterBar` | tabs / select / date range / search bound to a list's filter area | Outbound, Inbound |
-| `TreeGroupBy` | sidebar group-by with counts | WhatsApp Numbers (`link_status`) |
 | `RowActions` | per-row overflow menu + row click | Outbound, Inbound, Queue, Numbers, Commands |
 | `BulkActions` | selection actions, native `names[]` or per-name loop with progress | Outbound, Campaigns, Queue |
 | `Stepper` | multi-step flow with "Step n of m" | ContactPicker confirm, Onboarding (phase 6) |
 | `PhoneField` | phone input with country hint and E.164 preview | ContactPicker manual source |
 | `ListStatsCard` | cards above a list (count / sum / method) with a detail modal | Campaigns "sending now" |
-| `MetaDialog` | tabbed dialog whose fields come from a DocType's meta | Commands modal |
 | `Collection` | rows as a table, list, cards, gallery or timeline, with the switch between them | drawer activity history |
 | `Drawer` | record / form / choice side panel from a list; `record` reads as a document | Outbound, Inbound, Queue |
 | `ChatThread` | message bubbles, ticks, day separators | ConversationDrawer |
@@ -42,7 +40,7 @@ loading (skeleton) / empty / error states, and every panel is keyboard-accessibl
 | `DashboardBlock` | Custom HTML Block rendering Number Cards / Dashboard Charts | Workspace "WhatsApp" |
 | `ContactPicker` | six-source recipient picker with duplicate flags and confirm | Campaigns, Contact Groups |
 
-Each folder has `index.js` (registers `sanad.ui.<Component>`), `style.scss` and a `README.md`
+Each folder has `index.js` (registers `whatsapp.ui.<Component>`), `style.scss` and a `README.md`
 with a usage snippet, its live use and the design-gate findings applied.
 
 ## Copy the kit into another Frappe app
@@ -51,7 +49,7 @@ with a usage snippet, its live use and the design-gate findings applied.
 2. Create `<your_app>/public/js/<your_app>.bundle.js`:
    ```js
    import "./ui/index.js";
-   sanad.ui.configure({
+   whatsapp.ui.configure({
      api: {
        // key the components use            → your whitelisted method
        "messages.get_conversation": "your_app.api.get_conversation",
@@ -70,7 +68,7 @@ with a usage snippet, its live use and the design-gate findings applied.
 3. In `hooks.py`: `app_include_js = ["<your_app>.bundle.js"]`,
    `app_include_css = ["<your_app>.bundle.css"]`, then `bench build --app <your_app>`.
 4. Mount components from your list/form scripts or pages, e.g.
-   `new sanad.ui.Drawer({ doctype: "Sales Invoice", name, mode: "record" }).show()`.
+   `new whatsapp.ui.Drawer({ doctype: "Sales Invoice", name, mode: "record" }).show()`.
 5. Components that call the server expect the return shapes documented in their README; wire
    your own whitelisted methods to those shapes (they are plain dicts) or pass `api: {...}`
    overrides per instance.

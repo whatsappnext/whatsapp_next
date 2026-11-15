@@ -10,7 +10,7 @@ every run ends with a result toast, `listview.clear_checked_items()` and `listvi
 ## Usage
 
 ```js
-new sanad.ui.BulkActions({
+new whatsapp.ui.BulkActions({
   listview,
   actions: [
     // native: one call with names[] (+ reason from the confirm dialog)
@@ -34,7 +34,7 @@ Options: `listview`, `cap` (default 200), `actions[]` (`label` string or `(count
 `(names, docs) => spec | null`, `condition(docs)`, `handler(names, docs, payload)` (replaces the
 API call), `success` string or `(result, names) => string`, `on_done(result, names)`, `cap`,
 `roles`, `perm`). Result shapes understood: `{count}` and `{count, done[], failed[], skipped[]}`.
-Methods: `update()`, `run(action)`, `destroy()`.
+Methods: `update()`, `run_bulk_action(action)`, `destroy()`.
 
 ## Live use
 Outbound list — `public/js/listview/whatsapp_log_list.js` (Resend failed → `messages.resend_many`,
@@ -51,5 +51,5 @@ Applied from the phase-5 audit:
   reliably); it shows the bar **and** "N of M done, K failed", and can be stopped.
 - Selection cap (200) with a message that says both the cap and the current count.
 - Decisions go through ConfirmDialog (impact rows, reason, acknowledgement); toasts only report.
-- Role / permission visibility through `sanad.ui.visible_actions` (same rules as RowActions and
+- Role / permission visibility through `whatsapp.ui.visible_actions` (same rules as RowActions and
   Drawer); `condition(docs)` re-evaluated on every selection change.

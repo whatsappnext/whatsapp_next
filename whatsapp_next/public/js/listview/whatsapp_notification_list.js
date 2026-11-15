@@ -6,7 +6,7 @@
 // ConfirmDialog. PageHeader / DataList are guarded with `typeof`; native rows render until they land.
 
 const DOCTYPE = "WhatsApp Notification";
-const has_kit = (name) => typeof sanad.ui[name] === "function";
+const has_kit = (name) => typeof whatsapp.ui[name] === "function";
 // a plain date: `add_days` returns an ISO string with the browser's offset, which the server reads as
 // another instant. "30 days" is today and the 29 before it, as the usage window counts them.
 const days_ago = (n) => frappe.datetime.add_days(frappe.datetime.now_date(), -n).slice(0, 10);
@@ -18,35 +18,22 @@ function open_editor(doc) {
 
 /** Enable / disable one row with a confirmation, then refresh the list. */
 function toggle_enabled(doc, listview) {
-	const enable = !cint(doc.enabled);
-	const title = doc.notification_name || doc.name;
-	return sanad.ui.ConfirmDialog.ask({
-		title: enable ? __("Enable {0}?", [title]) : __("Disable {0}?", [title]),
-		message: enable
-			? __("Messages will be sent automatically when the event happens.")
-			: __("No messages will be sent for this event until it is enabled again."),
+	return whatsapp_next.enabled_toggle.confirm_and_toggle_enabled(listview, DOCTYPE, doc, {
+		title: doc.notification_name || doc.name,
+		enable_message: __("Messages will be sent automatically when the event happens."),
+		disable_message: __("No messages will be sent for this event until it is enabled again."),
 		impact: [
 			{ label: __("Document type"), value: __(doc.document_type || "") },
 			{ label: __("Device"), value: doc.device || "—" },
 		],
-		confirm_label: enable ? __("Enable") : __("Disable"),
-		danger: !enable,
-		on_confirm: () => frappe.xcall("frappe.client.set_value", { doctype: DOCTYPE, name: doc.name, fieldname: "enabled", value: enable ? 1 : 0 }),
-	})
-		.then(() => {
-			sanad.ui.Toast.success(enable ? __("Notification enabled") : __("Notification disabled"));
-			listview.refresh();
-			listview._sanad_header && listview._sanad_header.refresh();
-		})
-		.catch(() => {});
+		enabled_toast: __("Notification enabled"),
+		disabled_toast: __("Notification disabled"),
+	});
 }
 
 /** Status chip that doubles as the enable / disable toggle (mouse + keyboard). */
 function status_chip(doc, can_write) {
-	const enabled = !!cint(doc.enabled);
-	const badge = sanad.ui.StatusBadge.html({ label: enabled ? __("Enabled") : __("Disabled"), colour: enabled ? "green" : "gray" });
-	if (!can_write) return badge;
-	return `<button type="button" class="btn btn-link p-0 wa-toggle-enabled" data-name="${frappe.utils.escape_html(doc.name)}" aria-pressed="${enabled}" aria-label="${frappe.utils.escape_html(enabled ? __("Enabled — click to disable") : __("Disabled — click to enable"))}">${badge}</button>`;
+	return whatsapp_next.enabled_toggle.enabled_chip_html(doc, can_write);
 }
 
 /** Enabled notifications whose device is not Connected (their messages wait in the queue). */
@@ -71,7 +58,7 @@ const STATS = () => [
 				frappe.db.count(DOCTYPE),
 				frappe.db.get_list(DOCTYPE, { fields: ["document_type"], group_by: "document_type", limit: 200 }),
 			]).then(([total, rows]) => ({ value: total, types: (rows || []).filter((r) => r.document_type).length })),
-		sub: (value, raw) => sanad.ui.plural((raw && raw.types) || 0, { one: __("{0} document type"), other: __("{0} document types") }),
+		sub: (value, raw) => whatsapp.ui.plural((raw && raw.types) || 0, { one: __("{0} document type"), other: __("{0} document types") }),
 	},
 	{
 		key: "enabled",
@@ -82,7 +69,7 @@ const STATS = () => [
 			Promise.all([frappe.db.count(DOCTYPE, { filters: { enabled: 1 } }), frappe.db.count(DOCTYPE, { filters: { enabled: 0 } })]).then(
 				([on, off]) => ({ value: on, tone: "green", disabled: off })
 			),
-		sub: (value, raw) => sanad.ui.plural((raw && raw.disabled) || 0, { one: __("{0} disabled"), other: __("{0} disabled") }),
+		sub: (value, raw) => whatsapp.ui.plural((raw && raw.disabled) || 0, { one: __("{0} disabled"), other: __("{0} disabled") }),
 	},
 	{
 		key: "sent",
@@ -99,7 +86,7 @@ const STATS = () => [
 		icon: "es-line-mobile",
 		value: count_on_disconnected_device,
 		sub: (value) => (value ? __("Their messages stay in the queue") : __("Every linked device is connected")),
-		onclick: () => frappe.set_route((sanad.ui.config.defaults || {}).devices_route || "wa-devices"),
+		onclick: () => frappe.set_route((whatsapp.ui.config.defaults || {}).devices_route || "wa-devices"),
 	},
 ];
 
@@ -118,7 +105,7 @@ const COLUMNS = (can_write) => [
 		hidden_xs: true,
 		// the Desk form beside the editor window that "View" opens: every field, the sidebar, the history
 		format: (v, doc) =>
-			`<button type="button" class="sanad-datalist__action wa-open-form" data-name="${frappe.utils.escape_html(doc.name)}" aria-label="${frappe.utils.escape_html(__("Open the form of {0}", [doc.notification_name || doc.name]))}">${frappe.utils.escape_html(__("Open form"))}</button>`,
+			`<button type="button" class="whatsapp-kit-datalist__action whatsapp-open-form" data-name="${frappe.utils.escape_html(doc.name)}" aria-label="${frappe.utils.escape_html(__("Open the form of {0}", [doc.notification_name || doc.name]))}">${frappe.utils.escape_html(__("Open form"))}</button>`,
 	},
 ];
 
@@ -141,7 +128,7 @@ frappe.listview_settings[DOCTYPE] = {
 
 		const has_header = has_kit("PageHeader");
 		if (has_header) {
-			listview._sanad_header = new sanad.ui.PageHeader({
+			listview._whatsapp_header = new whatsapp.ui.PageHeader({
 				listview,
 				primary: { label: __("New notification"), icon: "es-line-add", perm: "create", handler: () => open_editor() },
 				stats: STATS(),
@@ -150,7 +137,7 @@ frappe.listview_settings[DOCTYPE] = {
 		}
 
 		if (has_kit("FilterBar")) {
-			new sanad.ui.FilterBar({
+			new whatsapp.ui.FilterBar({
 				listview,
 				actions: ["group_by", "export"],
 				intro: has_header ? null : __("Each notification ties a document event to a message sent automatically from a chosen device."),
@@ -165,13 +152,13 @@ frappe.listview_settings[DOCTYPE] = {
 		}
 
 		if (has_kit("DataList")) {
-			listview._sanad_datalist = new sanad.ui.DataList({
+			listview._whatsapp_datalist = new whatsapp.ui.DataList({
 				listview,
 				columns: COLUMNS(can_write),
 				selectable: true,
 				page_length: 20,
 				on_row_click: open_editor,
-				footer: { count: (total) => sanad.ui.plural(total, { one: __("{0} notification"), other: __("{0} notifications") }) },
+				footer: { count: (total) => whatsapp.ui.plural(total, { one: __("{0} notification"), other: __("{0} notifications") }) },
 				empty: {
 					title: __("No notifications yet"),
 					description: __("Send a message automatically when a document is created, submitted or becomes due."),
@@ -180,12 +167,12 @@ frappe.listview_settings[DOCTYPE] = {
 				mobile: "cards",
 			});
 		} else if (has_kit("RowActions")) {
-			new sanad.ui.RowActions({
+			new whatsapp.ui.RowActions({
 				listview,
 				actions: [
 					{ label: __("Enable"), icon: "es-line-success", condition: (doc) => can_write && !cint(doc.enabled), handler: (doc) => toggle_enabled(doc, listview) },
-					{ label: __("Disable"), icon: sanad.ui.icons.cancel, condition: (doc) => can_write && !!cint(doc.enabled), handler: (doc) => toggle_enabled(doc, listview) },
-					{ label: __("Open"), icon: sanad.ui.icons.open, handler: open_editor },
+					{ label: __("Disable"), icon: whatsapp.ui.icons.cancel, condition: (doc) => can_write && !!cint(doc.enabled), handler: (doc) => toggle_enabled(doc, listview) },
+					{ label: __("Open"), icon: whatsapp.ui.icons.open, handler: open_editor },
 					{ label: __("Open form"), icon: "es-line-edit", handler: (doc) => frappe.set_route("Form", DOCTYPE, doc.name) },
 				],
 				on_row_click: open_editor,
@@ -193,19 +180,13 @@ frappe.listview_settings[DOCTYPE] = {
 		}
 
 		// "Open form" inside DataList rows: the Desk form, not the editor the row click opens.
-		listview.$result.off("click.wanotificationform").on("click.wanotificationform", ".wa-open-form", (e) => {
+		listview.$result.off("click.wanotificationform").on("click.wanotificationform", ".whatsapp-open-form", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			frappe.set_route("Form", DOCTYPE, $(e.currentTarget).data("name"));
 		});
 
-		// Status chip toggle inside DataList rows (delegated: rows re-render on every refresh).
-		listview.$result.off("click.wanotification").on("click.wanotification", ".wa-toggle-enabled", (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			const name = $(e.currentTarget).data("name");
-			const doc = (listview.data || []).find((d) => d.name === name);
-			if (doc) toggle_enabled(doc, listview);
-		});
+		// Status chip toggle inside DataList rows
+		whatsapp_next.enabled_toggle.bind_enabled_toggle(listview, "wanotification", toggle_enabled);
 	},
 };

@@ -1,4 +1,4 @@
-# `sanad.ui.EmptyState`
+# `whatsapp.ui.EmptyState`
 
 The single renderer for the four non-data states of any panel, list or page:
 
@@ -26,7 +26,7 @@ The default icons are `es-line-inbox` for `empty`, `es-line-alert-circle` for `e
 
 ## Methods
 
-- `set(state, opts = {})` merges `opts`, sets the state, re-renders, and returns `this`.
+- `set_state(state, opts = {})` merges `opts`, sets the state, re-renders, and returns `this`.
 - `loading(opts)`, `empty(opts)` and `offline(opts)` are shortcuts for `set`.
 - `error(err, opts = {})` shows the error state. The description is `err.message` when `err` has one, otherwise `opts.description`.
 - `hide()` empties the wrapper.
@@ -43,8 +43,8 @@ None.
 ## Usage
 
 ```js
-const state = new sanad.ui.EmptyState({ wrapper: $panel, state: "loading" });
-sanad.ui.call("home.get_dashboard")
+const state = new whatsapp.ui.EmptyState({ wrapper: $panel, state: "loading" });
+whatsapp.ui.call("home.get_dashboard")
   .then((data) => {
     if (!data.devices.length)
       return state.empty({ title: __("No devices yet"),
@@ -57,8 +57,8 @@ sanad.ui.call("home.get_dashboard")
 
 ## CSS hooks
 
-- `.sanad-empty` is the root. Size modifiers are `--sm` and `--md`. State modifiers are `--loading`, `--empty`, `--error` and `--offline`.
-- Inner elements are `.sanad-empty__icon`, `__title`, `__desc` and `__actions`. `__actions` is removed when it has no buttons.
+- `.whatsapp-kit-empty` is the root. Size modifiers are `--sm` and `--md`. State modifiers are `--loading`, `--empty`, `--error` and `--offline`.
+- Inner elements are `.whatsapp-kit-empty__icon`, `__title`, `__description` and `__actions`. `__actions` is removed when it has no buttons.
 - The icon is red in `--error` and amber in `--offline`. The root has a reserved `min-height` (120 px, or 80 px for `sm`) so the panel does not jump.
 
 ## Notes
@@ -71,4 +71,4 @@ sanad.ui.call("home.get_dashboard")
   - `public/js/listview/`: `whatsapp_campaign_list.js`, `whatsapp_contact_group_list.js`, `whatsapp_inbound_message_list.js`
   - `public/js/screens/settings.js`
   - `whatsapp_next/page/`: `wa_contacts`, `wa_devices`, `wa_functions_center`, `wa_home`, `wa_simulator`
-- Kit users: ChatThread, Collection, ContactPicker, ConversationDrawer, DashboardBlock, DataList, Drawer, FilterBar, ListStatsCard, MessageComposer, PageHeader, PagedChildTable, QuickSend, Render, TemplateEditor and TreeGroupBy.
+- Kit users: ChatThread, Collection, ContactPicker, ConversationDrawer, DashboardBlock, DataList, Drawer, FilterBar, ListStatsCard, MessageComposer, PageHeader, PagedChildTable, QuickSend, Render and TemplateEditor.

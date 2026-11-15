@@ -5,10 +5,10 @@
 frappe.provide("whatsapp_next.queue");
 
 (function () {
-	const ui = sanad.ui;
+	const ui = whatsapp.ui;
 
 	whatsapp_next.queue.cancel_item = function (doc, after) {
-		return ui.ConfirmDialog.ask({
+		return ui.ConfirmDialog.ask_for_confirmation({
 			title: __("Cancel this message?"),
 			message: __("It will not be sent. The row stays in the queue as Deleted and the message is marked Cancelled."),
 			impact: [

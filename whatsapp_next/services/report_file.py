@@ -22,27 +22,27 @@ EXT = {"PDF": "pdf", "Excel": "xlsx"}
 def _columns(raw: list[Any]) -> list[dict[str, Any]]:
 	"""Report columns as dicts (`fieldname`, `label`, `fieldtype`, `options`), hidden ones dropped."""
 	out = []
-	for i, col in enumerate(raw or []):
-		if isinstance(col, str):
+	for i, column in enumerate(raw or []):
+		if isinstance(column, str):
 			# legacy "Label:Fieldtype/Options:Width"
-			label, _sep, rest = col.partition(":")
+			label, _sep, rest = column.partition(":")
 			fieldtype = rest.split(":")[0].split("/")[0] or "Data"
-			col = {"label": label, "fieldtype": fieldtype, "fieldname": frappe.scrub(label) or f"col_{i}"}
-		if not isinstance(col, dict) or col.get("hidden"):
+			column = {"label": label, "fieldtype": fieldtype, "fieldname": frappe.scrub(label) or f"col_{i}"}
+		if not isinstance(column, dict) or column.get("hidden"):
 			continue
 		out.append(
 			{
-				"fieldname": col.get("fieldname") or f"col_{i}",
-				"label": cstr(col.get("label") or col.get("fieldname") or ""),
-				"fieldtype": col.get("fieldtype") or "Data",
-				"options": col.get("options"),
+				"fieldname": column.get("fieldname") or f"col_{i}",
+				"label": cstr(column.get("label") or column.get("fieldname") or ""),
+				"fieldtype": column.get("fieldtype") or "Data",
+				"options": column.get("options"),
 				"index": i,
 			}
 		)
 	return out
 
 
-def _cell(row: Any, col: dict[str, Any]) -> Any:
+def _get_row_cell_value(row: Any, col: dict[str, Any]) -> Any:
 	if isinstance(row, dict):
 		return row.get(col["fieldname"])
 	if isinstance(row, list | tuple) and col["index"] < len(row):
@@ -59,7 +59,7 @@ def run_report(report_name: str, filters: dict[str, Any]) -> tuple[list[dict[str
 	return _columns(result.get("columns")), rows
 
 
-def _pdf(title: str, columns: list[dict[str, Any]], rows: list[Any]) -> bytes:
+def _render_report_pdf(title: str, columns: list[dict[str, Any]], rows: list[Any]) -> bytes:
 	from frappe.utils.pdf import get_pdf
 
 	rtl = frappe.local.lang in ("ar", "fa", "he", "ur")
@@ -68,7 +68,7 @@ def _pdf(title: str, columns: list[dict[str, Any]], rows: list[Any]) -> bytes:
 	for row in rows:
 		cells = []
 		for c in columns:
-			value = _cell(row, c)
+			value = _get_row_cell_value(row, c)
 			shown = (
 				format_value(value, {"fieldtype": c["fieldtype"], "options": c["options"]})
 				if value not in (None, "")
@@ -88,24 +88,28 @@ th{{background:#f2f2f2}}
 	return get_pdf(html, {"orientation": "Landscape" if len(columns) > 6 else "Portrait"})
 
 
-def _xlsx(title: str, columns: list[dict[str, Any]], rows: list[Any]) -> bytes:
+def _render_report_xlsx(title: str, columns: list[dict[str, Any]], rows: list[Any]) -> bytes:
 	from frappe.utils.xlsxutils import make_xlsx
 
 	data = [[_(c["label"]) for c in columns]]
-	data += [[_cell(row, c) for c in columns] for row in rows]
+	data += [[_get_row_cell_value(row, c) for c in columns] for row in rows]
 	return make_xlsx(data, (_(title) or "Report")[:31]).getvalue()
 
 
 def render_report_file(msg: dict[str, Any]) -> tuple[str, bytes, str]:
 	"""`(file name, bytes, mime)` for a validated `report` message
 	(`report_name`, `filters`, `format`, `file_name`). E: `frappe.ValidationError`."""
-	fmt = msg.get("format") or "PDF"
-	if fmt not in FORMATS:
-		frappe.throw(_("Unknown report format {0}").format(fmt))
+	file_format = msg.get("format") or "PDF"
+	if file_format not in FORMATS:
+		frappe.throw(_("Unknown report format {0}").format(file_format))
 	report_name = msg["report_name"]
 	columns, rows = run_report(report_name, msg.get("filters") or {})
-	content = _pdf(report_name, columns, rows) if fmt == "PDF" else _xlsx(report_name, columns, rows)
+	content = (
+		_render_report_pdf(report_name, columns, rows)
+		if file_format == "PDF"
+		else _render_report_xlsx(report_name, columns, rows)
+	)
 	name = cstr(msg.get("file_name") or report_name).strip() or report_name
-	if not name.lower().endswith("." + EXT[fmt]):
-		name = f"{name}.{EXT[fmt]}"
-	return name, content, MIME[fmt]
+	if not name.lower().endswith("." + EXT[file_format]):
+		name = f"{name}.{EXT[file_format]}"
+	return name, content, MIME[file_format]

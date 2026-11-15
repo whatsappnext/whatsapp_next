@@ -1,4 +1,4 @@
-// ContactPicker source 4 — Excel upload as a three-step `sanad.ui.Stepper` flow: 1 Upload
+// ContactPicker source 4 — Excel upload as a three-step `whatsapp.ui.Stepper` flow: 1 Upload
 // (`frappe.ui.FileUploader`, private file, .xlsx / .xls / .csv), 2 Map columns (only when the
 // server answers `needs_mapping` — skipped automatically otherwise, skippable by hand),
 // 3 Preview (counts strip, first rows, invalid rows with reasons) whose Finish button "Add N rows"
@@ -18,7 +18,7 @@ export class UploadSource extends BaseSource {
 		return "Excel";
 	}
 
-	static label() {
+	static default_tab_label() {
 		return __("Excel file");
 	}
 
@@ -31,7 +31,7 @@ export class UploadSource extends BaseSource {
 		return { excel: [".xlsx", ".xls", ".csv"], csv: [".csv"], vcf: [".vcf"] }[kind] || [];
 	}
 
-	note() {
+	upload_hint_text() {
 		return __("The first row must hold the column headers. The phone column is detected from its header; if that fails, choose it in the next step.");
 	}
 
@@ -45,7 +45,7 @@ export class UploadSource extends BaseSource {
 			{ key: "map", label: __("Map columns"), can_skip: false, render: ($body) => (this.$mapping = $body), on_show: () => this.render_mapping(), validate: () => this.validate_mapping() },
 			{ key: "preview", label: __("Preview"), render: ($body) => (this.$preview = $body), on_show: (_$body, _ctx, stepper) => this.render_preview(stepper) },
 		];
-		this.stepper = new sanad.ui.Stepper({
+		this.stepper = new whatsapp.ui.Stepper({
 			wrapper: this.$pane,
 			steps: this.steps,
 			finish_label: __("Add rows"),
@@ -60,9 +60,9 @@ export class UploadSource extends BaseSource {
 			const labels = { vcf: __("vCard (.vcf)"), csv: __("CSV"), excel: __("Excel") };
 			$body.append(this.chips(__("File type"), this.kinds().map((k) => ({ value: k, label: labels[k] || k })), (k) => this.set_kind(k), { all: false }));
 		}
-		$body.append(`<p class="sanad-picker__note">${ui.escape(this.note())}</p>`);
-		this.$uploader = $('<div class="sanad-picker__uploader"></div>').appendTo($body);
-		this.$file = $('<div class="sanad-picker__note" aria-live="polite"></div>').appendTo($body);
+		$body.append(`<p class="whatsapp-kit-picker__note">${ui.escape(this.upload_hint_text())}</p>`);
+		this.$uploader = $('<div class="whatsapp-kit-picker__uploader"></div>').appendTo($body);
+		this.$file = $('<div class="whatsapp-kit-picker__note" aria-live="polite"></div>').appendTo($body);
 		this.make_uploader();
 	}
 
@@ -74,7 +74,7 @@ export class UploadSource extends BaseSource {
 		this.mapping_needed = false;
 		this.file_url = null;
 		this.$file.empty();
-		this.stepper.go(UPLOAD);
+		this.stepper.go_to_step(UPLOAD);
 		this.make_uploader();
 	}
 
@@ -98,13 +98,13 @@ export class UploadSource extends BaseSource {
 					this.file_name = file_doc.file_name || file_doc.file_url;
 					this.mapping = null;
 					this.$file.text(__("Uploaded {0}", [this.file_name]));
-					this.parse().catch(() => {});
+					this.parse_uploaded_file().catch(() => {});
 				},
 			});
 		} catch (err) {
 			const message = err.message || __("The uploader could not be opened. Reload the page and try again.");
 			if (this.stepper) this.stepper.show_error(message);
-			else this.$uploader.html(`<div class="sanad-picker__alert" role="alert">${ui.escape(message)}</div>`);
+			else this.$uploader.html(`<div class="whatsapp-kit-picker__alert" role="alert">${ui.escape(message)}</div>`);
 		}
 	}
 
@@ -117,13 +117,13 @@ export class UploadSource extends BaseSource {
 		const kind = /\.(vcf|vcard)$/.test(name) ? "vcf" : /\.csv$/.test(name) ? "csv" : "excel";
 		if (this.kinds().includes(kind) && kind !== this.kind) this.set_kind(kind);
 		if (!this.uploader || !this.uploader.uploader) {
-			return sanad.ui.Toast.warning(__("Choose the file in the panel."));
+			return whatsapp.ui.Toast.warning(__("Choose the file in the panel."));
 		}
 		try {
 			this.uploader.uploader.add_files([file]);
 			this.uploader.uploader.upload_files();
 		} catch (e) {
-			sanad.ui.Toast.warning(__("Choose the file in the panel."));
+			whatsapp.ui.Toast.warning(__("Choose the file in the panel."));
 		}
 	}
 
@@ -143,10 +143,10 @@ export class UploadSource extends BaseSource {
 	 * Preview, missing phone column → Map columns, any other failure → back to Upload with the
 	 * message inline. Rejects with the error either way.
 	 */
-	parse({ navigate = true } = {}) {
+	parse_uploaded_file({ navigate = true } = {}) {
 		if (!this.file_url) return Promise.reject(new Error(__("Upload a file to continue")));
 		this.picker.set_progress(__("Parsing {0}…", [this.file_name]));
-		return this.call("picker.parse_upload", { file_url: this.file_url, kind: this.kind, mapping: this.mapping }, { silent: true })
+		return this.call_picker_api("picker.parse_upload", { file_url: this.file_url, kind: this.kind, mapping: this.mapping }, { silent: true })
 			.then((r) => {
 				this.picker.set_progress(null);
 				this.columns = r.columns || [];
@@ -156,7 +156,7 @@ export class UploadSource extends BaseSource {
 					this.mapping_needed = true;
 					this.steps[MAP].can_skip = false;
 					if (navigate) {
-						this.stepper.go(MAP);
+						this.stepper.go_to_step(MAP);
 						this.stepper.show_error(r.error || __("Choose the column that holds the phone number"));
 					}
 					const err = new Error(r.error || __("Choose the column that holds the phone number"));
@@ -166,7 +166,7 @@ export class UploadSource extends BaseSource {
 				this.result = r;
 				this.mapping_needed = false;
 				this.steps[MAP].can_skip = true;
-				if (navigate) this.stepper.go(PREVIEW);
+				if (navigate) this.stepper.go_to_step(PREVIEW);
 				return r;
 			})
 			.catch((err) => {
@@ -177,7 +177,7 @@ export class UploadSource extends BaseSource {
 				this.mapping_needed = needs_mapping;
 				this.steps[MAP].can_skip = false;
 				if (navigate) {
-					this.stepper.go(needs_mapping ? MAP : UPLOAD);
+					this.stepper.go_to_step(needs_mapping ? MAP : UPLOAD);
 					this.stepper.show_error(err.message || this.read_error());
 				}
 				throw err;
@@ -190,12 +190,12 @@ export class UploadSource extends BaseSource {
 	render_mapping() {
 		const $body = this.$mapping.empty();
 		if (this.kind === "vcf") {
-			$body.append(`<p class="sanad-picker__note">${ui.escape(__("vCard files need no column mapping."))}</p>`);
+			$body.append(`<p class="whatsapp-kit-picker__note">${ui.escape(__("vCard files need no column mapping."))}</p>`);
 			return;
 		}
 		const columns = (this.result && this.result.columns) || this.columns || [];
-		const phone_id = ui.uid("map-phone");
-		const name_id = ui.uid("map-name");
+		const phone_id = ui.unique_dom_id("map-phone");
+		const name_id = ui.unique_dom_id("map-name");
 		const control = (id) => {
 			if (columns.length) {
 				const $s = $(`<select class="form-control" id="${id}"><option value="">${ui.escape(__("Detect automatically"))}</option></select>`);
@@ -204,16 +204,16 @@ export class UploadSource extends BaseSource {
 			}
 			return $(`<input type="text" class="form-control" id="${id}" placeholder="${ui.escape(__("Column header"))}">`);
 		};
-		$body.append(`<p class="sanad-picker__note">${ui.escape(this.result ? __("Columns were detected. Change them here or skip this step.") : __("Choose the column that holds the phone number, then continue to re-read the file."))}</p>`);
-		const $grid = $('<div class="sanad-picker__mapping-grid"></div>');
+		$body.append(`<p class="whatsapp-kit-picker__note">${ui.escape(this.result ? __("Columns were detected. Change them here or skip this step.") : __("Choose the column that holds the phone number, then continue to re-read the file."))}</p>`);
+		const $grid = $('<div class="whatsapp-kit-picker__mapping-grid"></div>');
 		this.$phone_col = control(phone_id);
 		this.$name_col = control(name_id);
 		if (this.mapping) {
 			this.$phone_col.val(this.mapping.phone || "");
 			this.$name_col.val(this.mapping.name || "");
 		}
-		$grid.append($(`<div class="sanad-picker__field"><label for="${phone_id}">${ui.escape(__("Phone column"))}</label></div>`).append(this.$phone_col));
-		$grid.append($(`<div class="sanad-picker__field"><label for="${name_id}">${ui.escape(__("Name column"))}</label></div>`).append(this.$name_col));
+		$grid.append($(`<div class="whatsapp-kit-picker__field"><label for="${phone_id}">${ui.escape(__("Phone column"))}</label></div>`).append(this.$phone_col));
+		$grid.append($(`<div class="whatsapp-kit-picker__field"><label for="${name_id}">${ui.escape(__("Name column"))}</label></div>`).append(this.$name_col));
 		$body.append($grid);
 	}
 
@@ -224,7 +224,7 @@ export class UploadSource extends BaseSource {
 		const name = this.$name_col ? this.$name_col.val() : "";
 		if (!phone && this.mapping_needed) return __("Choose the column that holds the phone number");
 		this.mapping = phone || name ? { phone: phone || null, name: name || null } : null;
-		return this.parse({ navigate: false }).then(
+		return this.parse_uploaded_file({ navigate: false }).then(
 			() => true,
 			(err) => err.message || this.read_error()
 		);
@@ -234,13 +234,13 @@ export class UploadSource extends BaseSource {
 
 	render_preview(stepper) {
 		const $body = this.$preview.empty();
-		const r = this.result;
-		const rows = (r && r.rows) || [];
-		const invalid = (r && r.invalid) || [];
+		const result = this.result;
+		const rows = (result && result.rows) || [];
+		const invalid = (result && result.invalid) || [];
 		const state = this.state_for($body);
-		stepper.set_finish_label(rows.length ? __("Add {0} rows", [ui.format_int(rows.length)]) : __("Add rows"));
-		if (!r) {
-			state.empty({ title: __("Nothing to preview yet"), description: __("Upload a file first."), action: { label: __("Back to upload"), onclick: () => stepper.go(UPLOAD) } });
+		stepper.set_finish_label(rows.length ? __("Add {0} rows", [ui.format_integer(rows.length)]) : __("Add rows"));
+		if (!result) {
+			state.empty({ title: __("Nothing to preview yet"), description: __("Upload a file first."), action: { label: __("Back to upload"), onclick: () => stepper.go_to_step(UPLOAD) } });
 			stepper.set_step_valid(false);
 			return;
 		}
@@ -256,9 +256,9 @@ export class UploadSource extends BaseSource {
 			return;
 		}
 		state.hide();
-		$body.append(`<div class="sanad-picker__counts"><span class="sanad-tone--green">${ui.escape(__("{0} valid", [ui.format_int(rows.length)]))}</span><span class="sanad-tone--amber">${ui.escape(__("{0} invalid", [ui.format_int(invalid.length)]))}</span><span>${ui.escape(__("{0} rows in file", [ui.format_int(r.total || rows.length + invalid.length)]))}</span></div>`);
+		$body.append(`<div class="whatsapp-kit-picker__counts"><span class="whatsapp-kit-tone--green">${ui.escape(__("{0} valid", [ui.format_integer(rows.length)]))}</span><span class="whatsapp-kit-tone--amber">${ui.escape(__("{0} invalid", [ui.format_integer(invalid.length)]))}</span><span>${ui.escape(__("{0} rows in file", [ui.format_integer(result.total || rows.length + invalid.length)]))}</span></div>`);
 		$body.append(this.candidate_table(rows.slice(0, PREVIEW_ROWS), { selectable: false }));
-		if (rows.length > PREVIEW_ROWS) $body.append(`<div class="sanad-picker__note">${ui.escape(__("Showing the first {0} of {1} valid rows", [PREVIEW_ROWS, ui.format_int(rows.length)]))}</div>`);
+		if (rows.length > PREVIEW_ROWS) $body.append(`<div class="whatsapp-kit-picker__note">${ui.escape(__("Showing the first {0} of {1} valid rows", [PREVIEW_ROWS, ui.format_integer(rows.length)]))}</div>`);
 		$body.append(this.invalid_list(invalid));
 	}
 
@@ -268,12 +268,12 @@ export class UploadSource extends BaseSource {
 		if (!rows.length) return;
 		this.picker.add_rows(rows, { source_type: this.key, source_ref: this.file_name });
 		this.stepper.set_step_valid(false);
-		this.stepper.set_finish_label(__("Added {0} rows", [ui.format_int(rows.length)]));
+		this.stepper.set_finish_label(__("Added {0} rows", [ui.format_integer(rows.length)]));
 	}
 
 	preselect(pre) {
 		if (pre && pre.kind && this.kinds().includes(pre.kind) && pre.kind !== this.kind) {
-			this.$pane.find(`.sanad-picker__chip[data-value="${pre.kind}"]`).trigger("click");
+			this.$pane.find(`.whatsapp-kit-picker__chip[data-value="${pre.kind}"]`).trigger("click");
 		}
 	}
 

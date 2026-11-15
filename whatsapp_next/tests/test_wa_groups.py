@@ -14,7 +14,7 @@ from whatsapp_next.services import wa_groups
 from whatsapp_next.tests.conftest_frappe import ensure_device
 
 
-def plan(groups: bool) -> None:
+def set_plan_allows_groups(groups: bool) -> None:
 	frappe.db.set_single_value("WhatsApp Settings", "plan_features", frappe.as_json({"allow_groups": groups}))
 	frappe.clear_document_cache("WhatsApp Settings", "WhatsApp Settings")
 
@@ -42,21 +42,21 @@ class TestWaGroups(IntegrationTestCase):
 			frappe.db.get_value("WhatsApp Device", {"status": "Connected", "disabled": 0}, "name")
 			or ensure_device()
 		)
-		plan(True)
+		set_plan_allows_groups(True)
 		self.provider = Provider()
 
 	def _create(self, **kw):
 		with patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider):
-			return wa_groups.create(
+			return wa_groups.create_whatsapp_group(
 				self.device,
 				kw.pop("name", "Project team"),
-				kw.pop("members", ["+967711000001", "967711000002"]),
+				kw.pop("members", ["+967784499996", "967777667663"]),
 				**kw,
 			)
 
 	def test_creates_the_group_and_its_number(self):
 		result = self._create(description="Weekly")
-		self.assertEqual(self.provider.calls[0][2], ["+967711000001", "+967711000002"])
+		self.assertEqual(self.provider.calls[0][2], ["+967784499996", "+967777667663"])
 		self.assertEqual([m["status"] for m in result["members"]], ["added", "invite_required"])
 		row = frappe.db.get_value(
 			"WhatsApp Number", result["jid"], ["number_type", "display_name", "synced_device"], as_dict=True
@@ -75,11 +75,11 @@ class TestWaGroups(IntegrationTestCase):
 			{
 				"doctype": "Contact",
 				"first_name": f"Group {frappe.generate_hash(length=5)}",
-				"phone_nos": [{"phone": "+967711000003", "is_primary_mobile_no": 1}],
+				"phone_nos": [{"phone": "+967777999579", "is_primary_mobile_no": 1}],
 			}
 		).insert(ignore_permissions=True)
 		members = wa_groups.members_from("Contact", [contact.name])
-		self.assertEqual([m["phone_e164"] for m in members], ["+967711000003"])
+		self.assertEqual([m["phone_e164"] for m in members], ["+967777999579"])
 		result = self._create(members=[m["phone_e164"] for m in members], contact=contact.name)
 		self.assertTrue(result["saved_to_contact"])
 		phones = frappe.get_all("Contact Phone", filters={"parent": contact.name}, pluck="wa_phone_e164")
@@ -89,7 +89,7 @@ class TestWaGroups(IntegrationTestCase):
 	def test_needs_the_plan_and_members(self):
 		with self.assertRaises(WAValidationError):
 			self._create(members=["not a number"])
-		plan(False)
+		set_plan_allows_groups(False)
 		with self.assertRaises(WANotSupportedError):
 			self._create()
 

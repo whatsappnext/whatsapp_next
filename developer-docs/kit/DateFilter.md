@@ -1,4 +1,4 @@
-# `sanad.ui.DateFilter` and `sanad.ui.DateFilterSet`
+# `whatsapp.ui.DateFilter` and `whatsapp.ui.DateFilterSet`
 
 `DateFilter` is the prototype's operator-based date filter (`docs/component/Date Filter.html`). A split trigger (**operator · [field] · value**) opens a panel whose shape follows the operator:
 
@@ -35,7 +35,7 @@ All bounds are inclusive. `after` / `before` without a time shift the date by on
 | Option | Type | Default | Meaning |
 |---|---|---|---|
 | `wrapper` | jQuery \| HTMLElement | — (required) | The trigger is appended here. |
-| `label` | string | — | Caption above the trigger (`.sanad-datefilter__label`). |
+| `label` | string | — | Caption above the trigger (`.whatsapp-kit-datefilter__label`). |
 | `placeholder` | string | `__("Pick a date")` | Value text while nothing is applied. `""` hides the text. |
 | `default_op` | operator key | `"between"` | Operator for a fresh draft. |
 | `layout` | `"auto"` \| `"wide"` \| `"compact"` | `"auto"` | `auto` goes compact under 720 px wide. |
@@ -59,7 +59,7 @@ The last seven options are the set's wiring. `DateFilterSet` supplies them, and 
 
 | Option | Type | Default | Meaning |
 |---|---|---|---|
-| `wrapper` | jQuery \| HTMLElement | — (required) | Receives `.sanad-datefilter-set`. |
+| `wrapper` | jQuery \| HTMLElement | — (required) | Receives `.whatsapp-kit-datefilter-set`. |
 | `fields` | as above | — | The date fields on offer. |
 | `fieldname` | string | first field | The field the first row starts on. |
 | `on_change` | `(rows, {removed}) => void` | — | `rows = [{fieldname, value \| null}]`. `removed` holds the fieldnames the set dropped. |
@@ -71,21 +71,21 @@ The last seven options are the set's wiring. `DateFilterSet` supplies them, and 
 
 - `get_value()` returns the value object, or `null` while the draft is incomplete.
 - `set_value(value, {silent})` restores a value. `null` clears.
-- `apply({cascade = true, silent = false})` applies the draft.
+- `apply_selected_dates({cascade = true, silent = false})` applies the draft.
 - `clear({silent = false, cascade = true})` clears the filter.
 - `open({keep_state})` / `close(restore_focus)` open and close the panel. `open_menu()` / `close_menu()` do the same for the operator list, and `open_fields()` / `close_fields()` for the field list.
 - `set_op(key)` changes the operator. The picked dates are kept.
 - `set_field(fieldname, {silent})` points the row at another field.
-- `set(patch)` merges `patch` into the draft and re-renders.
+- `update_draft_state(patch)` merges `patch` into the draft and re-renders.
 - `render_panel()` redraws the open panel.
 - `reflect_trigger()` repaints the trigger.
 - `destroy()` removes the control and its document handlers.
 
 `DateFilterSet`:
 
-- `values()` returns `[{fieldname, value}]`.
+- `applied_field_values()` returns `[{fieldname, value}]`.
 - `selected()` returns the fieldnames currently held.
-- `add(fieldname, {silent, activate})` and `remove(fieldname, {silent, open})` add and drop rows. The last row cannot be removed.
+- `add_date_field_row(fieldname, {silent, activate})` and `remove_date_field_row(fieldname, {silent, open})` add and drop rows. The last row cannot be removed.
 - `activate(fieldname, {open})` switches the visible row.
 - `toggle(fieldname, from)` ticks or unticks a field in the list. Ticking a field while the current row is still blank moves that row to the new field instead of adding one.
 - `apply_all()` applies every row that has a usable draft, then emits once.
@@ -105,12 +105,12 @@ None.
 ## Usage
 
 ```js
-new sanad.ui.DateFilter({
+new whatsapp.ui.DateFilter({
   wrapper: $slot, label: __("Sent at"), default_op: "between",
   on_change: (v) => (v ? load({ from: v.from, to: v.to }) : load({})),
 });
 
-new sanad.ui.DateFilterSet({
+new whatsapp.ui.DateFilterSet({
   wrapper: $slot,
   fields: [{ value: "sent_at", label: __("Sent at") }, { value: "creation", label: __("Created On") }],
   fieldname: "creation",
@@ -122,21 +122,21 @@ In a Desk list, use the FilterBar preset `{ type: "date" }` instead, which does 
 
 ## CSS hooks
 
-- **Root:** `.sanad-datefilter`, with the modifiers `--set` (a value is applied) and `--hidden` (the set's inactive rows).
-- **Trigger:** `.sanad-datefilter__trigger` contains `__op`, `__fieldpick` (`__fieldpick-label--tag`), `__value`, `__text` (`--empty`), `__clear` and `__caret`.
-- **Menus:** `.sanad-datefilter__menu` (`--fields`) holds `__menu-item`, with the modifiers `--on` and `--mine`, plus `__menu-box` and `__menu-check`.
-- **Panel:** `.sanad-datefilter__panel` (`--compact`) contains:
-  - `__chead` (the compact head)
+- **Root:** `.whatsapp-kit-datefilter`, with the modifiers `--set` (a value is applied) and `--hidden` (the set's inactive rows).
+- **Trigger:** `.whatsapp-kit-datefilter__trigger` contains `__operator`, `__field-picker` (`__field-picker-label--tag`), `__value`, `__text` (`--empty`), `__clear` and `__caret`.
+- **Menus:** `.whatsapp-kit-datefilter__menu` (`--fields`) holds `__menu-item`, with the modifiers `--on` and `--mine`, plus `__menu-box` and `__menu-check`.
+- **Panel:** `.whatsapp-kit-datefilter__panel` (`--compact`) contains:
+  - `__compact-head` (the compact head)
   - `__rail` / `__rail-item--on`
   - `__presets` / `__preset--on`
   - `__inputs` / `__field--bad`
-  - `__cal` / `__month` / `__grid`
+  - `__calendar` / `__month` / `__grid`
   - `__day`, with the modifiers `--on`, `--ring`, `--today`, `--band`, `--band-start/-mid/-end` and `--blank`, containing `__pill[data-key]`
   - `__picker` / `__picker-cell--on` / `--now`
-  - `__form`, `__seg`, `__stepper` and `__bars` / `__bar--on`
+  - `__form`, `__segment`, `__stepper` and `__bars` / `__bar--on`
   - `__footer`, holding `__summary`, `__count-chip`, `__cancel` and `__apply`
-- **Custom property:** `--sanad-band-radius` is set on range cells.
-- **Set root:** `.sanad-datefilter-set`.
+- **Custom property:** `--whatsapp-kit-band-radius` is set on range cells.
+- **Set root:** `.whatsapp-kit-datefilter-set`.
 
 ## Notes
 
@@ -151,4 +151,4 @@ In a Desk list, use the FilterBar preset `{ type: "date" }` instead, which does 
   - `public/js/listview/`: `whatsapp_campaign_list.js`, `whatsapp_contact_group_list.js`, `whatsapp_notification_alert_list.js`, `whatsapp_notification_list.js`, `whatsapp_number_list.js`, `whatsapp_template_list.js`
   - `public/js/screens/messages.js`, for the Outbound, Inbound and Queue lists
   - `whatsapp_next/page/wa_contacts/wa_contacts.js`
-- **Phones (under 768 px):** the stylesheet reduces the trigger to one calendar icon. The label, operator and field segments are hidden, and the compact panel head (`__chead`) carries the operator and field instead. The panel becomes `position: fixed` and scrolls, so Apply stays reachable. When a value is set, the trigger is tinted and keeps its ×.
+- **Phones (under 768 px):** the stylesheet reduces the trigger to one calendar icon. The label, operator and field segments are hidden, and the compact panel head (`__compact-head`) carries the operator and field instead. The panel becomes `position: fixed` and scrolls, so Apply stays reachable. When a value is set, the trigger is tinted and keeps its ×.

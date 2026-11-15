@@ -22,8 +22,8 @@ from whatsapp_next.tests.conftest_frappe import (
 
 NAME = "EditorTest Alert"
 RENAMED = "EditorTest Alert Renamed"
-PHONE = "+966500931401"
-TEST_PHONE = "+966500931402"
+PHONE = "+967777667663"
+TEST_PHONE = "+967784499996"
 COLUMNS = [{"label": "Customer", "fieldname": "customer", "fieldtype": "Data"}]
 ROWS = [{"customer": "A"}, {"customer": "B"}, {"customer": "C"}]
 
@@ -32,17 +32,17 @@ class TestAlertsEditor(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		cls.device = ensure_device("EditorTest Alert Device", "WAD-TEST-ALEDITOR", phone="+966500931400")
+		cls.device = ensure_device("EditorTest Alert Device", "WAD-TEST-ALEDITOR", phone="+967777999579")
 		ensure_settings(send_only_to_known_numbers=0)
 
 	def setUp(self):
-		self._clean()
+		self._delete_test_alerts_and_logs()
 
 	def tearDown(self):
-		self._clean()
+		self._delete_test_alerts_and_logs()
 
 	@staticmethod
-	def _clean():
+	def _delete_test_alerts_and_logs():
 		delete_test_rows("WhatsApp Queue Item")
 		for phone in (PHONE, TEST_PHONE):
 			delete_all("WhatsApp Log", {"phone_e164": phone})
@@ -223,13 +223,13 @@ class TestAlertsEditorReports(IntegrationTestCase):
 		with as_user("WhatsApp Manager"):
 			out = picker_api.classify(
 				rows=[
-					{"phone": "+966500931501"},
-					{"phone": "+966500931502"},
-					{"phone": "+966500931501"},
+					{"phone": "+967775040850"},
+					{"phone": "+967777999579"},
+					{"phone": "+967775040850"},
 					{"phone": "x"},
 				],
-				existing=["+966500931502"],
+				existing=["+967777999579"],
 			)
-		self.assertEqual([r["phone_e164"] for r in out["available"]], ["+966500931501"])
-		self.assertEqual([r["phone_e164"] for r in out["already_added"]], ["+966500931502"])
+		self.assertEqual([r["phone_e164"] for r in out["available"]], ["+967775040850"])
+		self.assertEqual([r["phone_e164"] for r in out["already_added"]], ["+967777999579"])
 		self.assertEqual((len(out["duplicates_in_selection"]), len(out["invalid"])), (1, 1))

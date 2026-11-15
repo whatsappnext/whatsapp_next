@@ -14,7 +14,7 @@ from whatsapp_next.exceptions import WAInvalidPhoneError, WAPermissionError, WAV
 from whatsapp_next.services import dispatch, templates
 from whatsapp_next.services.devices import default_device
 from whatsapp_next.services.dispatch import OutboundSpec
-from whatsapp_next.services.phone import classify, is_group_or_lid, normalize
+from whatsapp_next.services.phone import classify, is_group_or_lid, normalize_phone_to_e164
 
 QUICK_SOURCES = frozenset({"Quick Send", "Form", "API", "Simulator"})
 
@@ -36,8 +36,8 @@ def warnings_for(device: str | None) -> list[str]:
 	if cint(settings.queue_paused):
 		out.append("queue_paused")
 	if device:
-		st = frappe.db.get_value("WhatsApp Device", device, ["status", "disabled"], as_dict=True)
-		if not st or st.status != "Connected" or cint(st.disabled):
+		device_state = frappe.db.get_value("WhatsApp Device", device, ["status", "disabled"], as_dict=True)
+		if not device_state or device_state.status != "Connected" or cint(device_state.disabled):
 			out.append("device_offline")
 	return out
 
@@ -64,7 +64,7 @@ def resolve_recipient(
 		phones = permissions.contact_phones(contact)
 		if not phones and not phone:
 			frappe.throw(_("Contact {0} has no WhatsApp number").format(contact), WAInvalidPhoneError)
-		key = normalize(phone) if phone else phones[0]
+		key = normalize_phone_to_e164(phone) if phone else phones[0]
 		display_name = frappe.db.get_value("Contact", contact, "full_name")
 	elif phone:
 		kind, key = classify(phone)
@@ -91,7 +91,7 @@ def resolve_recipient(
 	}
 
 
-def preview(
+def preview_message_body(
 	template: str | None = None,
 	body: str | None = None,
 	reference_doctype: str | None = None,
@@ -123,17 +123,17 @@ def preview(
 				"display_name": name,
 				"contact": contact,
 			}
-	ctx = context or (
+	render_context = context or (
 		templates.context_for(reference_doctype, reference_name, recipient=recipient)
 		if reference_doctype and reference_name
 		else templates.sample_context(reference_doctype)
 	)
 	if not context and reference_doctype and reference_name:
 		# record-level read is not field-level read: a hidden field previews as empty, as it sends
-		templates.readable_only(ctx.get("doc"))
+		templates.readable_only(render_context.get("doc"))
 	if recipient and not context and not (reference_doctype and reference_name):
-		ctx["recipient"] = templates.context_for(recipient=recipient)["recipient"]
-	result = templates.render(source, ctx)
+		render_context["recipient"] = templates.context_for(recipient=recipient)["recipient"]
+	result = templates.render_message_template(source, render_context)
 	return {"body": result.text, "errors": [result.error] if result.error else []}
 
 

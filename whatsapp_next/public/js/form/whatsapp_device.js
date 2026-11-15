@@ -9,7 +9,7 @@ frappe.ui.form.on("WhatsApp Device", {
 			frappe.set_route("wa-devices");
 			return;
 		}
-		const ui = sanad.ui;
+		const ui = whatsapp.ui;
 		const doc = frm.doc;
 		const label = doc.device_name || doc.name;
 		frm.add_custom_button(__("Open Devices page"), () => frappe.set_route("wa-devices"));
@@ -22,7 +22,7 @@ frappe.ui.form.on("WhatsApp Device", {
 
 		if (doc.status === "Connected" || doc.status === "Pending QR") {
 			frm.add_custom_button(__("Disconnect"), () =>
-				ui.ConfirmDialog.ask({
+				ui.ConfirmDialog.ask_for_confirmation({
 					title: __("Disconnect {0}?", [label]),
 					message: __("Messages waiting for this device stop until it is paired again."),
 					impact: [{ label: __("Device"), value: label }],
@@ -39,7 +39,7 @@ frappe.ui.form.on("WhatsApp Device", {
 		}
 
 		frm.add_custom_button(__("Delete device"), () =>
-			ui.ConfirmDialog.ask({
+			ui.ConfirmDialog.ask_for_confirmation({
 				title: __("Delete {0}?", [label]),
 				message: __("The device is removed from the platform. Its message history stays in the log."),
 				impact: [{ label: __("Device"), value: label }],

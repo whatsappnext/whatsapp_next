@@ -1,4 +1,4 @@
-# `sanad.ui.ChatThread`
+# `whatsapp.ui.ChatThread`
 
 A WhatsApp-style message thread over read-layer rows: bubbles by `direction` (outbound on the
 inline-end side, inbound on the inline-start side), day separators ("Today" / "Yesterday" / user
@@ -40,7 +40,7 @@ place.
 - `update_status(name, status)` → boolean; patches one outbound row's ticks.
 - `set_has_more(bool)`, `load_more()` (calls `on_load_more`, button shows "Loading…", errors → `Toast.error`).
 - `scroll_to_bottom()`, `scroll_to(name)`, `is_at_bottom(threshold = 40)`, `get_row(key)`, `render()`, `destroy()`.
-- Static helpers: `ChatThread.sort(rows)` (by `ts`/`creation`, then `name`), `status_html(status)`, `media_html(row, {link})`, `format(text)` (escape + WhatsApp `*bold*`, `_italic_`, `~strike~`, `` `code` ``, line breaks), `day_of(ts)` → `{key, label}`, `time_of(ts)` → `{label, full, iso}`, `moment_of(ts)`.
+- Static helpers: `ChatThread.sort_rows_oldest_first(rows)` (by `ts`/`creation`, then `name`), `status_html(status)`, `media_html(row, {link})`, `format_whatsapp_text(text)` (escape + WhatsApp `*bold*`, `_italic_`, `~strike~`, `` `code` ``, line breaks), `day_of(ts)` → `{key, label}`, `time_of(ts)` → `{label, full, iso}`, `moment_of(ts)`.
 
 ## Events and callbacks
 
@@ -55,7 +55,7 @@ None.
 ## Usage
 
 ```js
-const thread = new sanad.ui.ChatThread({
+const thread = new whatsapp.ui.ChatThread({
   wrapper: $panel,
   rows: page.rows.slice().reverse(),     // API pages are newest-first
   has_more: page.has_more,
@@ -67,8 +67,8 @@ frappe.realtime.on("wa:message:status", (p) => thread.update_status(p.outbound, 
 
 ## CSS hooks
 
-- Root `.sanad-kit.sanad-chat` (`id` = uid), `__top`, `__more`, `__scroll` (`role="log"`), `__state`, `__list`, `__day`.
-- Rows: `.sanad-chat__row--in|--out`, `--clickable`, `--highlight`, `data-key`, `data-name`; `__bubble`, `__text` (`--muted`), `__caption`, `__meta`, `__open`, `__ref`.
+- Root `.whatsapp-kit.whatsapp-kit-chat` (`id` = uid), `__top`, `__more`, `__scroll` (`role="log"`), `__state`, `__list`, `__day`.
+- Rows: `.whatsapp-kit-chat__row--in|--out`, `--clickable`, `--highlight`, `data-key`, `data-name`; `__bubble`, `__text` (`--muted`), `__caption`, `__meta`, `__open`, `__reference`.
 - Media: `__media` (`--plain`), `__media-icon`, `__media-name`, `__media-type`.
 - Status: `__status--gray|blue|red|amber`, `__status-text` (visible word for Failed / Cancelled / Held).
 
@@ -78,4 +78,4 @@ frappe.realtime.on("wa:message:status", (p) => thread.update_status(p.outbound, 
 - A11y: the scroll region is `role="log"` without `aria-live` (re-renders would re-read everything); ticks are `role="img"` with `aria-label`; rows are `role="group"` labelled "Sent message, {status}" / "Received message from {who}"; day separators `role="separator"`. No nested interactive content when rows are clickable.
 - RTL via logical properties; all text escaped before formatting. Re-renders the whole list on prepend / append.
 - `cursor` is listed in the JSDoc row shape but not read by the component.
-- Live use: `public/js/ui/ConversationDrawer/index.js`, `whatsapp_next/page/wa_simulator/wa_simulator.js`, and inside the kit `CommandEditor` / `FunctionDetail` (reply preview) and `TemplateEditor` (`ChatThread.format`).
+- Live use: `public/js/ui/ConversationDrawer/index.js`, `whatsapp_next/page/wa_simulator/wa_simulator.js`, and inside the kit `CommandEditor` / `FunctionDetail` (reply preview) and `TemplateEditor` (`ChatThread.format_whatsapp_text`).

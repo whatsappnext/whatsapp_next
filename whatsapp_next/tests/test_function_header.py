@@ -14,7 +14,7 @@ from whatsapp_next.services.function_runner import Sender
 from whatsapp_next.tests import function_fixtures as ff
 
 
-def _spec(key: str) -> dict:
+def _parse_fixture_function_header(key: str) -> dict:
 	return fh.parse_function_header(ff.FUNCTIONS[key][1])
 
 
@@ -32,22 +32,23 @@ class TestFunctionHeader(IntegrationTestCase):
 		return str(caught.exception)
 
 	def test_parse(self):
-		spec = _spec("_test_span")
+		spec = _parse_fixture_function_header("_test_span")
 		self.assertEqual(
 			(spec["function"], spec["title"], spec["version"]), ("_test_span", "Test Span", "1.0.0")
 		)
 		self.assertEqual(spec["party_types"], {"mode": "only", "types": ["Customer"]})
-		timespan = fh.param(spec, "timespan")
+		timespan = fh.find_header_param(spec, "timespan")
 		self.assertEqual(
 			(timespan["fieldtype"], timespan["default"], timespan["select_options"], timespan["source"]),
 			("Select", "this month", ["today", "this month", "select date range"], "command"),
 		)
 		self.assertEqual(
-			fh.param(spec, "from_date")["depends_on"], {"param": "timespan", "value": "select date range"}
+			fh.find_header_param(spec, "from_date")["depends_on"],
+			{"param": "timespan", "value": "select date range"},
 		)
-		self.assertEqual(fh.param(spec, "party")["fieldtype"], "Dynamic")
-		self.assertEqual(fh.param(spec, "party")["options"], "party_type")
-		msg = fh.param(spec, "msg_result")
+		self.assertEqual(fh.find_header_param(spec, "party")["fieldtype"], "Dynamic")
+		self.assertEqual(fh.find_header_param(spec, "party")["options"], "party_type")
+		msg = fh.find_header_param(spec, "msg_result")
 		self.assertEqual(msg["default"], "رصيد {{ party }} {{ span }}")
 		self.assertEqual(msg["defaults_by_lang"], {"en": "Balance of {{ party }} {{ span }}"})
 		self.assertEqual(
@@ -55,7 +56,7 @@ class TestFunctionHeader(IntegrationTestCase):
 			[("result_text", "text", None, None), ("statement", "report", ff.SPAN_REPORT, "PDF")],
 		)
 		self.assertEqual([v["name"] for v in spec["vars"]], ["party", "span"])
-		self.assertIsNone(fh.param(spec, "nope"))
+		self.assertIsNone(fh.find_header_param(spec, "nope"))
 		# a multi-line default keeps its lines; `@var` with two columns is for every message
 		spec = fh.parse_function_header(
 			ff.header(
@@ -63,7 +64,7 @@ class TestFunctionHeader(IntegrationTestCase):
 				["@param m | Template | optional | | M", "@default m", "> one", ">   two", "@var v | Value"],
 			)
 		)
-		self.assertEqual(fh.param(spec, "m")["default"], "one\n  two")
+		self.assertEqual(fh.find_header_param(spec, "m")["default"], "one\n  two")
 		self.assertEqual(spec["vars"], [{"name": "v", "label": "Value", "messages": ["all"]}])
 
 	def test_party_types_rules(self):
@@ -151,7 +152,7 @@ class TestFunctionHeader(IntegrationTestCase):
 		self.assertEqual(fh.function_availability({}), (True, []))
 
 	def test_parameter_groups_and_vars(self):
-		spec = _spec("_test_echo")
+		spec = _parse_fixture_function_header("_test_echo")
 		self.assertEqual([p["name"] for p in fh.command_params(spec)], ["text", "msg_result"])
 		self.assertEqual(
 			[p["name"] for p in fh.typed_params(spec)], ["text"]
@@ -160,8 +161,8 @@ class TestFunctionHeader(IntegrationTestCase):
 		self.assertEqual([v["name"] for v in fh.vars_for(spec, "other")], ["party"])
 
 	def test_build_params(self):
-		spec = _spec("_test_span")
-		customer = Sender("+966500000001", None, None, None, party_type="Customer", party_name="CUST-1")
+		spec = _parse_fixture_function_header("_test_span")
+		customer = Sender("+967784499996", None, None, None, party_type="Customer", party_name="CUST-1")
 		params, missing = fh.build_params(spec, customer, {"party": "OTHER", "party_type": "Supplier"}, "en")
 		self.assertEqual((params["party_type"], params["party"]), ("Customer", "CUST-1"))
 		self.assertEqual((params["timespan"], params["language"]), ("this month", "en"))
@@ -190,7 +191,7 @@ class TestFunctionHeader(IntegrationTestCase):
 				{"timespan": "select date range", "from_date": "not a date", "to_date": "today"},
 				"en",
 			)
-		typed = _spec("_test_typed")
+		typed = _parse_fixture_function_header("_test_typed")
 		with self.assertRaises(ValueError):
 			fh.build_params(typed, customer, {"doc_name": "X", "days": "7.5"})
 		params, _m = fh.build_params(typed, customer, {"doc_name": " X ", "days": "-2", "since": "-1d"})
@@ -201,13 +202,15 @@ class TestFunctionHeader(IntegrationTestCase):
 
 	def test_coerce(self):
 		check = {"fieldtype": "Check", "label": "C"}
-		self.assertEqual([fh.coerce(check, v) for v in ("1", "yes", "نعم", "0", "no")], [1, 1, 1, 0, 0])
+		self.assertEqual(
+			[fh.coerce_param_value(check, v) for v in ("1", "yes", "نعم", "0", "no")], [1, 1, 1, 0, 0]
+		)
 		link = {"fieldtype": "Link", "options": "Language", "label": "L"}
-		self.assertEqual(fh.coerce(link, " en "), "en")
+		self.assertEqual(fh.coerce_param_value(link, " en "), "en")
 		with self.assertRaises(ValueError):
-			fh.coerce(link, "_no_such_language")
+			fh.coerce_param_value(link, "_no_such_language")
 		template = {"fieldtype": "Template", "label": "T"}
-		self.assertEqual(fh.coerce(template, {"en": "x"}), {"en": "x"})
+		self.assertEqual(fh.coerce_param_value(template, {"en": "x"}), {"en": "x"})
 
 	def test_dates_and_defaults(self):
 		today = getdate(nowdate())

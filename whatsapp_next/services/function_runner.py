@@ -62,7 +62,7 @@ def spec_of(function: str | None) -> dict[str, Any]:
 	return spec if "params" in spec and spec.get("function") else {}
 
 
-def _json(value: Any) -> dict[str, Any]:
+def _parse_json_object(value: Any) -> dict[str, Any]:
 	if isinstance(value, dict):
 		return value
 	try:
@@ -73,7 +73,7 @@ def _json(value: Any) -> dict[str, Any]:
 
 def command_overrides(command) -> dict[str, Any]:
 	"""The command's `settings_overrides`, keyed by parameter name."""
-	return _json(command.get("settings_overrides"))
+	return _parse_json_object(command.get("settings_overrides"))
 
 
 def disabled_replies(command) -> set[str]:
@@ -125,7 +125,7 @@ def merged_values(
 	return out
 
 
-def prepare(
+def prepare_command_params(
 	command, sender, given: dict[str, Any] | None = None
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 	"""`(params, missing)` for the command's function. E: `ValueError` (a value not allowed)."""
@@ -165,17 +165,17 @@ def execute(command, params: dict[str, Any], *, disabled: set[str] | None = None
 	"""Run the command's function with ready `params` (caller handles the user and the metrics).
 	A script that raises becomes the generic error for the sender, logged with the script's name;
 	a message the header did not declare fails the run and nothing is sent."""
-	fn = frappe.db.get_value(
+	function_row = frappe.db.get_value(
 		"WhatsApp Function", command.function, ["server_script", "manifest"], as_dict=True
 	)
-	if not fn or not fn.server_script:
+	if not function_row or not function_row.server_script:
 		return FunctionRun(error=_("Function is inactive"), params=params)
-	spec = functions_catalog.manifest_of(fn)
+	spec = functions_catalog.manifest_of(function_row)
 	try:
-		result = run_function(fn.server_script, params, spec)
+		result = run_function(function_row.server_script, params, spec)
 	except Exception as exc:
 		frappe.log_error(
-			title=f"WhatsApp function {fn.server_script} failed",
+			title=f"WhatsApp function {function_row.server_script} failed",
 			message=f"command={command.name} {type(exc).__name__}: {str(exc)[:300]}",
 		)
 		return FunctionRun(
@@ -189,7 +189,9 @@ def execute(command, params: dict[str, Any], *, disabled: set[str] | None = None
 	try:
 		messages = fh.validate_messages(spec, result["messages"], disabled=disabled)
 	except ValueError as exc:
-		frappe.log_error(title=f"WhatsApp function {fn.server_script}: undeclared reply", message=str(exc))
+		frappe.log_error(
+			title=f"WhatsApp function {function_row.server_script}: undeclared reply", message=str(exc)
+		)
 		# the sender is told the request failed; what the script did wrong stays with the team
 		return FunctionRun(error=_(GENERIC_ERROR), detail=str(exc), data=result["data"], params=params)
 	return FunctionRun(messages=messages, data=result["data"], params=params)
@@ -257,7 +259,7 @@ def replies_of(run: FunctionRun, *, dry_run: bool = False) -> list[dict[str, Any
 # ---- the Functions Center's "Try" (§4) ------------------------------------------------------------
 
 
-def trial(
+def run_function_trial(
 	function_key: str, party_type: str | None = None, party: str | None = None, values: dict | None = None
 ) -> dict[str, Any]:
 	"""The run a command would make, step by step, with nothing sent and nothing kept (the same steps
@@ -268,7 +270,7 @@ def trial(
 
 	out: dict[str, Any] = {"steps": [], "params": {}, "missing": [], "messages": [], "error": None}
 
-	def step(name: str, ok: bool, detail: str = "") -> bool:
+	def record_trial_step(name: str, ok: bool, detail: str = "") -> bool:
 		out["steps"].append({"name": name, "ok": ok, "detail": detail})
 		return ok
 
@@ -277,24 +279,26 @@ def trial(
 		spec, checksum = functions_catalog.script_spec(doc.server_script)
 	except frappe.ValidationError as exc:
 		frappe.clear_last_message()
-		step(_("Header"), False, str(exc))
+		record_trial_step(_("Header"), False, str(exc))
 		return out
-	if not step(_("Header"), True, f"{spec['function']} {spec.get('version') or ''}".strip()):
+	if not record_trial_step(_("Header"), True, f"{spec['function']} {spec.get('version') or ''}".strip()):
 		return out
 	if checksum != doc.manifest_checksum:
-		step(_("Installed header"), True, _("The script's header changed: update the function to use it"))
+		record_trial_step(
+			_("Installed header"), True, _("The script's header changed: update the function to use it")
+		)
 		spec = functions_catalog.manifest_of(doc)
 	available, reasons = fh.function_availability(spec)
-	if not step(_("Requirements (@requires)"), available, " · ".join(reasons) or _("Available")):
+	if not record_trial_step(_("Requirements (@requires)"), available, " · ".join(reasons) or _("Available")):
 		return out
-	if not step(
+	if not record_trial_step(
 		_("Party type (@party_types)"),
 		fh.party_type_allowed(spec, party_type),
 		_(party_type) if party_type else _("None"),
 	):
 		return out
 	if party_type and party and not frappe.db.exists(party_type, party):
-		step(_("Party"), False, _("{0} {1} not found").format(_(party_type), party))
+		record_trial_step(_("Party"), False, _("{0} {1} not found").format(_(party_type), party))
 		return out
 	sender = Sender(None, None, None, None, party_type=party_type, party_name=party)
 	command = frappe._dict(function=doc.name, settings_overrides=None, templates=[], name=None)
@@ -303,7 +307,7 @@ def trial(
 		merged = merged_values(command, spec, values or {}, language)
 		params, missing = fh.build_params(spec, sender, merged, language)
 	except ValueError as exc:
-		step(_("Parameters"), False, str(exc))
+		record_trial_step(_("Parameters"), False, str(exc))
 		return out
 	out["params"], out["missing"] = params, missing
 	detail = (
@@ -311,7 +315,7 @@ def trial(
 		if missing
 		else _("{0} values").format(len(params))
 	)
-	if not step(_("Parameters"), not missing, detail):
+	if not record_trial_step(_("Parameters"), not missing, detail):
 		return out
 	previous = frappe.session.user
 	saved_sid, saved_data, saved_form = frappe.session.sid, frappe.session.data, frappe.local.form_dict
@@ -322,20 +326,20 @@ def trial(
 		result = run_function(doc.server_script, params, spec)
 	except Exception as exc:
 		frappe.clear_last_message()
-		step(_("Run"), False, f"{type(exc).__name__}: {str(exc)[:300]}")
+		record_trial_step(_("Run"), False, f"{type(exc).__name__}: {str(exc)[:300]}")
 		return out
 	finally:
 		rollback_to("wa_fn_trial")
 		frappe.set_user(previous)
 		frappe.session.sid, frappe.session.data, frappe.local.form_dict = saved_sid, saved_data, saved_form
-	ms = int((frappe.utils.now_datetime() - started).total_seconds() * 1000)
+	run_milliseconds = int((frappe.utils.now_datetime() - started).total_seconds() * 1000)
 	out["error"] = result["error"]
-	if not step(_("Run"), not result["error"], result["error"] or f"{ms} ms"):
+	if not record_trial_step(_("Run"), not result["error"], result["error"] or f"{run_milliseconds} ms"):
 		return out
 	try:
 		out["messages"] = fh.validate_messages(spec, result["messages"])
 	except ValueError as exc:
-		step(_("Replies (@reply)"), False, str(exc))
+		record_trial_step(_("Replies (@reply)"), False, str(exc))
 		return out
-	step(_("Replies (@reply)"), True, _("{0} messages").format(len(out["messages"])))
+	record_trial_step(_("Replies (@reply)"), True, _("{0} messages").format(len(out["messages"])))
 	return out

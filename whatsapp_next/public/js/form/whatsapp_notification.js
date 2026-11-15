@@ -16,7 +16,7 @@ frappe.ui.form.on("WhatsApp Notification", {
 		if (whatsapp_next.notifications && whatsapp_next.notifications.open) {
 			frm.add_custom_button(__("Open in the editor"), () => whatsapp_next.notifications.open(frm.doc.name, { on_saved: (r) => (r && r.deleted ? frappe.set_route("List", frm.doctype) : frm.reload_doc()) }));
 		}
-		frm.add_custom_button(__("Preview"), () => pick_document(frm, __("Preview for a document"), __("Preview")).then((ref) => ref && preview(frm, ref)));
+		frm.add_custom_button(__("Preview"), () => pick_document(frm, __("Preview for a document"), __("Preview")).then((ref) => ref && show_notification_preview(frm, ref)));
 		frm.add_custom_button(__("Send now"), () => pick_document(frm, __("Send for a document"), __("Continue")).then((ref) => ref && send_now(frm, ref)));
 	},
 
@@ -64,9 +64,9 @@ function options_of(rows, current) {
 }
 
 function load_field_choices(frm) {
-	const dt = frm.doc.document_type;
-	if (!dt) return;
-	const apply = (f) => {
+	const document_type = frm.doc.document_type;
+	if (!document_type) return;
+	const apply_field_choices = (f) => {
 		frm.set_df_property("date_changed", "options", options_of(f.date_fields, frm.doc.date_changed));
 		frm.set_df_property("datetime_changed", "options", options_of(f.datetime_fields, frm.doc.datetime_changed));
 		frm.set_df_property("value_changed", "options", options_of(f.all_fields, frm.doc.value_changed));
@@ -77,25 +77,25 @@ function load_field_choices(frm) {
 			const receivers = (f.phone_fields || []).concat((f.link_fields || []).filter((r) => r.options === "Contact"));
 			grid.update_docfield_property("receiver_by_document_field", "options", options_of(receivers));
 			grid.update_docfield_property("linked_document_field", "options", options_of(f.link_fields));
-			grid.update_docfield_property("linked_document_field", "description", __("A Link field of {0}; the number is read from the linked document.", [__(dt)]));
+			grid.update_docfield_property("linked_document_field", "description", __("A Link field of {0}; the number is read from the linked document.", [__(document_type)]));
 			grid.refresh();
 		}
 	};
-	if (frm._wa_fields && frm._wa_fields.dt === dt) return apply(frm._wa_fields.data);
-	sanad.ui
-		.call("notifications.get_document_fields", { document_type: dt })
+	if (frm._wa_fields && frm._wa_fields.dt === document_type) return apply_field_choices(frm._wa_fields.data);
+	whatsapp.ui
+		.call("notifications.get_document_fields", { document_type: document_type })
 		.then((data) => {
-			frm._wa_fields = { dt, data };
-			apply(data);
+			frm._wa_fields = { dt: document_type, data };
+			apply_field_choices(data);
 		})
-		.catch((err) => sanad.ui.Toast.error(err));
+		.catch((err) => whatsapp.ui.Toast.error(err));
 }
 
 /** Ask for one document of the notification's DocType; resolves its name, or null when closed. */
 function pick_document(frm, title, label) {
 	return new Promise((resolve) => {
 		if (!frm.doc.document_type) {
-			sanad.ui.Toast.info(__("Choose the document type first."));
+			whatsapp.ui.Toast.info(__("Choose the document type first."));
 			return resolve(null);
 		}
 		let done = false;
@@ -110,18 +110,18 @@ function pick_document(frm, title, label) {
 			},
 			on_hide: () => done || resolve(null),
 		});
-		d.$wrapper.addClass("sanad-kit");
+		d.$wrapper.addClass("whatsapp-kit");
 		d.show();
 	});
 }
 
-function preview(frm, reference_name) {
-	sanad.ui
+function show_notification_preview(frm, reference_name) {
+	whatsapp.ui
 		.call("notifications.preview", { name: frm.doc.name, reference_name }, { freeze: true })
 		.then((r) => {
-			const esc = sanad.ui.escape;
-			const recipients = (r.recipients || []).map((x) => `<li><bdi dir="ltr">${esc(x.phone_e164)}</bdi> <span class="text-muted">· ${esc(__(x.source || ""))}</span></li>`).join("");
-			const errors = (r.errors || []).map((e) => `<li>${esc(e)}</li>`).join("");
+			const escape_html = whatsapp.ui.escape;
+			const recipients = (r.recipients || []).map((x) => `<li><bdi dir="ltr">${escape_html(x.phone_e164)}</bdi> <span class="text-muted">· ${escape_html(__(x.source || ""))}</span></li>`).join("");
+			const errors = (r.errors || []).map((e) => `<li>${escape_html(e)}</li>`).join("");
 			const d = new frappe.ui.Dialog({
 				title: __("Preview: {0}", [frappe.utils.escape_html(reference_name)]),
 				size: "large",
@@ -130,33 +130,33 @@ function preview(frm, reference_name) {
 						fieldtype: "HTML",
 						fieldname: "body",
 						options: `
-							<p class="${r.meets_condition ? "text-success" : "text-warning"}">${esc(r.meets_condition ? __("The condition is met: this document would be sent.") : __("The condition is not met: nothing would be sent."))}</p>
-							<h6>${esc(__("Message"))}</h6>
-							<div class="wa-notification-preview" dir="auto" style="white-space: pre-wrap">${esc(r.message || "")}</div>
-							<h6>${esc(__("Recipients"))}</h6>
-							${recipients ? `<ul>${recipients}</ul>` : `<p class="text-muted">${esc(__("No recipient resolved."))}</p>`}
-							${errors ? `<h6>${esc(__("Errors"))}</h6><ul class="text-danger">${errors}</ul>` : ""}`,
+							<p class="${r.meets_condition ? "text-success" : "text-warning"}">${escape_html(r.meets_condition ? __("The condition is met: this document would be sent.") : __("The condition is not met: nothing would be sent."))}</p>
+							<h6>${escape_html(__("Message"))}</h6>
+							<div class="whatsapp-notification-preview" dir="auto" style="white-space: pre-wrap">${escape_html(r.message || "")}</div>
+							<h6>${escape_html(__("Recipients"))}</h6>
+							${recipients ? `<ul>${recipients}</ul>` : `<p class="text-muted">${escape_html(__("No recipient resolved."))}</p>`}
+							${errors ? `<h6>${escape_html(__("Errors"))}</h6><ul class="text-danger">${errors}</ul>` : ""}`,
 					},
 				],
 			});
-			d.$wrapper.addClass("sanad-kit");
+			d.$wrapper.addClass("whatsapp-kit");
 			d.show();
 		})
-		.catch((err) => sanad.ui.Toast.error(err));
+		.catch((err) => whatsapp.ui.Toast.error(err));
 }
 
 function send_now(frm, reference_name) {
-	sanad.ui.ConfirmDialog.ask({
+	whatsapp.ui.ConfirmDialog.ask_for_confirmation({
 		title: __("Send {0} now?", [frm.doc.notification_name || frm.doc.name]),
 		message: __("The condition is checked again; one message per recipient is queued."),
 		impact: [{ label: __(frm.doc.document_type), value: reference_name }],
 		confirm_label: __("Send now"),
-		on_confirm: () => sanad.ui.call("notifications.send_now", { name: frm.doc.name, reference_name }),
+		on_confirm: () => whatsapp.ui.call("notifications.send_now", { name: frm.doc.name, reference_name }),
 	})
 		.then((r) => {
-			if (r && r.error) sanad.ui.Toast.error(r.error);
-			else if (r && r.sent) sanad.ui.Toast.success(sanad.ui.plural(r.sent, { one: __("{0} message queued"), other: __("{0} messages queued") }));
-			else sanad.ui.Toast.info(__("Nothing was sent: the condition is not met or no recipient was found."));
+			if (r && r.error) whatsapp.ui.Toast.error(r.error);
+			else if (r && r.sent) whatsapp.ui.Toast.success(whatsapp.ui.plural(r.sent, { one: __("{0} message queued"), other: __("{0} messages queued") }));
+			else whatsapp.ui.Toast.info(__("Nothing was sent: the condition is not met or no recipient was found."));
 			frm.reload_doc();
 		})
 		.catch(() => {});

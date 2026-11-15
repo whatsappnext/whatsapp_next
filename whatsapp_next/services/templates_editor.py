@@ -1,4 +1,4 @@
-# Module role: the message template editor window — what `sanad.ui.TemplateWindow` opens with,
+# Module role: the message template editor window — what `whatsapp.ui.TemplateWindow` opens with,
 # saves and deletes. The controller keeps every rule (the body compiles, a Document template has a
 # print format); this module maps an allow-listed payload onto the document, guards against an
 # edit made elsewhere since the window opened, and renames on a changed name. The API layer
@@ -11,9 +11,10 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint, get_datetime
+from frappe.utils import cint
 
 from whatsapp_next.exceptions import WANotFoundError, WAValidationError
+from whatsapp_next.services import editor_payload
 
 DOCTYPE = "WhatsApp Template"
 
@@ -36,15 +37,10 @@ FIELDS: tuple[str, ...] = (
 STAT_FIELDS: tuple[str, ...] = ("use_count", "last_used_at", "modified")
 
 
-def _get(name: str):
+def _get_template_doc_or_throw(name: str):
 	if not frappe.db.exists(DOCTYPE, name):
 		frappe.throw(_("Template {0} not found").format(name), WANotFoundError)
 	return frappe.get_doc(DOCTYPE, name)
-
-
-def _message_types() -> list[str]:
-	df = frappe.get_meta(DOCTYPE).get_field("message_type")
-	return [o for o in (df.options or "").split("\n") if o] if df else ["Text"]
 
 
 def _categories() -> list[str]:
@@ -54,12 +50,12 @@ def _categories() -> list[str]:
 	return [r.category for r in rows if r.category]
 
 
-def editor(name: str | None = None) -> dict[str, Any]:
+def get_template_editor_data(name: str | None = None) -> dict[str, Any]:
 	"""Everything the window opens with: `{template, categories[], message_types[], can_write,
 	can_delete}` — the template (defaults for a new one) and the choices its controls offer.
 	E: `WANotFoundError`."""
 	if name:
-		doc = _get(name)
+		doc = _get_template_doc_or_throw(name)
 		doc.check_permission("read")
 		template = {"name": doc.name, **{f: doc.get(f) for f in (*FIELDS, *STAT_FIELDS)}}
 		can_write = bool(frappe.has_permission(DOCTYPE, "write", doc))
@@ -73,13 +69,13 @@ def editor(name: str | None = None) -> dict[str, Any]:
 	return {
 		"template": template,
 		"categories": _categories(),
-		"message_types": _message_types(),
+		"message_types": editor_payload.select_options(DOCTYPE, "message_type", default=["Text"]),
 		"can_write": can_write,
 		"can_delete": can_delete,
 	}
 
 
-def _apply(doc, payload: dict) -> None:
+def _apply_editor_payload_to_template(doc, payload: dict) -> None:
 	for field in FIELDS:
 		if field not in payload:
 			continue
@@ -97,28 +93,26 @@ def _apply(doc, payload: dict) -> None:
 		doc.print_format = doc.letter_head = doc.file_name_template = None
 
 
-def save(payload: dict) -> dict[str, Any]:
+def save_template_from_editor(payload: dict) -> dict[str, Any]:
 	"""Create or update the template from the payload; a changed name renames it. Refuses to
 	overwrite an edit saved elsewhere since the window opened (`modified`). Returns `{name,
 	modified}`. The controller validates everything else."""
-	if not isinstance(payload, dict):
-		frappe.throw(_("payload must be an object"), WAValidationError)
+	editor_payload.require_object(payload)
 	new_name = (payload.get("template_name") or "").strip()
 	if not new_name:
 		frappe.throw(_("Give the template a name"), WAValidationError)
 	name = payload.get("name")
 	if name:
-		doc = _get(name)
+		doc = _get_template_doc_or_throw(name)
 		doc.check_permission("write")
-		opened = payload.get("modified")
-		if opened and get_datetime(opened) != get_datetime(doc.modified):
-			frappe.throw(
-				_(
-					"Someone else saved this template after you opened it. Close it and open it again to see their changes."
-				),
-				WAValidationError,
-			)
-		_apply(doc, payload)
+		editor_payload.refuse_stale(
+			doc,
+			payload.get("modified"),
+			_(
+				"Someone else saved this template after you opened it. Close it and open it again to see their changes."
+			),
+		)
+		_apply_editor_payload_to_template(doc, payload)
 		doc.save()
 		if new_name != doc.name:
 			if frappe.db.exists(DOCTYPE, new_name):
@@ -129,14 +123,14 @@ def save(payload: dict) -> dict[str, Any]:
 		if frappe.db.exists(DOCTYPE, new_name):
 			frappe.throw(_("A template named {0} already exists").format(new_name), WAValidationError)
 		doc = frappe.new_doc(DOCTYPE)
-		_apply(doc, payload)
+		_apply_editor_payload_to_template(doc, payload)
 		doc.insert()
 	return {"name": doc.name, "modified": frappe.db.get_value(DOCTYPE, doc.name, "modified")}
 
 
-def delete(name: str) -> None:
+def delete_template(name: str) -> None:
 	"""Delete the template. Frappe refuses while sent messages or campaigns still link to it, and
 	says which — the window shows that message and suggests disabling it instead."""
-	doc = _get(name)
+	doc = _get_template_doc_or_throw(name)
 	doc.check_permission("delete")
 	frappe.delete_doc(DOCTYPE, doc.name)

@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-RECIPIENT_TYPES = ("Individual", "Group")
 MESSAGE_TYPES = (
 	"Text",
 	"Document",
@@ -22,7 +21,6 @@ MESSAGE_TYPES = (
 	"Interactive",
 )
 DEVICE_STATUSES = ("Pending QR", "Connected", "Disconnected", "Logged Out")
-WEBHOOK_ENDPOINT_STATUSES = ("Active", "Disabled", "Locked", "Revoked")
 
 # Canonical webhook event names (platform SUPPORTED_WEBHOOK_EVENTS + test.webhook).
 CANONICAL_EVENTS: tuple[str, ...] = (
@@ -320,6 +318,7 @@ class WebhookEvent:
 
 	@property
 	def is_known(self) -> bool:
+		"""True when the event is one of the canonical events this app handles."""
 		return self.event_name in CANONICAL_EVENTS
 
 

@@ -14,9 +14,9 @@
 frappe.provide("whatsapp_next.campaign");
 
 (function () {
-	const ui = sanad.ui;
-	const C = whatsapp_next.campaign;
-	const K = whatsapp_next.campaigns;
+	const ui = whatsapp.ui;
+	const campaign_builder = whatsapp_next.campaign;
+	const campaign_helpers = whatsapp_next.campaigns;
 
 	const FILE_TYPES = ["Image", "Video", "Audio", "Sticker"];
 
@@ -41,18 +41,18 @@ frappe.provide("whatsapp_next.campaign");
 		return null;
 	}
 
-	C.Builder = class CampaignBuilder {
+	campaign_builder.Builder = class CampaignBuilder {
 		constructor({ frm, wrapper }) {
 			this.frm = frm;
 			this.$wrapper = $(wrapper);
-			this.id = ui.uid("cb");
+			this.id = ui.unique_dom_id("cb");
 			this.cap = 0;
 			this.retry_policy = null;
 			this.readiness = null;
 			this.readiness_key = null;
 			this.step = cint(frm.wa_step);
-			this.make();
-			C.limits().then((l) => {
+			this.build_campaign_screen();
+			campaign_builder.limits().then((l) => {
 				if (this.cap === cint(l.rate)) return;
 				this.cap = cint(l.rate);
 				// only the first step draws the cap (the slider's ceiling): nothing else redraws
@@ -65,19 +65,19 @@ frappe.provide("whatsapp_next.campaign");
 			return this.frm.doc;
 		}
 
-		make() {
-			// `wa wa--compact` is the kit's own density switch: every control the screen draws —
+		build_campaign_screen() {
+			// `wa whatsapp--compact` is the kit's own density switch: every control the screen draws —
 			// input, select, toggle, button, badge — takes the compact scale from it instead of
 			// this screen inventing sizes of its own.
-			this.$wrapper.addClass("wa wa--compact");
+			this.$wrapper.addClass("whatsapp whatsapp--compact");
 			this.$wrapper.html(`
-				<div class="wa-cb__shell">
-					<div class="wa-cb__top" data-el="header"></div>
-					<div class="wa-cb__body">
-						<main class="wa-cb__main">
-							<div class="wa-cb__panel">
-								<div class="wa-cb__panel-head" data-el="stepper"></div>
-								<div class="wa-cb__pane" data-el="pane"></div>
+				<div class="whatsapp-campaign-builder__shell">
+					<div class="whatsapp-campaign-builder__top" data-el="header"></div>
+					<div class="whatsapp-campaign-builder__body">
+						<main class="whatsapp-campaign-builder__main">
+							<div class="whatsapp-campaign-builder__panel">
+								<div class="whatsapp-campaign-builder__panel-head" data-el="stepper"></div>
+								<div class="whatsapp-campaign-builder__pane" data-el="pane"></div>
 							</div>
 						</main>
 					</div>
@@ -87,7 +87,7 @@ frappe.provide("whatsapp_next.campaign");
 			// both are asked for now, so that step opens without waiting on either
 			ui.meta.with_doctype("WhatsApp Campaign Recipient").catch(() => {});
 			if (ui.ContactPicker) ui.ContactPicker.prefetch(this.frm.doctype);
-			this._pin = ui.debounce(() => this.pin(), 150);
+			this._pin = ui.debounce(() => this.update_sticky_offsets(), 150);
 			$(window).on(`resize.${this.id}`, this._pin);
 		}
 
@@ -98,9 +98,9 @@ frappe.provide("whatsapp_next.campaign");
 		 * not guessed — the navbar and the page head are not the same height on every route, and
 		 * the band is not drawn at all before the first save.
 		 */
-		pin() {
-			const el = this.$wrapper[0];
-			if (!el || !el.isConnected) return;
+		update_sticky_offsets() {
+			const wrapper_element = this.$wrapper[0];
+			if (!wrapper_element || !wrapper_element.isConnected) return;
 			const navbar = document.querySelector(".navbar");
 			const head = document.querySelector(".page-head");
 			const top = (navbar ? navbar.getBoundingClientRect().height : 0) + (head ? head.getBoundingClientRect().height : 0);
@@ -118,7 +118,7 @@ frappe.provide("whatsapp_next.campaign");
 		}
 
 		/** A paused campaign opened for editing: the wizard, with a way back to the monitor. */
-		edit(on) {
+		set_editing_mode(on) {
 			this.editing = !!on;
 			this.step = 0;
 			this.frm.wa_step = 0;
@@ -126,11 +126,8 @@ frappe.provide("whatsapp_next.campaign");
 		}
 
 		can_edit() {
-			return (
-				!K.TERMINAL.includes(this.doc.status) &&
-				(this.frm.is_new() || K.EDITABLE.includes(this.doc.status) || this.doc.status === "Scheduled") &&
-				frappe.model.can_write(this.frm.doctype)
-			);
+			return (!campaign_helpers.TERMINAL.includes(this.doc.status) &&
+			(this.frm.is_new() || campaign_helpers.EDITABLE.includes(this.doc.status) || this.doc.status === "Scheduled") && frappe.model.can_write(this.frm.doctype));
 		}
 
 		/**
@@ -145,7 +142,7 @@ frappe.provide("whatsapp_next.campaign");
 		}
 
 		estimate() {
-			return C.estimate(this.doc, this.cap);
+			return campaign_builder.estimate(this.doc, this.cap);
 		}
 
 		devices() {
@@ -192,7 +189,7 @@ frappe.provide("whatsapp_next.campaign");
 						no_question: __("has no question"),
 						few_options: __("needs at least two answers"),
 					}[message_problem(bad)];
-					return __("Message {0} {1}.", [C.fmt_int(bad.idx), why]);
+					return __("Message {0} {1}.", [campaign_builder.format_integer(bad.idx), why]);
 				}
 				return "";
 			}
@@ -207,13 +204,8 @@ frappe.provide("whatsapp_next.campaign");
 			return i < this.step && this.step_problem(i) ? 1 : 0;
 		}
 
-		/** Every step may be opened. A step that is not finished says so inside itself. */
-		can_go() {
-			return true;
-		}
-
-		go(i) {
-			const next = Math.max(0, Math.min(cint(i), C.STEPS.length - 1));
+		go_to_step(i) {
+			const next = Math.max(0, Math.min(cint(i), campaign_builder.STEPS.length - 1));
 			if (next === this.step) return;
 			this.step = next;
 			this.frm.wa_step = next;
@@ -222,17 +214,17 @@ frappe.provide("whatsapp_next.campaign");
 			window.scrollTo({ top: 0, behavior: "smooth" });
 		}
 
-		save() {
+		save_campaign() {
 			return this.frm.save();
 		}
 
 		// ---- drawing ---------------------------------------------------------------------------
 
 		/** The cheap half: everything that only reads the document. */
-		sync() {
-			if (!this.frm.is_new()) this.header = new C.Header({ wrapper: this.$("header"), ctx: this });
+		refresh_header_and_stepper() {
+			if (!this.frm.is_new()) this.header = new campaign_builder.Header({ wrapper: this.$("header"), ctx: this });
 			if (this.wizard()) {
-				this.stepper = new C.Stepper({ wrapper: this.$("stepper"), ctx: this });
+				this.stepper = new campaign_builder.Stepper({ wrapper: this.$("stepper"), ctx: this });
 				if (this.checks) this.checks.render();
 			}
 		}
@@ -240,7 +232,7 @@ frappe.provide("whatsapp_next.campaign");
 		/** The whole screen, including the step's own pane. */
 		render() {
 			const wizard = this.wizard();
-			this.$wrapper.toggleClass("wa-cb--wizard", wizard).toggleClass("wa-cb--monitor", !wizard);
+			this.$wrapper.toggleClass("whatsapp-campaign-builder--wizard", wizard).toggleClass("whatsapp-campaign-builder--monitor", !wizard);
 			// until the campaign exists there is no device, no audience and no duration to state:
 			// the band would be four dashes over an empty name
 			this.$("header").toggle(!this.frm.is_new());
@@ -249,7 +241,7 @@ frappe.provide("whatsapp_next.campaign");
 			// a campaign that can no longer be edited hides it rather than leaving it dead
 			if (!this.can_edit() && !this.frm.is_new()) this.frm.disable_save();
 			this.render_pane();
-			this.sync();
+			this.refresh_header_and_stepper();
 			return this;
 		}
 
@@ -257,15 +249,15 @@ frappe.provide("whatsapp_next.campaign");
 			const $pane = this.$("pane").empty();
 			this.pane && this.pane.destroy && this.pane.destroy();
 			if (!this.wizard()) {
-				this.pane = new C.Monitor({ wrapper: $pane, ctx: this });
+				this.pane = new campaign_builder.Monitor({ wrapper: $pane, ctx: this });
 				this.pane.load_progress();
-				this.pin();
+				this.update_sticky_offsets();
 				return;
 			}
-			const Step = [C.Setup, C.Messages, C.Audience, C.Review][this.step];
+			const Step = [campaign_builder.Setup, campaign_builder.Messages, campaign_builder.Audience, campaign_builder.Review][this.step];
 			this.pane = new Step({ wrapper: $pane, ctx: this });
 			this.checks = null;
-			this.pin();
+			this.update_sticky_offsets();
 		}
 
 		/**
@@ -287,7 +279,7 @@ frappe.provide("whatsapp_next.campaign");
 					this.readiness = r;
 					this.readiness_key = key;
 					if (this.checks) this.checks.render();
-					if (this.pane && this.pane instanceof C.Review) this.pane.refresh();
+					if (this.pane && this.pane instanceof campaign_builder.Review) this.pane.refresh();
 				})
 				.catch(() => {});
 		}

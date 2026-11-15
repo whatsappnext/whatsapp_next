@@ -17,15 +17,15 @@ class TestAudit(IntegrationTestCase):
 
 	def test_log_records_real_user_and_masks(self):
 		with as_user("WhatsApp Manager") as email:
-			name = audit.log(
+			name = audit.record_audit_entry(
 				"Queue Paused",
 				reason="test-audit pause",
 				count=3,
 				details={
-					"phone": "+966501234567",
+					"phone": "+967784499996",
 					"api_key": "SECRET",
 					"note": "ok",
-					"nested": {"token": "x", "recipient_no": "966501234567"},
+					"nested": {"token": "x", "recipient_no": "967784499996"},
 				},
 				summary="Queue paused by {user}",
 				summary_args={"user": email},
@@ -44,7 +44,7 @@ class TestAudit(IntegrationTestCase):
 		self.assertIsNotNone(row.timestamp)
 
 	def test_default_severity_and_references(self):
-		name = audit.log(
+		name = audit.record_audit_entry(
 			"Device Deleted",
 			reference=("Role", "WhatsApp Manager"),
 			target=("Role", "WhatsApp Viewer"),

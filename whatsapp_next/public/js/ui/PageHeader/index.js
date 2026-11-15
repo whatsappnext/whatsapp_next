@@ -1,4 +1,4 @@
-// sanad.ui.PageHeader — the prototype's screen header above a Desk list (or on a custom page):
+// whatsapp.ui.PageHeader — the prototype's screen header above a Desk list (or on a custom page):
 // H2 title + one-line description with the primary button at the inline-end, an optional
 // secondary button row, a KPI row (ListStatsCard inside — icon in a tinted square, label, big
 // tabular number, sub-text; 4 / 2 / 1 per row), an optional banner (tone + text + action) and
@@ -11,7 +11,7 @@ import ui from "../_core/index.js";
 
 const BANNER_ICON = { amber: "es-line-alert-triangle", red: "es-line-alert-circle", blue: "es-line-info", green: "es-line-success", gray: "es-line-info" };
 
-sanad.ui.PageHeader = class PageHeader {
+whatsapp.ui.PageHeader = class PageHeader {
 	/**
 	 * @param {Object} opts
 	 * @param {Object} [opts.listview] — a Desk ListView
@@ -37,7 +37,7 @@ sanad.ui.PageHeader = class PageHeader {
 		this.page_buttons = [];
 		this.handlers = {};
 		this.block_handlers = [];
-		this.make();
+		this.build_header_shell();
 		this.bind_events();
 		this.last_refresh = Date.now();
 		this.refresh_banner();
@@ -46,34 +46,34 @@ sanad.ui.PageHeader = class PageHeader {
 
 	// ---- mount ---------------------------------------------------------------------------
 
-	make() {
-		const o = this.opts;
+	build_header_shell() {
+		const options = this.opts;
 		this.$el = $(`
-			<header class="sanad-kit sanad-pagehead">
-				<div class="sanad-pagehead__row">
-					<div class="sanad-pagehead__text">
-						${o.title && !this.desk_page ? `<h2 class="sanad-pagehead__title">${ui.escape(o.title)}</h2>` : ""}
-						${o.description && !this.desk_page ? `<p class="sanad-pagehead__desc">${ui.escape(o.description)}</p>` : ""}
+			<header class="whatsapp-kit whatsapp-kit-page-header">
+				<div class="whatsapp-kit-page-header__row">
+					<div class="whatsapp-kit-page-header__text">
+						${options.title && !this.desk_page ? `<h2 class="whatsapp-kit-page-header__title">${ui.escape(options.title)}</h2>` : ""}
+						${options.description && !this.desk_page ? `<p class="whatsapp-kit-page-header__description">${ui.escape(options.description)}</p>` : ""}
 					</div>
-					<div class="sanad-pagehead__actions"></div>
+					<div class="whatsapp-kit-page-header__actions"></div>
 				</div>
-				<div class="sanad-pagehead__stats"></div>
-				<div class="sanad-pagehead__banner" hidden></div>
-				<div class="sanad-pagehead__blocks"></div>
+				<div class="whatsapp-kit-page-header__stats"></div>
+				<div class="whatsapp-kit-page-header__banner" hidden></div>
+				<div class="whatsapp-kit-page-header__blocks"></div>
 			</header>`);
-		this.$actions = this.$el.find(".sanad-pagehead__actions");
-		this.$stats = this.$el.find(".sanad-pagehead__stats");
-		this.$banner = this.$el.find(".sanad-pagehead__banner");
-		this.$blocks = this.$el.find(".sanad-pagehead__blocks");
+		this.$actions = this.$el.find(".whatsapp-kit-page-header__actions");
+		this.$stats = this.$el.find(".whatsapp-kit-page-header__stats");
+		this.$banner = this.$el.find(".whatsapp-kit-page-header__banner");
+		this.$blocks = this.$el.find(".whatsapp-kit-page-header__blocks");
 		if (!this.desk_page) this.render_actions();
 		else this.$actions.remove();
 		// a header may carry nothing but a banner and its blocks (a screen whose console names
 		// itself, or one whose title is Desk's strip): an empty title row would then reserve space
 		// and draw a stray margin
-		if (this.desk_page || (!o.title && !o.description)) this.$el.find(".sanad-pagehead__text").remove();
-		if (!this.$el.find(".sanad-pagehead__row").children().length) this.$el.find(".sanad-pagehead__row").remove();
-		if (o.stats && o.stats.length) {
-			this.stats = new sanad.ui.ListStatsCard({ wrapper: this.$stats, cards: o.stats, refresh_seconds: o.refresh_seconds, layout: "kpi" });
+		if (this.desk_page || (!options.title && !options.description)) this.$el.find(".whatsapp-kit-page-header__text").remove();
+		if (!this.$el.find(".whatsapp-kit-page-header__row").children().length) this.$el.find(".whatsapp-kit-page-header__row").remove();
+		if (options.stats && options.stats.length) {
+			this.stats = new whatsapp.ui.ListStatsCard({ wrapper: this.$stats, cards: options.stats, refresh_seconds: options.refresh_seconds, layout: "kpi" });
 		} else {
 			this.$stats.remove();
 		}
@@ -88,11 +88,11 @@ sanad.ui.PageHeader = class PageHeader {
 			this.mount_page_actions();
 			// Desk fires `show` immediately after mount; without this guard every banner, block and
 			// KPI was fetched twice on each visit to the list.
-			this.listview.page.wrapper.on("show.sanadpagehead", () => this.refresh());
+			this.listview.page.wrapper.on("show.whatsapppagehead", () => this.refresh());
 		} else {
 			$(this.opts.wrapper).prepend(this.$el);
 			if (this.desk_page) {
-				if (o.title) this.desk_page.set_title(o.title);
+				if (options.title) this.desk_page.set_title(options.title);
 				this.mount_page_actions();
 			}
 		}
@@ -104,27 +104,27 @@ sanad.ui.PageHeader = class PageHeader {
 	 * this list rather than the button being cleared after the fact.
 	 */
 	mount_page_actions() {
-		const lv = this.listview;
-		const page = this.desk_page;
-		const p = this.opts.primary;
-		if (p && lv) {
-			lv.can_create = false;
-			lv.set_primary_action = () => {
-				if (this.allowed(p)) page.set_primary_action(p.label, () => p.handler(this), p.icon);
-				else page.clear_primary_action();
+		const listview = this.listview;
+		const desk_page = this.desk_page;
+		const primary = this.opts.primary;
+		if (primary && listview) {
+			listview.can_create = false;
+			listview.set_primary_action = () => {
+				if (this.allowed(primary)) desk_page.set_primary_action(primary.label, () => primary.handler(this), primary.icon);
+				else desk_page.clear_primary_action();
 			};
-			lv.set_primary_action();
-		} else if (p && this.allowed(p)) {
-			page.set_primary_action(p.label, () => p.handler(this), p.icon);
+			listview.set_primary_action();
+		} else if (primary && this.allowed(primary)) {
+			desk_page.set_primary_action(primary.label, () => primary.handler(this), primary.icon);
 		}
 		(this.opts.secondary || []).forEach((a) => {
 			if (!this.allowed(a)) return;
-			const $btn = page.add_button(ui.escape(a.label), () => a.handler(this), { icon: a.icon });
+			const $btn = desk_page.add_button(ui.escape(a.label), () => a.handler(this), { icon: a.icon });
 			this.page_buttons.push($btn);
 			if (a.count == null) return;
 			Promise.resolve(typeof a.count === "function" ? a.count() : a.count).then((n) => {
 				if (n == null) return;
-				$btn.append(` <span class="sanad-pagehead__count sanad-tabular">${ui.escape(ui.format_int(n))}</span>`);
+				$btn.append(` <span class="whatsapp-kit-page-header__count whatsapp-kit-tabular">${ui.escape(ui.format_integer(n))}</span>`);
 			});
 		});
 	}
@@ -140,15 +140,15 @@ sanad.ui.PageHeader = class PageHeader {
 		this.$actions.empty();
 		(this.opts.secondary || []).forEach((a) => {
 			if (!this.allowed(a)) return;
-			const count = a.count != null ? ` <span class="sanad-pagehead__count sanad-tabular">${ui.escape(ui.format_int(a.count))}</span>` : "";
+			const count = a.count != null ? ` <span class="whatsapp-kit-page-header__count whatsapp-kit-tabular">${ui.escape(ui.format_integer(a.count))}</span>` : "";
 			$(`<button type="button" class="btn btn-default btn-sm">${a.icon ? ui.icon(a.icon, "xs") + " " : ""}${ui.escape(a.label)}${count}</button>`)
 				.on("click", () => a.handler(this))
 				.appendTo(this.$actions);
 		});
-		const p = this.opts.primary;
-		if (p && this.allowed(p)) {
-			$(`<button type="button" class="btn btn-primary btn-sm sanad-pagehead__primary">${p.icon ? ui.icon(p.icon, "xs") + " " : ""}${ui.escape(p.label)}</button>`)
-				.on("click", () => p.handler(this))
+		const primary = this.opts.primary;
+		if (primary && this.allowed(primary)) {
+			$(`<button type="button" class="btn btn-primary btn-sm whatsapp-kit-page-header__primary">${primary.icon ? ui.icon(primary.icon, "xs") + " " : ""}${ui.escape(primary.label)}</button>`)
+				.on("click", () => primary.handler(this))
 				.appendTo(this.$actions);
 		}
 		if (!this.$actions.children().length) this.$actions.remove();
@@ -161,15 +161,15 @@ sanad.ui.PageHeader = class PageHeader {
 			this.$banner.attr("hidden", true).empty().removeAttr("role");
 			return this;
 		}
-		const tone = ui.tone(banner.tone || "amber");
+		const tone = ui.tone_for_colour(banner.tone || "amber");
 		const icon = banner.icon || BANNER_ICON[tone] || "es-line-info";
 		this.$banner
 			.attr("role", tone === "red" ? "alert" : "status")
 			.removeAttr("hidden")
-			.attr("class", `sanad-pagehead__banner sanad-tone--${tone}`)
-			.html(`<span class="sanad-pagehead__banner-icon" aria-hidden="true">${ui.icon(icon, "sm")}</span><span class="sanad-pagehead__banner-text">${ui.escape(banner.text)}</span>`);
+			.attr("class", `whatsapp-kit-page-header__banner whatsapp-kit-tone--${tone}`)
+			.html(`<span class="whatsapp-kit-page-header__banner-icon" aria-hidden="true">${ui.icon(icon, "sm")}</span><span class="whatsapp-kit-page-header__banner-text">${ui.escape(banner.text)}</span>`);
 		if (banner.action && banner.action.handler) {
-			$(`<button type="button" class="btn btn-default btn-xs sanad-pagehead__banner-action">${ui.escape(banner.action.label)}</button>`)
+			$(`<button type="button" class="btn btn-default btn-xs whatsapp-kit-page-header__banner-action">${ui.escape(banner.action.label)}</button>`)
 				.on("click", () => banner.action.handler(this))
 				.appendTo(this.$banner);
 		}
@@ -191,18 +191,18 @@ sanad.ui.PageHeader = class PageHeader {
 	// ---- blocks ----------------------------------------------------------------------------
 
 	get_block(key) {
-		return this.$blocks.find(`.sanad-pagehead__block[data-key="${key}"]`);
+		return this.$blocks.find(`.whatsapp-kit-page-header__block[data-key="${key}"]`);
 	}
 
 	render_block(block) {
 		let $el = this.get_block(block.key);
-		if (!$el.length) $el = $(`<section class="sanad-pagehead__block" data-key="${ui.escape(block.key)}"></section>`).appendTo(this.$blocks);
+		if (!$el.length) $el = $(`<section class="whatsapp-kit-page-header__block" data-key="${ui.escape(block.key)}"></section>`).appendTo(this.$blocks);
 		try {
 			return Promise.resolve(block.render($el, this)).catch((err) => {
-				new sanad.ui.EmptyState({ wrapper: $el, state: "error", size: "sm", description: err.message, action: { label: __("Retry"), onclick: () => this.render_block(block) } });
+				new whatsapp.ui.EmptyState({ wrapper: $el, state: "error", size: "sm", description: err.message, action: { label: __("Retry"), onclick: () => this.render_block(block) } });
 			});
 		} catch (err) {
-			new sanad.ui.EmptyState({ wrapper: $el, state: "error", size: "sm", description: err.message });
+			new whatsapp.ui.EmptyState({ wrapper: $el, state: "error", size: "sm", description: err.message });
 			return Promise.resolve();
 		}
 	}
@@ -245,7 +245,7 @@ sanad.ui.PageHeader = class PageHeader {
 		this.block_handlers = [];
 		this.unhook_render && this.unhook_render();
 		this.stats && this.stats.destroy();
-		this.listview && this.listview.page.wrapper.off(".sanadpagehead");
+		this.listview && this.listview.page.wrapper.off(".whatsapppagehead");
 		// a custom page redraws its header: the buttons it put on Desk's bar go with it
 		if (this.desk_page && !this.listview) {
 			this.page_buttons.forEach(($b) => $b && $b.remove());
@@ -256,4 +256,4 @@ sanad.ui.PageHeader = class PageHeader {
 	}
 };
 
-export default sanad.ui.PageHeader;
+export default whatsapp.ui.PageHeader;

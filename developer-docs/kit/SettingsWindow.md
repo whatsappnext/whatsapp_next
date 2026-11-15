@@ -1,4 +1,4 @@
-# `sanad.ui.SettingsWindow`
+# `whatsapp.ui.SettingsWindow`
 
 A settings window in the shape of claude.ai's: one large modal over a dimmed backdrop, a rail on
 the inline-start (a search field, then sections in labelled groups) and one content pane that
@@ -8,7 +8,7 @@ nothing inside a section: the host renders each one through `render(key, $pane)`
 the static content helpers (`head_html`, `section_html`, `row_html`) for the same rows and headings.
 Constructing it builds the DOM but does not open it — call `show_window()`.
 
-**Portability:** no server calls, no app keys. The stylesheet uses the app's `--wa-*` palette
+**Portability:** no server calls, no app keys. The stylesheet uses the app's `--whatsapp-*` palette
 tokens (`public/scss/_tokens.scss`), which live outside the kit; the host's `cls` is where a palette
 scope goes.
 
@@ -18,7 +18,7 @@ scope goes.
 |---|---|---|---|
 | `title` | string | `__("Settings")` | Accessible name of the dialog and nav, and the back label on the list step. |
 | `groups` | `Array<{label?, items[]}>` | `[]` | Rail groups; a group without `label` is unlabelled. |
-| `groups[].items[]` | `{key, label, icon?, keywords?}` | — | One section. `icon` is a `_kit` `ico()` name; `keywords` widen the search. |
+| `groups[].items[]` | `{key, label, icon?, keywords?}` | — | One section. `icon` is a `_kit` `inline_icon_html()` name; `keywords` widen the search. |
 | `render` | `(key, $pane, win) => Promise\|void` | — | Draws one section into the (emptied) pane. |
 | `active` | string | first item | Section to open on the first `show_window()` without a key. |
 | `cls` | string | — | Extra class on the window root (host palette scope). |
@@ -45,7 +45,7 @@ Instance fields a host may read: `current` (open key), `open` (boolean), `$root`
 ## Events and callbacks
 
 - `render`, `on_show`, `on_close` as above.
-- Registers with `sanad.ui.overlay.open/close`; focus is trapped with `ui.trap_focus`; opening is
+- Registers with `whatsapp.ui.overlay.open/close`; focus is trapped with `ui.trap_focus`; opening is
   announced ("Settings opened.") with `ui.announce`.
 - No custom DOM events; no realtime subscriptions (the live host binds its own).
 
@@ -56,7 +56,7 @@ None.
 ## Usage
 
 ```js
-const SW = sanad.ui.SettingsWindow;
+const SW = whatsapp.ui.SettingsWindow;
 const win = new SW({
   title: __("Settings"),
   cls: "my-palette-scope",
@@ -75,15 +75,15 @@ win.show_window("usage");
 
 ## CSS hooks
 
-- `.sanad-sw-backdrop` and root `.sanad-kit.sanad-sw[role=dialog]` (plus `cls`), both appended to
-  `body`; `body.sanad-sw-open` while open.
-- State modifiers: `.sanad-sw--in` (entered, for the transition), `.sanad-sw--pane` (a section is
+- `.whatsapp-kit-settings-window-backdrop` and root `.whatsapp-kit.whatsapp-kit-settings-window[role=dialog]` (plus `cls`), both appended to
+  `body`; `body.whatsapp-kit-settings-window-open` while open.
+- State modifiers: `.whatsapp-kit-settings-window--in` (entered, for the transition), `.whatsapp-kit-settings-window--pane` (a section is
   shown — on phones this switches from list to pane).
 - Rail: `__rail`, `__search`, `__search-icon`, `__nav`, `__group`, `__group-label`,
   `__item[data-key]` (`.is-on`, `aria-current="page"`), `__item-icon`, `__item-label`, `__none`.
 - Main: `__main`, `__bar`, `__back`, `__back-label`, `__close`, `__pane[role=region]`.
-- Content helpers: `__head`, `__title`, `__desc`, `__h`, `__row`, `__row-text`, `__row-title`,
-  `__row-desc`, `__row-control`.
+- Content helpers: `__head`, `__title`, `__description`, `__heading`, `__row`, `__row-text`, `__row-title`,
+  `__row-description`, `__row-control`.
 - Phone layout at `max-width: 719px`.
 
 ## Notes

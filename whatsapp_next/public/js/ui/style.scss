@@ -1,4 +1,4 @@
-// sanad.ui kit styles — one import per component; imported by the host app's *.bundle.scss.
+// whatsapp.ui kit styles — one import per component; imported by the host app's *.bundle.scss.
 @import "./_kit/style";
 @import "./_core/style";
 @import "./Render/style";
@@ -8,14 +8,12 @@
 @import "./Toast/style";
 @import "./ConfirmDialog/style";
 @import "./FilterBar/style";
-@import "./TreeGroupBy/style";
 @import "./RowActions/style";
 @import "./BulkActions/style";
 @import "./Stepper/style";
 @import "./PhoneField/style";
 @import "./DateFilter/style";
 @import "./ListStatsCard/style";
-@import "./MetaDialog/style";
 @import "./DataList/style";
 @import "./Collection/style";
 @import "./PageHeader/style";

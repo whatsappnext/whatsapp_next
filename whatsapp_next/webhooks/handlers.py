@@ -105,6 +105,11 @@ def handle_event(
 	if name == "message.received":
 		if not device:
 			return "Ignored", {}
+		if inbound.is_from_this_device(event, device):
+			# sent by the device's own WhatsApp (the phone, another linked device): never a
+			# customer's message, never a command (live test 2026-11-12)
+			outbound_name = inbound.record_own_message(event, device=device)
+			return ("Processed", {"outbound_message": outbound_name}) if outbound_name else ("Ignored", {})
 		inbound_name = inbound.record_inbound(event, webhook_event_name, device=device)
 		return ("Processed", {"inbound_message": inbound_name}) if inbound_name else ("Ignored", {})
 	if name in ("message.edited", "message.deleted"):
@@ -113,7 +118,8 @@ def handle_event(
 		inbound_name = inbound.record_change(event, device=device)
 		return ("Processed", {"inbound_message": inbound_name}) if inbound_name else ("Ignored", {})
 	if name == "message.reaction":
-		if not device:
+		if not device or inbound.is_from_this_device(event, device):
+			# the device's own reaction is not a customer's (the history import skips it too)
 			return "Ignored", {}
 		inbound_name = inbound.record_reaction(event, webhook_event_name, device=device)
 		return ("Processed", {"inbound_message": inbound_name}) if inbound_name else ("Ignored", {})
@@ -165,7 +171,7 @@ def process_event(webhook_event: str) -> str:
 		parsed = provider.parse_webhook(provider.replay_headers(row.event_name, row.event_id), body)
 		device = row.device or devices.by_platform_device(parsed.platform_device)
 		# as the messaging service user when one is set: what the event writes carries its name
-		with service_user.acting():
+		with service_user.run_as_service_user():
 			status, links = handle_event(parsed, webhook_event_name=row.name, device=device)
 		values: dict[str, Any] = {
 			"status": status,
@@ -181,7 +187,7 @@ def process_event(webhook_event: str) -> str:
 		return status
 	except Exception as exc:
 		frappe.db.rollback(save_point="wa_webhook_event")
-		tries = _tries(row.error) + 1
+		tries = _parse_try_count_from_error(row.error) + 1
 		message = f"[try {tries}] {type(exc).__name__}: {str(exc)[:300]}"
 		with status_writer():
 			frappe.db.set_value(
@@ -202,9 +208,9 @@ def process_event(webhook_event: str) -> str:
 		return "Failed"
 
 
-def _tries(error: str | None) -> int:
-	m = _TRY_RE.match(error or "")
-	return cint(m.group(1)) if m else 0
+def _parse_try_count_from_error(error: str | None) -> int:
+	try_count_match = _TRY_RE.match(error or "")
+	return cint(try_count_match.group(1)) if try_count_match else 0
 
 
 STUCK_MINUTES = 10
@@ -230,12 +236,12 @@ def reprocess_failed(limit: int = 100) -> int:
 		order_by="received_at asc",
 		limit=cint(limit) or 100,
 	)
-	n = 0
+	reprocessed_count = 0
 	for r in rows:
-		if _tries(r.error) >= MAX_TRIES:
+		if _parse_try_count_from_error(r.error) >= MAX_TRIES:
 			continue
 		with status_writer():
 			frappe.db.set_value("WhatsApp Webhook Event", r.name, "status", "Received", update_modified=False)
 		process_event(r.name)
-		n += 1
-	return n
+		reprocessed_count += 1
+	return reprocessed_count

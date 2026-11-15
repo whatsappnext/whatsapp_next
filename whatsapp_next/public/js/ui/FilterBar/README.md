@@ -14,7 +14,7 @@ a Link control) unless the preset supplies them. Portable: needs only a DocType 
 
 ```js
 // Desk list (in listview_settings.onload) — one row: search → dropdown filters → period control
-new sanad.ui.FilterBar({
+new whatsapp.ui.FilterBar({
   listview,
   intro: __("Everything sent from your devices: status, document, device and errors."),
   actions: ["group_by", "export"],                 // optional second row
@@ -34,14 +34,14 @@ new sanad.ui.FilterBar({
 });
 
 // Custom page
-const bar = new sanad.ui.FilterBar({
+const bar = new whatsapp.ui.FilterBar({
   page, doctype: "ToDo", presets: [...],
   on_change: (filters, { or_filters, values, search }) => load(filters, or_filters),
 });
 ```
 
-Options: `listview` | `page` (+ `doctype`), `wrapper`, `intro`, `actions` (`"group_by"` mounts a
-`TreeGroupBy` rail on a chosen preset field, `"export"` opens Desk's own Data Export dialog over
+Options: `listview` | `page` (+ `doctype`), `wrapper`, `intro`, `actions` (`"group_by"` drives the
+DataList's multi-level grouping, `"export"` opens Desk's own Data Export dialog over
 the checked rows or the current filters), `replace_standard_filters` (default true),
 `presets[]` (`fieldname`, `type` = `select` (default) | `tabs` | `daterange` | `search` | `period`,
 `label`, `options` — strings, `{value, label}` objects or `(txt) => Promise<…>`; for `period`:
@@ -49,7 +49,7 @@ the checked rows or the current filters), `replace_standard_filters` (default tr
 `"30d"` / `"7d"` / `"today"` / `"all"`), `all_label`, `fields` / `placeholder` for search),
 `on_change`, `debounce`, `datalist` (page mode: the `DataList` — or `() => DataList` — that the
 `group_by` action groups; on a list the DataList registers itself). Presets render by type in the prototype order regardless of array order.
-Methods: `set(fieldname, value)`, `set_search(text, fields)`, `sync()` (re-read the list's
+Methods: `set_filter_value(fieldname, value)`, `set_search(text, fields)`, `read_list_filters_into_bar()` (re-read the list's
 filters, incl. mapping an `in` filter back to checked boxes), `get_filters()`,
 `get_or_filters()`, `group_by(fieldname)`, `export()`, `clear()`, `destroy()`.
 
@@ -121,12 +121,12 @@ prototype (`docs/component/Toolbar.dc.html`) and the WCAG 2.1 AA review:
   manual activation (3.2.2). Every control has an accessible name.
 - Loading inside a popover is a skeleton, errors show Retry (EmptyState); "No match for {0}" /
   "No options" empty copy.
-- Second row "Group by ▾" / "Export" reuse the kit (`TreeGroupBy`) and Desk (`DataExporter`)
-  instead of new UI; the group-by rail is a chip rail with counts.
-- Reserved bar height, `--sanad-gap-*` spacing, global kit focus ring, full-width search and a
+- Second row "Group by ▾" / "Export" reuse the kit (`DataList` grouping) and Desk (`DataExporter`)
+  instead of new UI.
+- Reserved bar height, `--whatsapp-kit-gap-*` spacing, global kit focus ring, full-width search and a
   wrapping toolbar under 768 px; announcements are sentences ("Filters cleared.").
 
 ## `list_style`
 
 `list_style: true` gives a toolbar on a custom page the padding and the rule a Desk list's toolbar
-has, for a page whose rows are drawn exactly as a list's (inside a `.sanad-list-card` panel).
+has, for a page whose rows are drawn exactly as a list's (inside a `.whatsapp-kit-list-card` panel).

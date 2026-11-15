@@ -1,4 +1,4 @@
-// sanad.ui.AttachMenu — the composer's "+" from the prototype's Chat Thread
+// whatsapp.ui.AttachMenu — the composer's "+" from the prototype's Chat Thread
 // (`docs/component/Chat Thread.dc.html`, `composer.attach`): a popover over the button with a
 // 3-column grid of kinds (image · video · document · voice note · location · contact card), each
 // in its tone, and — once picked — a chip above the field ("Image · receipt.jpg ×").
@@ -10,33 +10,33 @@
 //
 // Portable: the host passes the kinds it can send and the contact search.
 
-frappe.provide("sanad.ui");
+frappe.provide("whatsapp.ui");
 
 (function () {
-	const esc = (v) => sanad.ui.escape(v);
-	const SV = (d) =>
+	const escape_html = (v) => whatsapp.ui.escape(v);
+	const stroke_icon_svg = (d) =>
 		`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 	const ICONS = {
-		image: SV('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M4 17l4.8-4.6 3.4 3.2 2.6-2.4L20 17"></path>'),
-		video: SV('<rect x="3" y="6" width="12.5" height="12" rx="2.5"></rect><path d="M15.5 11.2l5-2.7v7l-5-2.7z"></path>'),
-		document: SV('<path d="M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"></path><path d="M13.5 3.5V9H19M9 13h6M9 16.5h4"></path>'),
-		audio: SV('<path d="M12 4.5a2.4 2.4 0 0 1 2.4 2.4v4.6a2.4 2.4 0 0 1-4.8 0V6.9A2.4 2.4 0 0 1 12 4.5z"></path><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9.5 20h5"></path>'),
-		location: SV('<path d="M12 21s6.5-6 6.5-11a6.5 6.5 0 1 0-13 0C5.5 15 12 21 12 21z"></path><circle cx="12" cy="10" r="2.3"></circle>'),
-		contact: SV('<circle cx="12" cy="9" r="3.2"></circle><path d="M5.5 19.5c1-3.2 3.6-4.8 6.5-4.8s5.5 1.6 6.5 4.8"></path>'),
-		buttons: SV('<rect x="3.5" y="5" width="17" height="5" rx="2.5"></rect><rect x="3.5" y="14" width="17" height="5" rx="2.5"></rect>'),
-		list: SV('<path d="M9 6.5h11M9 12h11M9 17.5h11"></path><circle cx="4.8" cy="6.5" r="1"></circle><circle cx="4.8" cy="12" r="1"></circle><circle cx="4.8" cy="17.5" r="1"></circle>'),
+		image: stroke_icon_svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M4 17l4.8-4.6 3.4 3.2 2.6-2.4L20 17"></path>'),
+		video: stroke_icon_svg('<rect x="3" y="6" width="12.5" height="12" rx="2.5"></rect><path d="M15.5 11.2l5-2.7v7l-5-2.7z"></path>'),
+		document: stroke_icon_svg('<path d="M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"></path><path d="M13.5 3.5V9H19M9 13h6M9 16.5h4"></path>'),
+		audio: stroke_icon_svg('<path d="M12 4.5a2.4 2.4 0 0 1 2.4 2.4v4.6a2.4 2.4 0 0 1-4.8 0V6.9A2.4 2.4 0 0 1 12 4.5z"></path><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9.5 20h5"></path>'),
+		location: stroke_icon_svg('<path d="M12 21s6.5-6 6.5-11a6.5 6.5 0 1 0-13 0C5.5 15 12 21 12 21z"></path><circle cx="12" cy="10" r="2.3"></circle>'),
+		contact: stroke_icon_svg('<circle cx="12" cy="9" r="3.2"></circle><path d="M5.5 19.5c1-3.2 3.6-4.8 6.5-4.8s5.5 1.6 6.5 4.8"></path>'),
+		buttons: stroke_icon_svg('<rect x="3.5" y="5" width="17" height="5" rx="2.5"></rect><rect x="3.5" y="14" width="17" height="5" rx="2.5"></rect>'),
+		list: stroke_icon_svg('<path d="M9 6.5h11M9 12h11M9 17.5h11"></path><circle cx="4.8" cy="6.5" r="1"></circle><circle cx="4.8" cy="12" r="1"></circle><circle cx="4.8" cy="17.5" r="1"></circle>'),
 	};
 	// the prototype's order and tones
 	const KINDS = [
-		{ key: "image", tone: "pri", accept: ["image/*"] },
-		{ key: "video", tone: "nf", accept: ["video/*"] },
-		{ key: "document", tone: "wn", accept: null },
+		{ key: "image", tone: "primary", accept: ["image/*"] },
+		{ key: "video", tone: "info", accept: ["video/*"] },
+		{ key: "document", tone: "warning", accept: null },
 		{ key: "audio", tone: "ok", accept: ["audio/*"] },
-		{ key: "location", tone: "dg" },
+		{ key: "location", tone: "danger" },
 		{ key: "contact", tone: "muted" },
 		// opt-in: shown only to a host that lists them in `kinds` (it must be able to send them)
-		{ key: "buttons", tone: "pri", opt_in: true },
-		{ key: "list", tone: "nf", opt_in: true },
+		{ key: "buttons", tone: "primary", opt_in: true },
+		{ key: "list", tone: "info", opt_in: true },
 	];
 	const label_of = (key) =>
 		({
@@ -66,11 +66,11 @@ frappe.provide("sanad.ui");
 			this.open();
 		}
 
-		static icon(kind) {
+		static kind_icon_svg(kind) {
 			return ICONS[kind] || ICONS.document;
 		}
 
-		static label(kind) {
+		static kind_label(kind) {
 			return label_of(kind);
 		}
 
@@ -79,16 +79,16 @@ frappe.provide("sanad.ui");
 			if (!v) return "";
 			const detail = v.file_name || v.contact_label || v.summary || (v.location ? v.location.name || `${v.location.latitude}, ${v.location.longitude}` : "");
 			const tone = (KINDS.find((k) => k.key === v.kind) || {}).tone || "muted";
-			return `<span class="sanad-am__chip sanad-am__chip--${tone}">
-				<span class="sanad-am__chip-icon">${ICONS[v.kind] || ""}</span>
-				<span class="sanad-am__chip-text">${esc(label_of(v.kind))}${detail ? ` · <bdi>${esc(detail)}</bdi>` : ""}</span>
-				<button type="button" class="sanad-am__chip-x" data-attach-clear aria-label="${esc(__("Remove the attachment"))}" title="${esc(__("Remove the attachment"))}">×</button>
+			return `<span class="whatsapp-kit-attach-menu__chip whatsapp-kit-attach-menu__chip--${tone}">
+				<span class="whatsapp-kit-attach-menu__chip-icon">${ICONS[v.kind] || ""}</span>
+				<span class="whatsapp-kit-attach-menu__chip-text">${escape_html(label_of(v.kind))}${detail ? ` · <bdi>${escape_html(detail)}</bdi>` : ""}</span>
+				<button type="button" class="whatsapp-kit-attach-menu__chip-x" data-attach-clear aria-label="${escape_html(__("Remove the attachment"))}" title="${escape_html(__("Remove the attachment"))}">×</button>
 			</span>`;
 		}
 
 		open() {
 			const $anchor = $(this.opts.anchor);
-			this.$pop = $(`<div class="sanad-kit sanad-am" role="dialog" aria-label="${esc(__("Message type"))}"></div>`).appendTo(document.body);
+			this.$pop = $(`<div class="whatsapp-kit whatsapp-kit-attach-menu" role="dialog" aria-label="${escape_html(__("Message type"))}"></div>`).appendTo(document.body);
 			this.render();
 			this.place($anchor);
 			this._outside = (e) => {
@@ -104,7 +104,7 @@ frappe.provide("sanad.ui");
 			setTimeout(() => document.addEventListener("mousedown", this._outside, true), 0);
 			this.$pop.on("keydown", this._key);
 			this._resize = () => this.place($anchor);
-			$(window).on("resize.sanad-am", this._resize);
+			$(window).on("resize.whatsapp-kit-attach-menu", this._resize);
 			const first = this.$pop.find("button:not([disabled]), input").get(0);
 			first && first.focus();
 		}
@@ -114,7 +114,7 @@ frappe.provide("sanad.ui");
 			const r = $anchor.get(0).getBoundingClientRect();
 			const w = this.$pop.outerWidth();
 			const h = this.$pop.outerHeight();
-			const rtl = sanad.ui.is_rtl();
+			const rtl = whatsapp.ui.is_rtl();
 			let left = rtl ? r.right - w : r.left;
 			left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
 			const top = r.top - h - 8 >= 8 ? r.top - h - 8 : Math.min(r.bottom + 8, window.innerHeight - h - 8);
@@ -123,7 +123,7 @@ frappe.provide("sanad.ui");
 
 		close(refocus = false) {
 			document.removeEventListener("mousedown", this._outside, true);
-			$(window).off("resize.sanad-am", this._resize);
+			$(window).off("resize.whatsapp-kit-attach-menu", this._resize);
 			if (this.$pop) this.$pop.remove();
 			this.$pop = null;
 			if (refocus) $(this.opts.anchor).trigger("focus");
@@ -135,43 +135,43 @@ frappe.provide("sanad.ui");
 		}
 
 		render() {
-			const $p = this.$pop;
+			const $popover = this.$pop;
 			if (this.step === "menu") {
-				$p.html(`<div class="sanad-am__grid">${KINDS.filter((k) => !k.opt_in || (this.opts.kinds || []).includes(k.key)).map((k) => {
+				$popover.html(`<div class="whatsapp-kit-attach-menu__grid">${KINDS.filter((k) => !k.opt_in || (this.opts.kinds || []).includes(k.key)).map((k) => {
 					const ok = this.allowed(k.key);
 					const reason = !ok && this.opts.reasons ? this.opts.reasons[k.key] : "";
-					return `<button type="button" class="sanad-am__item" data-kind="${k.key}"${ok ? "" : ` disabled title="${esc(reason || __("Not available here"))}"`}>
-						<span class="sanad-am__icon sanad-am__icon--${k.tone}">${ICONS[k.key]}</span>
-						<span class="sanad-am__label">${esc(label_of(k.key))}</span>
+					return `<button type="button" class="whatsapp-kit-attach-menu__item" data-kind="${k.key}"${ok ? "" : ` disabled title="${escape_html(reason || __("Not available here"))}"`}>
+						<span class="whatsapp-kit-attach-menu__icon whatsapp-kit-attach-menu__icon--${k.tone}">${ICONS[k.key]}</span>
+						<span class="whatsapp-kit-attach-menu__label">${escape_html(label_of(k.key))}</span>
 					</button>`;
 				}).join("")}</div>`);
-				$p.find("[data-kind]").on("click", (e) => this.pick($(e.currentTarget).data("kind")));
+				$popover.find("[data-kind]").on("click", (e) => this.choose_attachment_kind($(e.currentTarget).data("kind")));
 				return;
 			}
 			if (this.step === "location") {
-				$p.html(`<form class="sanad-am__form" novalidate>
-					<span class="sanad-am__title">${ICONS.location}${esc(__("Location"))}</span>
-					<span class="sanad-am__row">
-						<label class="sanad-am__fld"><span>${esc(__("Latitude"))}</span><input type="number" step="any" name="latitude" dir="ltr" required /></label>
-						<label class="sanad-am__fld"><span>${esc(__("Longitude"))}</span><input type="number" step="any" name="longitude" dir="ltr" required /></label>
+				$popover.html(`<form class="whatsapp-kit-attach-menu__form" novalidate>
+					<span class="whatsapp-kit-attach-menu__title">${ICONS.location}${escape_html(__("Location"))}</span>
+					<span class="whatsapp-kit-attach-menu__row">
+						<label class="whatsapp-kit-attach-menu__labelled-field"><span>${escape_html(__("Latitude"))}</span><input type="number" step="any" name="latitude" dir="ltr" required /></label>
+						<label class="whatsapp-kit-attach-menu__labelled-field"><span>${escape_html(__("Longitude"))}</span><input type="number" step="any" name="longitude" dir="ltr" required /></label>
 					</span>
-					<label class="sanad-am__fld"><span>${esc(__("Place name"))}</span><input type="text" name="name" /></label>
-					${navigator.geolocation ? `<button type="button" class="sanad-am__link" data-here>${esc(__("Use my current location"))}</button>` : ""}
-					<span class="sanad-am__error" role="alert"></span>
-					<span class="sanad-am__actions">
-						<button type="button" class="sanad-am__btn" data-back>${esc(__("Back"))}</button>
-						<button type="submit" class="sanad-am__btn sanad-am__btn--pri">${esc(__("Add the location"))}</button>
+					<label class="whatsapp-kit-attach-menu__labelled-field"><span>${escape_html(__("Place name"))}</span><input type="text" name="name" /></label>
+					${navigator.geolocation ? `<button type="button" class="whatsapp-kit-attach-menu__link" data-here>${escape_html(__("Use my current location"))}</button>` : ""}
+					<span class="whatsapp-kit-attach-menu__error" role="alert"></span>
+					<span class="whatsapp-kit-attach-menu__actions">
+						<button type="button" class="whatsapp-kit-attach-menu__button" data-back>${escape_html(__("Back"))}</button>
+						<button type="submit" class="whatsapp-kit-attach-menu__button whatsapp-kit-attach-menu__button--primary">${escape_html(__("Add the location"))}</button>
 					</span>
 				</form>`);
-				const $f = $p.find("form");
-				$p.find("[data-back]").on("click", () => this.go("menu"));
-				$p.find("[data-here]").on("click", () =>
+				const $f = $popover.find("form");
+				$popover.find("[data-back]").on("click", () => this.show_menu_step("menu"));
+				$popover.find("[data-here]").on("click", () =>
 					navigator.geolocation.getCurrentPosition(
 						(pos) => {
 							$f.find("[name=latitude]").val(pos.coords.latitude.toFixed(6));
 							$f.find("[name=longitude]").val(pos.coords.longitude.toFixed(6));
 						},
-						() => $f.find(".sanad-am__error").text(__("The browser did not share the location."))
+						() => $f.find(".whatsapp-kit-attach-menu__error").text(__("The browser did not share the location."))
 					)
 				);
 				$f.on("submit", (e) => {
@@ -179,31 +179,31 @@ frappe.provide("sanad.ui");
 					const lat = parseFloat($f.find("[name=latitude]").val());
 					const lng = parseFloat($f.find("[name=longitude]").val());
 					if (!(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180)) {
-						$f.find(".sanad-am__error").text(__("Enter a latitude between -90 and 90 and a longitude between -180 and 180."));
+						$f.find(".whatsapp-kit-attach-menu__error").text(__("Enter a latitude between -90 and 90 and a longitude between -180 and 180."));
 						return;
 					}
 					const name = cstr($f.find("[name=name]").val()).trim();
-					this.done({ kind: "location", location: { latitude: lat, longitude: lng, name: name || null } });
+					this.close_and_send_pick({ kind: "location", location: { latitude: lat, longitude: lng, name: name || null } });
 				});
 				return;
 			}
 			if (this.step === "contact") {
-				$p.html(`<div class="sanad-am__form">
-					<span class="sanad-am__title">${ICONS.contact}${esc(__("Contact card"))}</span>
-					<input type="text" class="sanad-am__search" data-sanad-bare placeholder="${esc(__("Search by name or number…"))}" aria-label="${esc(__("Search by name or number"))}" autocomplete="off" />
-					<span class="sanad-am__results" role="listbox"><span class="sanad-am__none">${esc(__("Loading…"))}</span></span>
-					<span class="sanad-am__actions"><button type="button" class="sanad-am__btn" data-back>${esc(__("Back"))}</button></span>
+				$popover.html(`<div class="whatsapp-kit-attach-menu__form">
+					<span class="whatsapp-kit-attach-menu__title">${ICONS.contact}${escape_html(__("Contact card"))}</span>
+					<input type="text" class="whatsapp-kit-attach-menu__search" data-whatsapp-bare placeholder="${escape_html(__("Search by name or number…"))}" aria-label="${escape_html(__("Search by name or number"))}" autocomplete="off" />
+					<span class="whatsapp-kit-attach-menu__results" role="listbox"><span class="whatsapp-kit-attach-menu__none">${escape_html(__("Loading…"))}</span></span>
+					<span class="whatsapp-kit-attach-menu__actions"><button type="button" class="whatsapp-kit-attach-menu__button" data-back>${escape_html(__("Back"))}</button></span>
 				</div>`);
-				$p.find("[data-back]").on("click", () => this.go("menu"));
-				const $q = $p.find(".sanad-am__search");
-				const $r = $p.find(".sanad-am__results");
-				const load = sanad.ui.debounce(async () => {
+				$popover.find("[data-back]").on("click", () => this.show_menu_step("menu"));
+				const $q = $popover.find(".whatsapp-kit-attach-menu__search");
+				const $r = $popover.find(".whatsapp-kit-attach-menu__results");
+				const load = whatsapp.ui.debounce(async () => {
 					const q = cstr($q.val());
 					let rows = [];
 					try {
 						rows = (await this.opts.search_contacts(q)) || [];
 					} catch (err) {
-						$r.html(`<span class="sanad-am__none">${esc(err && err.message ? err.message : __("Something went wrong. Please try again."))}</span>`);
+						$r.html(`<span class="whatsapp-kit-attach-menu__none">${escape_html(err && err.message ? err.message : __("Something went wrong. Please try again."))}</span>`);
 						return;
 					}
 					if (cstr($q.val()) !== q) return;
@@ -211,13 +211,13 @@ frappe.provide("sanad.ui");
 						rows.length
 							? rows
 									.slice(0, 20)
-									.map((c) => `<button type="button" role="option" class="sanad-am__opt" data-name="${esc(c.name)}">${esc(c.label || c.name)}<span dir="ltr">${esc(sanad.ui.phone(c.phone || ""))}</span></button>`)
+									.map((c) => `<button type="button" role="option" class="whatsapp-kit-attach-menu__option" data-name="${escape_html(c.name)}">${escape_html(c.label || c.name)}<span dir="ltr">${escape_html(whatsapp.ui.phone(c.phone || ""))}</span></button>`)
 									.join("")
-							: `<span class="sanad-am__none">${esc(__("No matching contacts."))}</span>`
+							: `<span class="whatsapp-kit-attach-menu__none">${escape_html(__("No matching contacts."))}</span>`
 					);
 					$r.find("[data-name]").on("click", (e) => {
 						const c = rows.find((x) => x.name === $(e.currentTarget).data("name"));
-						if (c) this.done({ kind: "contact", contact: c.name, contact_label: c.label || c.name });
+						if (c) this.close_and_send_pick({ kind: "contact", contact: c.name, contact_label: c.label || c.name });
 					});
 				}, 220);
 				$q.on("input", load).trigger("focus");
@@ -225,7 +225,7 @@ frappe.provide("sanad.ui");
 			}
 		}
 
-		go(step) {
+		show_menu_step(step) {
 			this.step = step;
 			this.render();
 			this.place($(this.opts.anchor));
@@ -233,8 +233,8 @@ frappe.provide("sanad.ui");
 			first && first.focus();
 		}
 
-		pick(kind) {
-			if (kind === "location" || kind === "contact") return this.go(kind);
+		choose_attachment_kind(kind) {
+			if (kind === "location" || kind === "contact") return this.show_menu_step(kind);
 			if (kind === "buttons" || kind === "list") return this.define(kind);
 			const spec = KINDS.find((k) => k.key === kind);
 			this.close();
@@ -305,11 +305,11 @@ frappe.provide("sanad.ui");
 			d.show();
 		}
 
-		done(value) {
+		close_and_send_pick(value) {
 			this.close(true);
 			this.opts.on_pick(value);
 		}
 	}
 
-	sanad.ui.AttachMenu = AttachMenu;
+	whatsapp.ui.AttachMenu = AttachMenu;
 })();

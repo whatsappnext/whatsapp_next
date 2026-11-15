@@ -48,16 +48,16 @@ def relative_date(value: str):
 		return today.replace(month=1, day=1)
 	if word == "year_end":
 		return today.replace(month=12, day=31)
-	m = _REL_RE.match(word)
-	if m:
-		n, unit = int(m.group(1)), m.group(2).lower()
+	offset_match = _REL_RE.match(word)
+	if offset_match:
+		offset_amount, unit = int(offset_match.group(1)), offset_match.group(2).lower()
 		if unit == "d":
-			return add_days(today, n)
+			return add_days(today, offset_amount)
 		if unit == "w":
-			return add_days(today, 7 * n)
+			return add_days(today, 7 * offset_amount)
 		if unit == "m":
-			return add_months(today, n)
-		return add_months(today, 12 * n)
+			return add_months(today, offset_amount)
+		return add_months(today, 12 * offset_amount)
 	return None
 
 
@@ -74,7 +74,7 @@ def ask_specs(command) -> dict[str, list[tuple[str, str]]]:
 			part = part.strip()
 			if not part:
 				continue
-			value, _eq, label = part.partition("=")
+			value, _equals_sign, label = part.partition("=")
 			choices.append((value.strip(), (label or value).strip()))
 		out[key.strip()] = choices
 	return out
@@ -93,7 +93,7 @@ def chat_key(inbound) -> str | None:
 	return get("phone_e164") or get("sender_jid") or get("jid")
 
 
-def load(device: str | None, chat: str | None) -> dict[str, Any] | None:
+def load_question_session(device: str | None, chat: str | None) -> dict[str, Any] | None:
 	"""The open question session of this device and chat, or None."""
 	raw = frappe.cache.get_value(_cache_key(device, chat))
 	if not raw:
@@ -104,14 +104,14 @@ def load(device: str | None, chat: str | None) -> dict[str, Any] | None:
 		return None
 
 
-def save(device: str | None, chat: str | None, session: dict[str, Any]) -> None:
+def save_question_session(device: str | None, chat: str | None, session: dict[str, Any]) -> None:
 	"""Keep a question session for `SESSION_TTL` seconds."""
 	frappe.cache.set_value(
 		_cache_key(device, chat), json.dumps(session, default=str), expires_in_sec=SESSION_TTL
 	)
 
 
-def clear(device: str | None, chat: str | None) -> None:
+def clear_question_session(device: str | None, chat: str | None) -> None:
 	"""End the question session of this device and chat."""
 	frappe.cache.delete_value(_cache_key(device, chat))
 
@@ -128,11 +128,11 @@ DATE_PRESETS = (
 )
 
 
-def _label(spec: dict[str, Any]) -> str:
+def _get_input_label(spec: dict[str, Any]) -> str:
 	return _(spec.get("label") or spec["key"])
 
 
-def options(command, spec: dict[str, Any]) -> list[tuple[str, str]]:
+def get_input_answer_options(command, spec: dict[str, Any]) -> list[tuple[str, str]]:
 	"""The ready answers offered for an input, `[(value, label)]`: the command's own choices, or
 	the date presets for a date input without them."""
 	choices = ask_specs(command).get(spec["key"]) or _own_choices(spec)
@@ -153,12 +153,16 @@ def _own_choices(spec: dict[str, Any]) -> list[tuple[str, str]]:
 def text_question(command, spec: dict[str, Any]) -> dict[str, Any]:
 	"""The same question as plain text, for a plan without buttons and lists: the ready answers
 	numbered, answered by their number (`numbered_answer`) or by typing the value."""
-	label = _label(spec)
+	label = _get_input_label(spec)
 	kind = (spec.get("type") or "str").lower()
-	lines = [_("Choose {0}").format(label) if options(command, spec) else _("Type {0}").format(label)]
-	lines += [f"{i}. {t}" for i, (_v, t) in enumerate(options(command, spec), start=1)]
+	lines = [
+		_("Choose {0}").format(label)
+		if get_input_answer_options(command, spec)
+		else _("Type {0}").format(label)
+	]
+	lines += [f"{i}. {t}" for i, (_v, t) in enumerate(get_input_answer_options(command, spec), start=1)]
 	hint = _("e.g. 2026-10-31") if kind == "date" else _("a number") if kind == "int" else ""
-	if options(command, spec):
+	if get_input_answer_options(command, spec):
 		lines.append(
 			_("Reply with the option number, or type another value") + (f" ({hint})" if hint else "")
 		)
@@ -172,13 +176,29 @@ def numbered_answer(command, spec: dict[str, Any], raw: str) -> str:
 	"""A typed answer to `text_question`: an option's number or label becomes its value; anything
 	else is kept as typed."""
 	answer = cstr(raw).strip()
-	offered = options(command, spec)
+	offered = get_input_answer_options(command, spec)
 	for value, label in offered:
 		if answer.casefold() == cstr(label).strip().casefold():
 			return value
 	if answer.isdigit() and 1 <= int(answer) <= len(offered):
 		return offered[int(answer) - 1][0]
 	return answer
+
+
+def _list_prompt(title: str, label: str, rows: list[dict]) -> dict:
+	"""The question as a WhatsApp list: one section named after the input, its `rows` to pick from."""
+	return {
+		"output_key": "prompt",
+		"message_type": "List",
+		"body": _("Choose {0}").format(label),
+		"interactive": {
+			"title": title,
+			"text": _("Choose {0}").format(label),
+			"button_text": _("Choose"),
+			"sections": [{"title": label, "rows": rows}],
+		},
+		"attachment": None,
+	}
 
 
 def question(command, spec: dict[str, Any]) -> dict[str, Any]:
@@ -189,7 +209,7 @@ def question(command, spec: dict[str, Any]) -> dict[str, Any]:
 
 	if not plan_features.interactive():
 		return text_question(command, spec)
-	label = _label(spec)
+	label = _get_input_label(spec)
 	kind = (spec.get("type") or "str").lower()
 	choices = ask_specs(command).get(spec["key"]) or _own_choices(spec)
 	title = _(command.get("title") or command.get("code") or "")
@@ -197,18 +217,7 @@ def question(command, spec: dict[str, Any]) -> dict[str, Any]:
 		rows = [{"id": ARG_PREFIX + v, "title": _(t)} for v, t in DATE_PRESETS]
 		rows.append({"id": TYPE_IT, "title": _("Another date"), "description": _("Type it, e.g. 2026-10-31")})
 		rows.append({"id": CANCEL, "title": _("Cancel")})
-		return {
-			"output_key": "prompt",
-			"message_type": "List",
-			"body": _("Choose {0}").format(label),
-			"interactive": {
-				"title": title,
-				"text": _("Choose {0}").format(label),
-				"button_text": _("Choose"),
-				"sections": [{"title": label, "rows": rows}],
-			},
-			"attachment": None,
-		}
+		return _list_prompt(title, label, rows)
 	if choices:
 		if len(choices) <= 2:
 			buttons = [{"type": "reply", "id": ARG_PREFIX + v, "text": t} for v, t in choices]
@@ -223,18 +232,7 @@ def question(command, spec: dict[str, Any]) -> dict[str, Any]:
 		rows = [{"id": ARG_PREFIX + v, "title": t} for v, t in choices]
 		rows.append({"id": TYPE_IT, "title": _("Another value"), "description": _("Type it")})
 		rows.append({"id": CANCEL, "title": _("Cancel")})
-		return {
-			"output_key": "prompt",
-			"message_type": "List",
-			"body": _("Choose {0}").format(label),
-			"interactive": {
-				"title": title,
-				"text": _("Choose {0}").format(label),
-				"button_text": _("Choose"),
-				"sections": [{"title": label, "rows": rows}],
-			},
-			"attachment": None,
-		}
+		return _list_prompt(title, label, rows)
 	hint = _("a number") if kind == "int" else _("a date, e.g. 2026-10-31") if kind == "date" else ""
 	text = _("Type {0}").format(label) + (f" ({hint})" if hint else "")
 	return {
@@ -254,7 +252,7 @@ def type_it(spec: dict[str, Any]) -> dict[str, Any]:
 	"""After "another date / value": ask for it as text."""
 	kind = (spec.get("type") or "str").lower()
 	hint = _("e.g. 2026-10-31") if kind == "date" else _("a number") if kind == "int" else ""
-	text = _("Type {0}").format(_label(spec)) + (f" ({hint})" if hint else "")
+	text = _("Type {0}").format(_get_input_label(spec)) + (f" ({hint})" if hint else "")
 	return {"output_key": "prompt", "message_type": "Text", "body": text, "attachment": None}
 
 

@@ -1,7 +1,7 @@
 // MessageComposer — an editor, not a viewer: a rail of messages beside one writing surface, with
 // the preview as a panel the writer may fold away. Espresso tokens only; logical properties only.
 
-.sanad-mc-host {
+.whatsapp-kit-message-composer-host {
 	> .grid-custom-buttons,
 	> .form-grid-container,
 	> .grid-footer,
@@ -12,18 +12,18 @@
 	> .small.text-muted { display: none; }
 }
 
-.sanad-mc {
+.whatsapp-kit-message-composer {
 	display: flex;
 	flex-direction: column;
-	gap: var(--sanad-gap-md);
-	margin-block: var(--sanad-gap-sm) var(--sanad-gap-lg);
+	gap: var(--whatsapp-kit-gap-md);
+	margin-block: var(--whatsapp-kit-gap-sm) var(--whatsapp-kit-gap-lg);
 	container-type: inline-size;
 
 	&__head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: var(--sanad-gap-sm) var(--sanad-gap-md);
+		gap: var(--whatsapp-kit-gap-sm) var(--whatsapp-kit-gap-md);
 	}
 	&__title {
 		margin: 0;
@@ -39,7 +39,7 @@
 	&__hint { font-size: var(--text-xs, 11px); color: var(--ink-gray-5); }
 
 	// both "Add message" buttons open the same list, so both wear the caret that says so
-	&__addwrap {
+	&__add-wrap {
 		position: relative;
 		display: inline-flex;
 	}
@@ -49,32 +49,32 @@
 		gap: 6px;
 		font-weight: 600;
 	}
-	&__railadd {
+	&__rail-add {
 		position: relative;
-		margin-block-start: var(--sanad-gap-sm);
+		margin-block-start: var(--whatsapp-kit-gap-sm);
 	}
-	&__railaddbtn {
+	&__rail-add-button {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
 		inline-size: 100%;
 		min-block-size: 28px;
-		padding-inline: var(--sanad-gap-sm);
+		padding-inline: var(--whatsapp-kit-gap-sm);
 		border: 1px dashed var(--outline-gray-2);
-		border-radius: var(--sanad-radius);
+		border-radius: var(--whatsapp-kit-radius);
 		background: transparent;
 		color: var(--ink-gray-6);
 		font: inherit;
 		font-size: var(--text-sm, 12px);
 		font-weight: 600;
 		cursor: pointer;
-		transition: background var(--sanad-motion), border-color var(--sanad-motion), color var(--sanad-motion);
+		transition: background var(--whatsapp-kit-motion), border-color var(--whatsapp-kit-motion), color var(--whatsapp-kit-motion);
 
 		&:hover:not([disabled]) {
-			border-color: var(--sanad-accent-outline);
-			background: var(--sanad-accent-soft);
-			color: var(--sanad-accent-ink);
+			border-color: var(--whatsapp-kit-accent-outline);
+			background: var(--whatsapp-kit-accent-soft);
+			color: var(--whatsapp-kit-accent-ink);
 		}
 		&[disabled] { opacity: 0.45; cursor: default; }
 	}
@@ -84,9 +84,9 @@
 	&__split {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: var(--sanad-gap-md);
-		border: var(--sanad-border);
-		border-radius: var(--sanad-radius);
+		gap: var(--whatsapp-kit-gap-md);
+		border: var(--whatsapp-kit-border);
+		border-radius: var(--whatsapp-kit-radius);
 		background: var(--surface-base);
 		overflow: hidden;
 
@@ -97,38 +97,38 @@
 	}
 
 	&__rail {
-		padding: var(--sanad-gap-sm);
+		padding: var(--whatsapp-kit-gap-sm);
 		background: var(--surface-gray-1);
 
 		@container (min-width: 760px) {
-			border-inline-end: var(--sanad-border);
+			border-inline-end: var(--whatsapp-kit-border);
 			min-block-size: 360px;
 		}
 	}
-	&__raillist {
+	&__rail-list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
 	}
-	&__railitem {
+	&__rail-item {
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		padding: 6px var(--sanad-gap-sm) var(--sanad-gap-sm);
+		padding: 6px var(--whatsapp-kit-gap-sm) var(--whatsapp-kit-gap-sm);
 		border: 1px solid transparent;
-		border-radius: var(--sanad-radius);
+		border-radius: var(--whatsapp-kit-radius);
 		background: var(--surface-base);
 
 		&:hover { border-color: var(--outline-gray-1); }
 		&--on {
-			border-color: var(--sanad-accent-outline);
-			background: var(--sanad-accent-soft);
+			border-color: var(--whatsapp-kit-accent-outline);
+			background: var(--whatsapp-kit-accent-soft);
 		}
-		&--problem .sanad-mc__raildot { background: var(--ink-amber-7); }
+		&--problem .whatsapp-kit-message-composer__rail-dot { background: var(--ink-amber-7); }
 	}
-	&__railtop {
+	&__rail-top {
 		display: flex;
 		align-items: center;
 		gap: 6px;
@@ -138,7 +138,7 @@
 	// is what a screen reader should read as the row's name — and reaches over the whole row with a
 	// stretched pseudo-element, so a click anywhere on the card selects it. The row's own verbs are
 	// lifted above that overlay so they still get their clicks.
-	&__railbtn {
+	&__rail-button {
 		display: block;
 		inline-size: 100%;
 		min-inline-size: 0;
@@ -156,12 +156,12 @@
 			border-radius: inherit;
 		}
 	}
-	&__railtop &__railactions,
-	&__railtop &__raildot {
+	&__rail-top &__rail-actions,
+	&__rail-top &__rail-dot {
 		position: relative;
 		z-index: 1;
 	}
-	&__railtype {
+	&__rail-type {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
@@ -177,7 +177,7 @@
 
 		.icon { flex: none; }
 	}
-	&__railline {
+	&__rail-line {
 		display: block;
 		font-size: var(--text-sm, 12px);
 		line-height: 1.55;
@@ -187,7 +187,7 @@
 		white-space: nowrap;
 		unicode-bidi: plaintext;
 	}
-	&__raildot {
+	&__rail-dot {
 		inline-size: 7px;
 		block-size: 7px;
 		border-radius: 50%;
@@ -207,29 +207,29 @@
 		font-weight: 700;
 		flex: none;
 	}
-	&__railitem--on &__order {
-		background: var(--sanad-accent);
-		color: var(--sanad-accent-on);
+	&__rail-item--on &__order {
+		background: var(--whatsapp-kit-accent);
+		color: var(--whatsapp-kit-accent-on);
 	}
-	&__railactions {
+	&__rail-actions {
 		display: flex;
 		align-items: center;
 		gap: 0;
 		margin-inline-start: auto;
 		opacity: 0;
-		transition: opacity var(--sanad-motion);
+		transition: opacity var(--whatsapp-kit-motion);
 	}
-	&__railitem:hover &__railactions,
-	&__railitem--on &__railactions,
-	&__railitem:focus-within &__railactions { opacity: 1; }
+	&__rail-item:hover &__rail-actions,
+	&__rail-item--on &__rail-actions,
+	&__rail-item:focus-within &__rail-actions { opacity: 1; }
 
 	// a finger cannot hover: on touch the verbs of a row are simply there
 	@media (hover: none) {
-		&__railactions { opacity: 1; }
+		&__rail-actions { opacity: 1; }
 	}
 
 	// the wait between two messages, written on the rail
-	&__railwait {
+	&__rail-wait {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -258,10 +258,10 @@
 		cursor: pointer;
 		white-space: nowrap;
 
-		&:hover { border-color: var(--sanad-accent-outline); color: var(--sanad-accent-ink); }
+		&:hover { border-color: var(--whatsapp-kit-accent-outline); color: var(--whatsapp-kit-accent-ink); }
 	}
 
-	&__icon-btn {
+	&__icon-button {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -269,7 +269,7 @@
 		block-size: 22px;
 		padding: 0;
 		border: 0;
-		border-radius: var(--sanad-radius);
+		border-radius: var(--whatsapp-kit-radius);
 		background: none;
 		color: var(--ink-gray-5);
 		cursor: pointer;
@@ -281,15 +281,15 @@
 	// ---- the editor ----------------------------------------------------------------------------
 
 	&__editor {
-		padding: var(--sanad-gap-lg);
+		padding: var(--whatsapp-kit-gap-lg);
 		min-inline-size: 0;
 	}
-	&__etop {
+	&__editor-top {
 		display: flex;
 		align-items: center;
-		gap: var(--sanad-gap-sm);
+		gap: var(--whatsapp-kit-gap-sm);
 		flex-wrap: wrap;
-		margin-block-end: var(--sanad-gap-md);
+		margin-block-end: var(--whatsapp-kit-gap-md);
 	}
 	&__toggle-preview {
 		display: inline-flex;
@@ -298,7 +298,7 @@
 		margin-inline-start: auto;
 		padding: 4px 8px;
 		border: 1px solid var(--outline-gray-1);
-		border-radius: var(--sanad-radius);
+		border-radius: var(--whatsapp-kit-radius);
 		background: var(--surface-base);
 		color: var(--ink-gray-6);
 		font-size: var(--text-xs, 11px);
@@ -309,14 +309,14 @@
 
 	// ---- what this message is ------------------------------------------------------------------
 
-	&__typewrap {
+	&__type-wrap {
 		position: relative;
 		display: inline-flex;
 	}
-	&__typepick {
+	&__type-picker {
 		display: inline-flex;
 		align-items: center;
-		gap: var(--sanad-gap-sm);
+		gap: var(--whatsapp-kit-gap-sm);
 		min-block-size: 36px;
 		padding-block: 4px;
 		padding-inline: 10px 8px;
@@ -326,19 +326,19 @@
 		font: inherit;
 		text-align: start;
 		cursor: pointer;
-		transition: border-color var(--sanad-motion), background var(--sanad-motion);
+		transition: border-color var(--whatsapp-kit-motion), background var(--whatsapp-kit-motion);
 
 		&:hover:not([disabled]) {
-			border-color: var(--sanad-accent-outline);
-			background: var(--sanad-accent-soft);
+			border-color: var(--whatsapp-kit-accent-outline);
+			background: var(--whatsapp-kit-accent-soft);
 		}
 		&[aria-expanded="true"] {
-			border-color: var(--sanad-accent-outline);
-			background: var(--sanad-accent-soft);
+			border-color: var(--whatsapp-kit-accent-outline);
+			background: var(--whatsapp-kit-accent-soft);
 		}
 		&[disabled] { cursor: default; background: var(--surface-gray-1); }
 	}
-	&__typepick-icon {
+	&__type-picker-icon {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -346,16 +346,16 @@
 		block-size: 28px;
 		flex: none;
 		border-radius: 8px;
-		background: var(--sanad-accent-soft);
-		color: var(--sanad-accent-ink);
+		background: var(--whatsapp-kit-accent-soft);
+		color: var(--whatsapp-kit-accent-ink);
 	}
-	&__typepick-text {
+	&__type-picker-text {
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
 		min-inline-size: 0;
 	}
-	&__typepick-caption {
+	&__type-picker-caption {
 		font-size: 11px;
 		font-weight: 600;
 		letter-spacing: 0.03em;
@@ -363,20 +363,20 @@
 		color: var(--ink-gray-5);
 		line-height: 1.2;
 	}
-	&__typepick-name {
+	&__type-picker-name {
 		font-size: var(--text-sm, 13px);
 		font-weight: 600;
 		color: var(--ink-gray-9);
 		line-height: 1.3;
 	}
-	&__typepick-caret {
+	&__type-picker-caret {
 		display: inline-flex;
 		flex: none;
 		color: var(--ink-gray-5);
 	}
 
 	// the list of what else it could be: one shelf per intent, one line per type
-	&__typemenu {
+	&__type-menu {
 		position: absolute;
 		inset-block-start: calc(100% + 4px);
 		inset-inline-start: 0;
@@ -385,40 +385,40 @@
 		max-inline-size: calc(100vw - 32px);
 		max-block-size: min(76vh, 520px);
 		overflow-y: auto;
-		padding: var(--sanad-gap-xs);
-		border: var(--sanad-border);
-		border-radius: var(--sanad-radius-lg);
+		padding: var(--whatsapp-kit-gap-xs);
+		border: var(--whatsapp-kit-border);
+		border-radius: var(--whatsapp-kit-radius-lg);
 		background: var(--surface-base);
 		box-shadow: var(--shadow-lg);
 	}
-	&__typegroup {
-		margin: var(--sanad-gap-sm) 0 2px;
-		padding-inline: var(--sanad-gap-sm);
+	&__type-group {
+		margin: var(--whatsapp-kit-gap-sm) 0 2px;
+		padding-inline: var(--whatsapp-kit-gap-sm);
 		font-size: 11px;
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 		color: var(--ink-gray-5);
 
-		&:first-child { margin-block-start: var(--sanad-gap-xs); }
+		&:first-child { margin-block-start: var(--whatsapp-kit-gap-xs); }
 	}
-	&__typeopt {
+	&__type-option {
 		display: flex;
 		align-items: flex-start;
-		gap: var(--sanad-gap-sm);
+		gap: var(--whatsapp-kit-gap-sm);
 		inline-size: 100%;
-		padding: 7px var(--sanad-gap-sm);
+		padding: 7px var(--whatsapp-kit-gap-sm);
 		border: 0;
-		border-radius: var(--sanad-radius);
+		border-radius: var(--whatsapp-kit-radius);
 		background: none;
 		font: inherit;
 		text-align: start;
 		cursor: pointer;
 
 		&:hover { background: var(--surface-gray-1); }
-		&--on { background: var(--sanad-accent-soft); }
+		&--on { background: var(--whatsapp-kit-accent-soft); }
 	}
-	&__typeopt-icon {
+	&__type-option-icon {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -429,47 +429,47 @@
 		background: var(--surface-gray-2);
 		color: var(--ink-gray-6);
 	}
-	&__typeopt--on &__typeopt-icon {
-		background: var(--sanad-accent);
-		color: var(--sanad-accent-on);
+	&__type-option--on &__type-option-icon {
+		background: var(--whatsapp-kit-accent);
+		color: var(--whatsapp-kit-accent-on);
 	}
-	&__typeopt-text {
+	&__type-option-text {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
 		flex: 1;
 		min-inline-size: 0;
 	}
-	&__typeopt-name {
+	&__type-option-name {
 		font-size: var(--text-sm, 13px);
 		font-weight: 600;
 		color: var(--ink-gray-9);
 	}
-	&__typeopt-hint {
+	&__type-option-hint {
 		font-size: var(--text-xs, 11px);
 		color: var(--ink-gray-6);
 		line-height: 1.4;
 		text-wrap: pretty;
 	}
-	&__typeopt-tick {
+	&__type-option-tick {
 		display: inline-flex;
 		flex: none;
-		color: var(--sanad-accent-ink);
+		color: var(--whatsapp-kit-accent-ink);
 	}
 
-	&__egrid {
+	&__editor-grid {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: var(--sanad-gap-lg);
+		gap: var(--whatsapp-kit-gap-lg);
 
 		@container (min-width: 820px) {
 			grid-template-columns: minmax(0, 1fr) clamp(260px, 30%, 340px);
-			&--nopreview { grid-template-columns: minmax(0, 1fr); }
+			&--no-preview { grid-template-columns: minmax(0, 1fr); }
 		}
 	}
-	&__eform {
+	&__editor-form {
 		display: grid;
-		gap: var(--sanad-gap-md);
+		gap: var(--whatsapp-kit-gap-md);
 		min-inline-size: 0;
 	}
 
@@ -500,7 +500,7 @@
 
 		> .clearfix { order: 0; }
 		> .control-input-wrapper { order: 1; }
-		> .sanad-mc__toolbar { order: 2; }
+		> .whatsapp-kit-message-composer__toolbar { order: 2; }
 		.help-box,
 		.description { order: 3; margin-block-start: 6px; }
 
@@ -517,8 +517,8 @@
 		padding: 4px 6px;
 		border: 1px solid var(--outline-gray-2);
 		border-block-start: 0;
-		border-end-start-radius: var(--sanad-radius);
-		border-end-end-radius: var(--sanad-radius);
+		border-end-start-radius: var(--whatsapp-kit-radius);
+		border-end-end-radius: var(--whatsapp-kit-radius);
 		background: var(--surface-gray-1);
 	}
 	&__mark {
@@ -536,8 +536,8 @@
 
 		&:hover { background: var(--surface-base); border-color: var(--outline-gray-1); color: var(--ink-gray-9); }
 	}
-	&__varpick { position: relative; margin-inline-start: auto; }
-	&__varbtn {
+	&__variable-picker { position: relative; margin-inline-start: auto; }
+	&__variable-button {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
@@ -551,9 +551,9 @@
 		font-weight: 600;
 		cursor: pointer;
 
-		&:hover { border-color: var(--sanad-accent-outline); color: var(--sanad-accent-ink); }
+		&:hover { border-color: var(--whatsapp-kit-accent-outline); color: var(--whatsapp-kit-accent-ink); }
 	}
-	&__varmenu {
+	&__variable-menu {
 		position: absolute;
 		inset-inline-end: 0;
 		inset-block-start: calc(100% + 4px);
@@ -562,31 +562,31 @@
 		max-block-size: 260px;
 		overflow-y: auto;
 		padding: 4px;
-		border: var(--sanad-border);
-		border-radius: var(--sanad-radius);
+		border: var(--whatsapp-kit-border);
+		border-radius: var(--whatsapp-kit-radius);
 		background: var(--surface-base);
 		box-shadow: var(--shadow-base);
 	}
-	&__varopt {
+	&__variable-option {
 		display: flex;
 		align-items: baseline;
-		gap: var(--sanad-gap-sm);
+		gap: var(--whatsapp-kit-gap-sm);
 		inline-size: 100%;
 		padding: 6px 8px;
 		border: 0;
-		border-radius: var(--sanad-radius);
+		border-radius: var(--whatsapp-kit-radius);
 		background: none;
 		text-align: start;
 		cursor: pointer;
 
-		&:hover { background: var(--sanad-accent-soft); }
+		&:hover { background: var(--whatsapp-kit-accent-soft); }
 	}
-	&__var-label {
+	&__variable-label {
 		font-size: var(--text-sm, 12px);
 		color: var(--ink-gray-7);
 		white-space: nowrap;
 	}
-	&__var-name {
+	&__variable-name {
 		font-family: var(--font-stack-mono, monospace);
 		font-size: 11px;
 		color: var(--ink-gray-5);
@@ -594,21 +594,21 @@
 	}
 
 	&__more {
-		border-block-start: var(--sanad-border);
-		padding-block-start: var(--sanad-gap-sm);
+		border-block-start: var(--whatsapp-kit-border);
+		padding-block-start: var(--whatsapp-kit-gap-sm);
 
 		> summary {
 			cursor: pointer;
 			font-size: var(--text-sm, 12px);
 			color: var(--ink-gray-6);
-			margin-block-end: var(--sanad-gap-sm);
+			margin-block-end: var(--whatsapp-kit-gap-sm);
 		}
 	}
 
-	&__delayline {
+	&__delay-line {
 		display: flex;
 		align-items: center;
-		gap: var(--sanad-gap-xs);
+		gap: var(--whatsapp-kit-gap-xs);
 		flex-wrap: wrap;
 		font-size: var(--text-sm, 12px);
 		color: var(--ink-gray-6);
@@ -616,15 +616,15 @@
 
 	// ---- the preview ---------------------------------------------------------------------------
 
-	&__epreview {
+	&__editor-preview {
 		display: flex;
 		flex-direction: column;
-		gap: var(--sanad-gap-sm);
+		gap: var(--whatsapp-kit-gap-sm);
 		min-inline-size: 0;
 
 		@container (min-width: 820px) {
 			position: sticky;
-			inset-block-start: var(--sanad-gap-sm);
+			inset-block-start: var(--whatsapp-kit-gap-sm);
 			align-self: start;
 		}
 	}
@@ -641,9 +641,9 @@
 	&__chat {
 		display: flex;
 		justify-content: flex-end;
-		padding: var(--sanad-gap-md);
-		border: var(--sanad-border);
-		border-radius: var(--sanad-radius-lg);
+		padding: var(--whatsapp-kit-gap-md);
+		border: var(--whatsapp-kit-border);
+		border-radius: var(--whatsapp-kit-radius-lg);
 		background-color: var(--surface-gray-2);
 		background-image: repeating-linear-gradient(
 			45deg,
@@ -662,7 +662,7 @@
 		padding: 8px 10px;
 		border-radius: 12px;
 		border-end-end-radius: 4px;
-		background: var(--sanad-accent-soft);
+		background: var(--whatsapp-kit-accent-soft);
 		color: var(--ink-gray-9);
 		font-size: var(--text-sm, 13px);
 		line-height: 1.7;
@@ -676,7 +676,7 @@
 			inset-inline-end: -6px;
 			inline-size: 10px;
 			block-size: 12px;
-			background: var(--sanad-accent-soft);
+			background: var(--whatsapp-kit-accent-soft);
 			clip-path: polygon(0 0, 0 100%, 100% 100%);
 		}
 	}
@@ -693,12 +693,12 @@
 			font-size: 0.92em;
 		}
 	}
-	&__var {
+	&__variable {
 		display: inline-block;
 		padding: 0 5px;
 		border-radius: 4px;
 		background: var(--surface-base);
-		color: var(--sanad-accent-ink);
+		color: var(--whatsapp-kit-accent-ink);
 		font-family: var(--font-stack-mono, monospace);
 		font-size: 0.86em;
 	}

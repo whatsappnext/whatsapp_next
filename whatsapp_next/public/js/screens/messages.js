@@ -10,10 +10,10 @@
 frappe.provide("whatsapp_next.messages");
 frappe.provide("whatsapp_next.screens");
 frappe.provide("whatsapp_next.columns");
-frappe.provide("whatsapp_next.fmt");
+frappe.provide("whatsapp_next.message_formatters");
 
 (function () {
-	const ui = sanad.ui;
+	const ui = whatsapp.ui;
 	const OUT = "WhatsApp Log";
 	const TERMINAL = ["Sent", "Delivered", "Read", "Failed", "Cancelled"];
 	const AGENT_ROLES = ["WhatsApp Agent", "WhatsApp Manager", "System Manager"];
@@ -34,22 +34,22 @@ frappe.provide("whatsapp_next.fmt");
 
 	// ---- formatters -------------------------------------------------------------------------
 
-	const fmt = whatsapp_next.fmt;
+	const message_formatters = whatsapp_next.message_formatters;
 
 	/** Full date and time in the user's format. */
-	fmt.dt = (v) => (v ? frappe.datetime.str_to_user(v) : "");
+	message_formatters.format_datetime = (v) => (v ? frappe.datetime.str_to_user(v) : "");
 
 	/** Table cell: user date + HH:mm, no seconds, as the prototype's time column shows it. */
-	fmt.short = (v) => (v ? moment(frappe.datetime.convert_to_user_tz ? frappe.datetime.convert_to_user_tz(v, false) : v).format(`${frappe.datetime.get_user_date_fmt().toUpperCase()} HH:mm`) : "");
+	message_formatters.format_short_datetime = (v) => (v ? moment(frappe.datetime.convert_to_user_tz ? frappe.datetime.convert_to_user_tz(v, false) : v).format(`${frappe.datetime.get_user_date_fmt().toUpperCase()} HH:mm`) : "");
 
 	/** A badge coloured by a DocType's own indicator rule. */
-	fmt.badge = (doctype, doc, label) => {
+	message_formatters.badge = (doctype, doc, label) => {
 		const ind = ui.indicator_for(doctype, Object.assign({ doctype }, doc));
 		return ui.StatusBadge.html({ label: __(label || ind.label || ""), colour: ind.colour });
 	};
 
 	/** A time cell: left-to-right and tabular, falling back to when the row was created. */
-	fmt.time_cell = (v, doc) => (v || (doc && doc.creation) ? `<span class="sanad-tabular sanad-datalist__date" dir="ltr">${ui.escape(fmt.short(v || doc.creation))}</span>` : "");
+	message_formatters.time_cell = (v, doc) => (v || (doc && doc.creation) ? `<span class="whatsapp-kit-tabular whatsapp-kit-datalist__date" dir="ltr">${ui.escape(message_formatters.format_short_datetime(v || doc.creation))}</span>` : "");
 
 	/** What a failure code means to the person reading it, not to the dispatcher. */
 	const ERROR_TEXT = {
@@ -68,7 +68,7 @@ frappe.provide("whatsapp_next.fmt");
 		unknown: () => __("An unknown error"),
 	};
 	/** `raw` is the provider's own text: shown when the code says nothing more than "unknown". */
-	fmt.error_text = (code, raw) => (code === "unknown" && raw ? raw : ERROR_TEXT[code] ? ERROR_TEXT[code]() : code ? __(code) : raw || "");
+	message_formatters.error_text = (code, raw) => (code === "unknown" && raw ? raw : ERROR_TEXT[code] ? ERROR_TEXT[code]() : code ? __(code) : raw || "");
 
 	// ---- columns every message screen shares --------------------------------------------------
 
@@ -80,7 +80,7 @@ frappe.provide("whatsapp_next.fmt");
 		label: label || __("Contact"),
 		sortable,
 		width,
-		format: (v, doc) => `<span class="sanad-datalist__name">${ui.escape(v || fallback || __("Unknown"))}</span>${ui.group_tag(doc && (doc.phone_e164 || doc.jid))}`,
+		format: (v, doc) => `<span class="whatsapp-kit-datalist__name">${ui.escape(v || fallback || __("Unknown"))}</span>${ui.group_tag(doc && (doc.phone_e164 || doc.jid))}`,
 		sub: (doc) => `<span dir="ltr">${ui.escape(ui.phone(doc.phone_e164 || doc.phone || doc.jid || ""))}</span>`,
 	});
 
@@ -88,7 +88,7 @@ frappe.provide("whatsapp_next.fmt");
 	columns.device = ({ label, fieldname = "device" } = {}) => ({ fieldname, type: "avatar", label: label || __("Device"), sortable: true });
 
 	/** When it happened. */
-	columns.time = ({ fieldname, label, sortable = true } = {}) => ({ fieldname, type: "date", label: label || __("Time"), sortable, format: fmt.time_cell });
+	columns.time = ({ fieldname, label, sortable = true } = {}) => ({ fieldname, type: "date", label: label || __("Time"), sortable, format: message_formatters.time_cell });
 
 	/** A flag that only matters when it is on ("On behalf", "Test"). */
 	columns.flag = ({ fieldname, label, colour = "gray" } = {}) => ({
@@ -118,7 +118,7 @@ frappe.provide("whatsapp_next.fmt");
 
 	/** Cancel one outbound message (`doc` needs `name`; `display_name` / `phone_e164` / `status` for the impact rows). */
 	whatsapp_next.messages.cancel = function (doc, after) {
-		return ui.ConfirmDialog.ask({
+		return ui.ConfirmDialog.ask_for_confirmation({
 			title: __("Cancel this message?"),
 			message: __("The message leaves the queue and its status becomes Cancelled."),
 			impact: [
@@ -209,7 +209,7 @@ frappe.provide("whatsapp_next.fmt");
 				}
 			},
 		});
-		d.$wrapper.addClass("sanad-kit");
+		d.$wrapper.addClass("whatsapp-kit");
 		d.show();
 		return d;
 	};
@@ -217,34 +217,34 @@ frappe.provide("whatsapp_next.fmt");
 	/** Timeline rows `{at, text, tone}` from the `messages.get_outbound` payload. */
 	whatsapp_next.messages.timeline_rows = function (doc) {
 		const rows = [];
-		const push = (at, text, tone) => at && rows.push({ at, text, tone });
-		push(doc.creation, __("Created ({0})", [__(doc.source_type || "API")]), "gray");
-		push(doc.queued_at, __("Queued"), "blue");
-		push(doc.scheduled_at, __("Scheduled for {0}", [fmt.dt(doc.scheduled_at)]), "blue");
+		const add_timeline_row = (at, text, tone) => at && rows.push({ at, text, tone });
+		add_timeline_row(doc.creation, __("Created ({0})", [__(doc.source_type || "API")]), "gray");
+		add_timeline_row(doc.queued_at, __("Queued"), "blue");
+		add_timeline_row(doc.scheduled_at, __("Scheduled for {0}", [message_formatters.format_datetime(doc.scheduled_at)]), "blue");
 		const q = doc.timeline && doc.timeline.queue_item;
 		if (q) {
-			push(q.claimed_at, __("Picked up for sending (attempt {0} of {1})", [ui.format_int(q.attempts || 1), ui.format_int(q.max_attempts || 0)]), "blue");
-			push(q.paused_at, __("Paused by {0}: {1}", [q.paused_by || "", q.pause_reason || ""]), "amber");
-			push(q.next_attempt_at, __("Retry scheduled ({0})", [q.last_error_code || q.last_error || ""]), "amber");
-			push(q.deleted_at, __("Removed from the queue by {0}: {1}", [q.deleted_by || "", q.delete_reason || ""]), "red");
+			add_timeline_row(q.claimed_at, __("Picked up for sending (attempt {0} of {1})", [ui.format_integer(q.attempts || 1), ui.format_integer(q.max_attempts || 0)]), "blue");
+			add_timeline_row(q.paused_at, __("Paused by {0}: {1}", [q.paused_by || "", q.pause_reason || ""]), "amber");
+			add_timeline_row(q.next_attempt_at, __("Retry scheduled ({0})", [q.last_error_code || q.last_error || ""]), "amber");
+			add_timeline_row(q.deleted_at, __("Removed from the queue by {0}: {1}", [q.deleted_by || "", q.delete_reason || ""]), "red");
 			// `completed_at` is the hand-over only when the platform took the message: a row given up
 			// before that carries its give-up time there instead
 			const handed = q.status === "Completed" || !!q.platform_queue_id;
-			if (q.status === "Dead Letter") push(handed ? q.modified : q.completed_at || q.modified, __("Gave up after retries: {0}", [q.dead_letter_reason || q.last_error || ""]), "red");
-			if (handed) push(q.completed_at, __("Handed to the sending platform ({0})", [q.platform_queue_id || q.batch_id || ""]), "green");
+			if (q.status === "Dead Letter") add_timeline_row(handed ? q.modified : q.completed_at || q.modified, __("Gave up after retries: {0}", [q.dead_letter_reason || q.last_error || ""]), "red");
+			if (handed) add_timeline_row(q.completed_at, __("Handed to the sending platform ({0})", [q.platform_queue_id || q.batch_id || ""]), "green");
 		}
-		push(doc.sent_at, __("Sent"), "green");
-		push(doc.delivered_at, __("Delivered"), "green");
-		push(doc.read_at, __("Read"), "green");
-		push(doc.held_at, __("Held: {0}", [doc.held_reason || ""]), "amber");
-		push(doc.failed_at, __("Failed: {0}", [fmt.error_text(doc.error_code, doc.error_message)]), "red");
-		push(doc.cancelled_at, __("Cancelled"), "red");
+		add_timeline_row(doc.sent_at, __("Sent"), "green");
+		add_timeline_row(doc.delivered_at, __("Delivered"), "green");
+		add_timeline_row(doc.read_at, __("Read"), "green");
+		add_timeline_row(doc.held_at, __("Held: {0}", [doc.held_reason || ""]), "amber");
+		add_timeline_row(doc.failed_at, __("Failed: {0}", [message_formatters.error_text(doc.error_code, doc.error_message)]), "red");
+		add_timeline_row(doc.cancelled_at, __("Cancelled"), "red");
 		((doc.timeline && doc.timeline.webhook_events) || []).forEach((e) => {
 			const ok = e.status === "Processed";
 			const text = e.error
 				? __("Webhook {0} ({1}): {2}", [e.event_name || "", __(e.status || ""), e.error])
 				: __("Webhook {0} ({1})", [e.event_name || "", __(e.status || "")]);
-			push(e.received_at || e.creation, text, ok ? "gray" : "amber");
+			add_timeline_row(e.received_at || e.creation, text, ok ? "gray" : "amber");
 		});
 		return rows.sort((a, b) => String(a.at).localeCompare(String(b.at)));
 	};
@@ -288,8 +288,8 @@ frappe.provide("whatsapp_next.fmt");
 				const text = d.body || d.caption;
 				$el.html(
 					text
-						? `<div class="sanad-doc__highlight" dir="auto">${ui.Render.value(text, body_df(), d, { density: "card", doctype: OUT })}</div>`
-						: `<div class="sanad-doc__highlight text-muted">${ui.escape(__(d.message_type || "Text"))}</div>`
+						? `<div class="whatsapp-kit-doc__highlight" dir="auto">${ui.Render.value(text, body_df(), d, { density: "card", doctype: OUT })}</div>`
+						: `<div class="whatsapp-kit-doc__highlight text-muted">${ui.escape(__(d.message_type || "Text"))}</div>`
 				);
 			},
 			highlight_label: __("Message"),

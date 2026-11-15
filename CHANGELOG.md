@@ -6,6 +6,52 @@ versions follow [Semantic Versioning](https://semver.org/). Decision numbers (`D
 
 ## [Unreleased]
 
+### Changed
+
+- **One name for the product's own code: `whatsapp`** (owner, 2026-11-11). The component kit's
+  namespace is `whatsapp.ui` / `whatsapp.kit` (was `sanad.ui` / `sanad.kit`); its classes are
+  `whatsapp-kit-*` and its variables `--whatsapp-kit-*` (were `sanad-*`, `--sanad-*`); the screens'
+  classes are `whatsapp-*` and the palette `--whatsapp-*` (were `wa-*`, `--wa-*`), the density
+  class `whatsapp` / `whatsapp--compact` (was `wa` / `wa--compact`). Page routes (`wa-home` …),
+  job ids and the `wa-commands` service user keep their names. The compiled stylesheet is the same
+  rule for rule once the names are mapped back. The "WA Dashboard Block" fixture follows (migrate
+  re-imports it). Another app that called `sanad.ui` of this app now calls `whatsapp.ui`.
+- **Python functions say what they do** (owner, 2026-11-11: a short or generic name cannot be
+  understood, guessed or searched). 230 internal functions renamed from one generic word or an
+  abbreviation to verb + object: `command_router._route` → `_route_inbound_message_to_command`,
+  `audit.log` → `record_audit_entry`, `phone.normalize` → `normalize_phone_to_e164`,
+  `secrets.read` → `read_password_field`, `campaign_runner.start` → `start_campaign` … The
+  published API endpoints (`api/v1/*`), the provider contract and Frappe's hooks keep their names.
+- **JavaScript names say what they do** (same rule). 420 file-local helpers and class methods
+  (`esc` → `escape_html`, `C` / `K` → `campaign_builder` / `campaign_helpers`, `load()` →
+  `load_command()`, `go()` → `go_to_step()` …) and the kit's shared names:
+  `whatsapp.ui.ico` / `btn` / `rule` → `inline_icon_html` / `button_html` / `section_rule_html`,
+  `format_int` → `format_integer`, `uid` → `unique_dom_id`, `ago` → `format_time_ago`,
+  `num_align` → `number_alignment`, `tone` → `tone_for_colour`; `Render.parts.chip` / `fact` /
+  `dl` / `kv` / `code` → `*_html`; `ConfirmDialog.ask` → `ask_for_confirmation`,
+  `ChatThread.format` → `format_whatsapp_text`, `PhoneField.normalize` / `mask` →
+  `normalize_phone_number` / `group_national_digits`, `EmptyState.set` → `set_state`,
+  `FilterBar.set` → `set_filter_value`, `Stepper.go` / `next` / `back` → `go_to_step` /
+  `go_to_next_step` / `go_to_previous_step`; `whatsapp_next.fmt` → `whatsapp_next.message_formatters`.
+  Another app that called the old kit names calls the new ones.
+- **Short variables say what they hold** (same rule). Inside the Python functions: 270 one-letter
+  and abbreviated locals (`s` → `settings`, `p` → `inbound_payload`, `ctx` → `template_context`,
+  query-builder tables `L` / `Q` → `log_table` / `queue_table` …); inside the JavaScript functions:
+  500 (`d` → `draft`, `lv` → `listview`, `n` → `selected_count` …). The test helpers too
+  (`_clean` → `_delete_test_campaigns`, `_t` → `_minutes_after_start` …). Parameters other code
+  passes by name (`at=`, the API's `idx`) keep their names.
+- **Class elements and CSS variables spelled out** (same rule). Inside the class names:
+  `__dd-btn` → `__dropdown-button`, `__td` / `__th` → `__table-cell` / `__table-header-cell`,
+  `__pv` → `__preview`, `__frow` → `__failure-row`, `--pri` → `--primary` …; the palette
+  `--whatsapp-pri` / `-dg` / `-wn` / `-nf` / `-ok` → `--whatsapp-primary` / `-danger` / `-warning` /
+  `-info` / `-success`, with `-s` / `-d` / `-sb` / `-i` → `-soft` / `-deep` / `-soft-border` /
+  `-ink`; `--whatsapp-h` / `fs` / `px` → `--whatsapp-control-height` / `font-size` /
+  `control-padding-inline`; `--whatsapp-kit-ctl-h` → `--whatsapp-kit-control-height` … The compiled
+  stylesheet and script are the same character for character once the names are mapped back. The
+  size scale (`xs` / `sm` / `md` / `lg` / `xl`) and terms such as `kpi`, `qr`, `ltr` keep their names.
+- **Removed** the unused kit components `MetaDialog` and `TreeGroupBy`, and dead code across the
+  app; duplicated code folded into shared helpers (see TECH_DEBT.md, 2026-11-11).
+
 ### Added
 
 - **Who an edit / a deletion is answered for** (Settings → Commands → "Reply on an edit only to",

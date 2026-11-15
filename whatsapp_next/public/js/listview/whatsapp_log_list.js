@@ -5,10 +5,10 @@
 // The drawer, the formatters and the per-message actions live in `js/screens/messages.js`.
 
 (function () {
-	const ui = sanad.ui;
+	const ui = whatsapp.ui;
 	const DT = "WhatsApp Log";
-	const M = whatsapp_next.messages;
-	const is_agent = M.is_agent;
+	const message_helpers = whatsapp_next.messages;
+	const is_agent = message_helpers.is_agent;
 
 	/** Options of a Link filter: the records the log points at, labelled by their title field. */
 	const link_options = (doctype, title_field) => (txt) =>
@@ -27,7 +27,7 @@
 		// every field the table, the badges and the actions read (the columns are explicit below)
 		add_fields: ["status", "phone", "phone_e164", "jid", "recipient_type", "display_name", "contact", "device", "source_type", "campaign", "reference_doctype", "reference_name", "message_type", "error_code", "error_message", "is_simulated", "is_test", "creation", "sent_at", "command", "template"],
 
-		// The one status → colour rule for this DocType; every badge reads it through `sanad.ui.indicator_for`.
+		// The one status → colour rule for this DocType; every badge reads it through `whatsapp.ui.indicator_for`.
 		get_indicator(doc) {
 			const colour = { Sent: "green", Delivered: "green", Read: "green", Queued: "blue", Sending: "blue", Unsent: "orange", Held: "orange", Failed: "red", Cancelled: "red" }[doc.status] || "gray";
 			return [__(doc.status), colour, `status,=,${doc.status}`];
@@ -36,10 +36,10 @@
 		onload(listview) {
 			whatsapp_next.drop_unreadable_link_titles(listview);
 			const refresh = () => listview.refresh();
-			const open = (doc) => M.open_outbound_drawer(doc.name, { after_change: refresh, listview });
+			const open_outbound_message_drawer = (doc) => message_helpers.open_outbound_drawer(doc.name, { after_change: refresh, listview });
 
 			whatsapp_next.screens.message_list(listview, {
-				open,
+				open: open_outbound_message_drawer,
 				realtime: "wa:message:status",
 				search: { fields: ["phone_e164", "display_name", "reference_name"], placeholder: __("Search name, number or document…") },
 				max_inline: 8,
@@ -81,17 +81,17 @@
 					whatsapp_next.columns.device(),
 					// a failed or cancelled message was never sent: no creation time standing in for it
 					Object.assign(whatsapp_next.columns.time({ fieldname: "sent_at", label: __("Sent at") }), {
-						format: (v, doc) => (!v && ["Failed", "Cancelled"].includes(doc.status) ? "—" : whatsapp_next.fmt.time_cell(v, doc)),
+						format: (v, doc) => (!v && ["Failed", "Cancelled"].includes(doc.status) ? "—" : whatsapp_next.message_formatters.time_cell(v, doc)),
 					}),
 					// the reason in words ("The number is not on WhatsApp"), the raw code and text on hover
-					{ fieldname: "error_code", label: __("Error"), sortable: true, format: (v, doc) => (v ? `<span class="sanad-cell__error" dir="auto" title="${ui.escape(doc.error_message || v)}">${ui.escape(whatsapp_next.fmt.error_text(v, doc.error_message))}</span>` : "") },
+					{ fieldname: "error_code", label: __("Error"), sortable: true, format: (v, doc) => (v ? `<span class="whatsapp-kit-cell__error" dir="auto" title="${ui.escape(doc.error_message || v)}">${ui.escape(whatsapp_next.message_formatters.error_text(v, doc.error_message))}</span>` : "") },
 					whatsapp_next.columns.flag({ fieldname: "is_simulated", label: __("On behalf") }),
 				],
 				mobile_columns: ["display_name", "status"],
 				bulk: is_agent()
 					? [
 							{
-								label: (n) => (n ? __("Resend failed ({0})", [ui.format_int(n)]) : __("Resend failed")),
+								label: (n) => (n ? __("Resend failed ({0})", [ui.format_integer(n)]) : __("Resend failed")),
 								method: "messages.resend_many",
 								confirm: (names, docs) => {
 									const failed = docs.filter((d) => d.status === "Failed").length;
@@ -99,8 +99,8 @@
 										? {
 												title: ui.plural(failed, { one: __("Resend {0} failed message?"), other: __("Resend {0} failed messages?") }),
 												impact: [
-													{ label: __("Will be re-queued"), value: ui.format_int(failed), tone: "blue" },
-													{ label: __("Ignored (not failed)"), value: ui.format_int(names.length - failed) },
+													{ label: __("Will be re-queued"), value: ui.format_integer(failed), tone: "blue" },
+													{ label: __("Ignored (not failed)"), value: ui.format_integer(names.length - failed) },
 												],
 												confirm_label: __("Resend"),
 										  }
@@ -112,7 +112,7 @@
 										ui.Toast.info(__("No failed messages in the selection"));
 										return undefined;
 									}
-									return ui.call("messages.resend_many", { names: failed }, { freeze: true, freeze_message: __("Resending {0} messages…", [ui.format_int(failed.length)]) });
+									return ui.call("messages.resend_many", { names: failed }, { freeze: true, freeze_message: __("Resending {0} messages…", [ui.format_integer(failed.length)]) });
 								},
 								success: (r) => ui.plural(r.count || 0, { one: __("{0} message re-queued"), other: __("{0} messages re-queued") }),
 							},

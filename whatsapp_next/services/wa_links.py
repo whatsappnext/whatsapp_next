@@ -18,7 +18,7 @@ from whatsapp_next.services.devices import default_device
 MAX_TEXT = 500
 
 
-def _number(device: str | None) -> str:
+def _get_device_number_digits(device: str | None) -> str:
 	"""The digits of the device's own number (the default device when none is named)."""
 	name = device or default_device()
 	phone = frappe.db.get_value("WhatsApp Device", name, "phone_e164") if name else None
@@ -32,9 +32,9 @@ def _number(device: str | None) -> str:
 	return digits
 
 
-def link(text: str | None = None, device: str | None = None) -> str:
+def build_chat_url(text: str | None = None, device: str | None = None) -> str:
 	"""`https://wa.me/<number>` with `text` typed in the chat when given."""
-	url = f"https://wa.me/{_number(device)}"
+	url = f"https://wa.me/{_get_device_number_digits(device)}"
 	text = (text or "").strip()[:MAX_TEXT]
 	return f"{url}?text={quote(text, safe='')}" if text else url
 
@@ -43,7 +43,7 @@ def qr_data_uri(text: str | None = None, device: str | None = None, scale: int =
 	"""The QR code of `link(text, device)` as a PNG data URI."""
 	import pyqrcode
 
-	code = pyqrcode.create(link(text, device), error="M")
+	code = pyqrcode.create(build_chat_url(text, device), error="M")
 	return "data:image/png;base64," + code.png_as_base64_str(
 		scale=max(1, min(int(scale or 4), 10)), quiet_zone=2
 	)
@@ -52,7 +52,7 @@ def qr_data_uri(text: str | None = None, device: str | None = None, scale: int =
 def whatsapp_link(text: str | None = None, device: str | None = None) -> str:
 	"""Jinja: `{{ whatsapp_link("كشف") }}` → the link (empty when no device has a number)."""
 	try:
-		return link(text, device)
+		return build_chat_url(text, device)
 	except Exception:
 		return ""
 
@@ -61,11 +61,11 @@ def whatsapp_qr(text: str | None = None, device: str | None = None, size: int = 
 	"""Jinja: `{{ whatsapp_qr("كشف " ~ doc.customer) }}` → an `<img>` of the QR code, `size` px wide
 	(nothing when no device has a number, so a print never fails over it)."""
 	try:
-		src = qr_data_uri(text, device)
+		qr_data_uri_value = qr_data_uri(text, device)
 	except Exception:
 		return Markup("")
-	px = max(48, min(int(size or 120), 600))
+	image_width = max(48, min(int(size or 120), 600))
 	alt = escape(_("Scan to chat on WhatsApp"))
 	return Markup(
-		f'<img src="{src}" width="{px}" height="{px}" alt="{alt}" style="image-rendering: pixelated;">'
+		f'<img src="{qr_data_uri_value}" width="{image_width}" height="{image_width}" alt="{alt}" style="image-rendering: pixelated;">'
 	)

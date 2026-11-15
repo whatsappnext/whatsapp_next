@@ -1,4 +1,4 @@
-// sanad.ui.BulkActions — actions over the checked rows of a Desk list, registered in the list's
+// whatsapp.ui.BulkActions — actions over the checked rows of a Desk list, registered in the list's
 // own "Actions" menu (visible once rows are checked). Native mode calls the API once with
 // `{names}`; `per_name` mode loops the names calling the API with `{name}` behind a cancellable
 // progress dialog. Labels carry the count ("Resend 12"), the selection is capped (200 by
@@ -6,7 +6,7 @@
 
 import ui from "../_core/index.js";
 
-sanad.ui.BulkActions = class BulkActions {
+whatsapp.ui.BulkActions = class BulkActions {
 	/**
 	 * @param {Object} opts
 	 * @param {Object} opts.listview — a Desk ListView
@@ -19,24 +19,24 @@ sanad.ui.BulkActions = class BulkActions {
 	constructor(opts = {}) {
 		this.opts = Object.assign({ actions: [], cap: 200 }, opts);
 		this.listview = this.opts.listview;
-		if (!this.listview) throw new Error("sanad.ui.BulkActions: listview is required");
+		if (!this.listview) throw new Error("whatsapp.ui.BulkActions: listview is required");
 		this.doctype = this.listview.doctype;
 		this.items = [];
 		this.mount();
 	}
 
 	mount() {
-		const lv = this.listview;
+		const listview = this.listview;
 		// roles / perm are decided once at mount; `condition(docs)` is re-evaluated per selection
 		const allowed = ui.visible_actions(this.opts.actions.map((a) => Object.assign({}, a, { condition: undefined })), null, this.doctype);
 		this.opts.actions.filter((a) => allowed.some((x) => x.label === a.label && x.method === a.method)).forEach((action) => {
-			const $item = lv.page.add_actions_menu_item(this.label_for(action, 0), () => this.run(action), false);
-			$item.addClass("sanad-bulk__item");
+			const $item = listview.page.add_actions_menu_item(this.label_for(action, 0), () => this.run_bulk_action(action), false);
+			$item.addClass("whatsapp-kit-bulk__item");
 			this.items.push({ action, $item });
 		});
 		// count in the label + condition(docs) whenever the selection changes
-		const orig = lv.on_row_checked.bind(lv);
-		lv.on_row_checked = (...a) => {
+		const orig = listview.on_row_checked.bind(listview);
+		listview.on_row_checked = (...a) => {
 			const r = orig(...a);
 			this.update();
 			return r;
@@ -45,7 +45,7 @@ sanad.ui.BulkActions = class BulkActions {
 
 	label_for(action, count) {
 		if (typeof action.label === "function") return action.label(count);
-		return count ? __("{0} ({1})", [action.label, ui.format_int(count)]) : action.label;
+		return count ? __("{0} ({1})", [action.label, ui.format_integer(count)]) : action.label;
 	}
 
 	update() {
@@ -60,23 +60,23 @@ sanad.ui.BulkActions = class BulkActions {
 			}
 			$item.parent().toggle(show);
 		});
-		if (count && count !== this._last_count) ui.announce(__("{0} selected", [ui.format_int(count)]));
+		if (count && count !== this._last_count) ui.announce(__("{0} selected", [ui.format_integer(count)]));
 		this._last_count = count;
 	}
 
 	// ---- run -------------------------------------------------------------------------------
 
-	async run(action) {
-		const lv = this.listview;
-		const docs = lv.get_checked_items();
+	async run_bulk_action(action) {
+		const listview = this.listview;
+		const docs = listview.get_checked_items();
 		const names = docs.map((d) => d.name);
 		if (!names.length) {
-			sanad.ui.Toast.info(__("Select at least one row first."));
+			whatsapp.ui.Toast.info(__("Select at least one row first."));
 			return;
 		}
 		const cap = action.cap || this.opts.cap;
 		if (names.length > cap) {
-			sanad.ui.Toast.warning(__("Select at most {0} rows at a time ({1} selected).", [ui.format_int(cap), ui.format_int(names.length)]));
+			whatsapp.ui.Toast.warning(__("Select at most {0} rows at a time ({1} selected).", [ui.format_integer(cap), ui.format_integer(names.length)]));
 			return;
 		}
 		let payload = { reason: null };
@@ -84,13 +84,13 @@ sanad.ui.BulkActions = class BulkActions {
 			const spec = typeof action.confirm === "function" ? action.confirm(names, docs) : action.confirm;
 			if (spec) {
 				try {
-					payload = await sanad.ui.ConfirmDialog.ask(spec);
+					payload = await whatsapp.ui.ConfirmDialog.ask_for_confirmation(spec);
 				} catch (e) {
 					return; // cancelled
 				}
 			}
 		}
-		lv.disable_list_update = true;
+		listview.disable_list_update = true;
 		let result;
 		try {
 			if (typeof action.handler === "function") {
@@ -101,21 +101,21 @@ sanad.ui.BulkActions = class BulkActions {
 				result = await this.run_native(action, names, docs, payload);
 			}
 		} catch (err) {
-			lv.disable_list_update = false;
-			if (err && err.message !== "cancelled") sanad.ui.Toast.error(err);
+			listview.disable_list_update = false;
+			if (err && err.message !== "cancelled") whatsapp.ui.Toast.error(err);
 			return;
 		}
-		lv.disable_list_update = false;
+		listview.disable_list_update = false;
 		if (result !== undefined) this.report(action, result, names);
-		lv.clear_checked_items();
-		lv.refresh();
+		listview.clear_checked_items();
+		listview.refresh();
 		if (typeof action.on_done === "function") action.on_done(result, names);
 	}
 
 	run_native(action, names, docs, payload) {
 		const extra = typeof action.args === "function" ? action.args(names, { docs, reason: payload.reason }) : {};
 		const args = Object.assign({ names }, payload.reason ? { reason: payload.reason } : {}, extra || {});
-		return ui.call(action.method, args, { freeze: true, freeze_message: __("Working on {0} rows…", [ui.format_int(names.length)]) });
+		return ui.call(action.method, args, { freeze: true, freeze_message: __("Working on {0} rows…", [ui.format_integer(names.length)]) });
 	}
 
 	/** Sequential loop with a progress dialog: `{count, done[], failed[], cancelled}`. */
@@ -135,30 +135,30 @@ sanad.ui.BulkActions = class BulkActions {
 				dialog.set_secondary_action_label(__("Stopping…"));
 			},
 		});
-		dialog.$wrapper.addClass("sanad-kit sanad-bulk__dialog");
-		const $p = dialog.get_field("progress").$wrapper;
+		dialog.$wrapper.addClass("whatsapp-kit whatsapp-kit-bulk__dialog");
+		const $progress_wrapper = dialog.get_field("progress").$wrapper;
 		// the live region is rendered once; each tick only updates its text and aria-valuenow
-		$p.html(`
-			<div class="sanad-bulk__progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="0" aria-label="${ui.escape(label)}">
-				<div class="sanad-bulk__bar" style="width:0%"></div>
+		$progress_wrapper.html(`
+			<div class="whatsapp-kit-bulk__progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="0" aria-label="${ui.escape(label)}">
+				<div class="whatsapp-kit-bulk__bar" style="width:0%"></div>
 			</div>
-			<div class="sanad-bulk__status" aria-live="polite" aria-atomic="true"></div>`);
-		const $bar = $p.find(".sanad-bulk__bar");
-		const $meter = $p.find(".sanad-bulk__progress");
-		const $status = $p.find(".sanad-bulk__status");
+			<div class="whatsapp-kit-bulk__status" aria-live="polite" aria-atomic="true"></div>`);
+		const $bar = $progress_wrapper.find(".whatsapp-kit-bulk__bar");
+		const $meter = $progress_wrapper.find(".whatsapp-kit-bulk__progress");
+		const $status = $progress_wrapper.find(".whatsapp-kit-bulk__status");
 		const render = (i) => {
 			$bar.css("width", `${Math.round((i / total) * 100)}%`);
 			$meter.attr("aria-valuenow", i);
 			$status.text(
 				result.failed.length
-					? __("{0} of {1} done, {2} failed", [ui.format_int(i), ui.format_int(total), ui.format_int(result.failed.length)])
-					: __("{0} of {1} done", [ui.format_int(i), ui.format_int(total)])
+					? __("{0} of {1} done, {2} failed", [ui.format_integer(i), ui.format_integer(total), ui.format_integer(result.failed.length)])
+					: __("{0} of {1} done", [ui.format_integer(i), ui.format_integer(total)])
 			);
 		};
 		render(0);
 		dialog.show();
 		const extra = (name, doc) => (typeof action.args === "function" ? action.args([name], { docs: doc ? [doc] : [], reason: payload.reason }) : {});
-		const loop = async () => {
+		const call_action_per_name = async () => {
 			for (let i = 0; i < total; i++) {
 				if (cancelled) {
 					result.cancelled = true;
@@ -179,13 +179,13 @@ sanad.ui.BulkActions = class BulkActions {
 			dialog.hide();
 			return result;
 		};
-		return loop();
+		return call_action_per_name();
 	}
 
 	report(action, result, names) {
 		if (typeof action.success === "function") {
 			const msg = action.success(result, names);
-			if (msg) sanad.ui.Toast.success(msg);
+			if (msg) whatsapp.ui.Toast.success(msg);
 			return;
 		}
 		const r = result && typeof result === "object" ? result : {};
@@ -193,12 +193,12 @@ sanad.ui.BulkActions = class BulkActions {
 		const failed = Array.isArray(r.failed) ? r.failed.length : 0;
 		const skipped = Array.isArray(r.skipped) ? r.skipped.length : 0;
 		if (failed) {
-			sanad.ui.Toast.warning(__("{0} done, {1} failed", [ui.format_int(count), ui.format_int(failed)]));
+			whatsapp.ui.Toast.warning(__("{0} done, {1} failed", [ui.format_integer(count), ui.format_integer(failed)]));
 		} else if (r.cancelled) {
-			sanad.ui.Toast.info(__("Stopped after {0} of {1}", [ui.format_int(count), ui.format_int(names.length)]));
+			whatsapp.ui.Toast.info(__("Stopped after {0} of {1}", [ui.format_integer(count), ui.format_integer(names.length)]));
 		} else {
-			const text = typeof action.success === "string" ? action.success : __("{0} of {1} done", [ui.format_int(count), ui.format_int(names.length)]);
-			sanad.ui.Toast.success(skipped ? __("{0} ({1} skipped)", [text, ui.format_int(skipped)]) : text);
+			const text = typeof action.success === "string" ? action.success : __("{0} of {1} done", [ui.format_integer(count), ui.format_integer(names.length)]);
+			whatsapp.ui.Toast.success(skipped ? __("{0} ({1} skipped)", [text, ui.format_integer(skipped)]) : text);
 		}
 	}
 
@@ -208,4 +208,4 @@ sanad.ui.BulkActions = class BulkActions {
 	}
 };
 
-export default sanad.ui.BulkActions;
+export default whatsapp.ui.BulkActions;

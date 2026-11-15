@@ -15,7 +15,7 @@ untouched; the native grid stays in the DOM (it is what saves) and is hidden beh
 ```js
 frappe.ui.form.on("Campaign", {
   refresh(frm) {
-    frm.composer = new sanad.ui.MessageComposer({
+    frm.composer = new whatsapp.ui.MessageComposer({
       frm,
       fieldname: "messages",             // the Table field
       type_field: "message_type",        // Select — drives which fields show
@@ -41,7 +41,7 @@ Options: `frm`, `fieldname`, `type_field` (`"message_type"`), `body_field` (`"bo
 `preview?` (`{method, args(row, frm)}` → `{body, attachment_name, message_type, errors[]}`),
 `variables?` (array of `{name, label}` or `{method, args(frm)}`), `can_edit?()`, `max?`,
 `empty_text?`, `debounce` (500).
-Methods: `refresh()`, `add(type?)`, `duplicate(row)`, `remove(row)`, `move(row, delta)`,
+Methods: `refresh()`, `add_message(type?)`, `duplicate(row)`, `remove_message(row)`, `move_message(row, delta)`,
 `insert_variable(row, name)`, `destroy()`.
 
 A type the host adds to the Select but does not name in the component's own catalogue still works:

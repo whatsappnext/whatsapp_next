@@ -9,7 +9,7 @@
 frappe.provide("whatsapp_next");
 
 (function () {
-	const ui = sanad.ui;
+	const ui = whatsapp.ui;
 	const DT = "WhatsApp Command";
 	// the API gates writes on either role (`_roles.MANAGER`); a System Manager is not a viewer here
 	const MANAGERS = ["WhatsApp Manager", "System Manager"];
@@ -40,11 +40,11 @@ frappe.provide("whatsapp_next");
 	function refresh_all(listview) {
 		if (!listview) return;
 		listview.refresh();
-		listview._sanad_header && listview._sanad_header.refresh(true);
+		listview._whatsapp_header && listview._whatsapp_header.refresh(true);
 	}
 
 	function set_primary(listview) {
-		if (listview._sanad_header || !listview.can_create || frappe.boot.read_only) return;
+		if (listview._whatsapp_header || !listview.can_create || frappe.boot.read_only) return;
 		listview.page.set_primary_action(__("New command"), () => open_modal(listview), "add");
 	}
 
@@ -64,7 +64,7 @@ frappe.provide("whatsapp_next");
 
 	async function restore_defaults(listview, doc) {
 		try {
-			await ui.ConfirmDialog.ask({
+			await ui.ConfirmDialog.ask_for_confirmation({
 				title: __("Restore defaults for {0}?", [doc.code || doc.name]),
 				message: __("Outputs are re-copied from the function and the settings overrides are cleared."),
 				impact: [{ label: __("Function"), value: doc.function || "—" }],
@@ -119,8 +119,8 @@ frappe.provide("whatsapp_next");
 			],
 			stats: [
 				{ key: "total", label: __("Commands"), icon: "es-line-code", count: { doctype: DT }, sub: () => (extra.synonyms == null ? "" : ui.plural(extra.synonyms, { one: __("{0} synonym registered"), other: __("{0} synonyms registered") })) },
-				{ key: "active", label: __("Active"), icon: "es-line-check", tone: "green", count: { doctype: DT, filters: { status: "Active" } }, sub: () => (extra.stopped == null ? "" : __("{0} stopped", [ui.format_int(extra.stopped)])) },
-				{ key: "runs", label: __("Runs (30d)"), icon: "es-line-chart", tone: "blue", method: "commands.list_commands", args: { filters: {}, page: 1, page_length: 200 }, format: (v, r) => ui.format_int((r.rows || []).reduce((n, row) => n + cint(row.run_count_30d), 0)), sub: __("Function calls from an inbound command") },
+				{ key: "active", label: __("Active"), icon: "es-line-check", tone: "green", count: { doctype: DT, filters: { status: "Active" } }, sub: () => (extra.stopped == null ? "" : __("{0} stopped", [ui.format_integer(extra.stopped)])) },
+				{ key: "runs", label: __("Runs (30d)"), icon: "es-line-chart", tone: "blue", method: "commands.list_commands", args: { filters: {}, page: 1, page_length: 200 }, format: (v, r) => ui.format_integer((r.rows || []).reduce((n, row) => n + cint(row.run_count_30d), 0)), sub: __("Function calls from an inbound command") },
 				{
 					key: "unmatched",
 					label: __("Inbound without a match"),
@@ -172,7 +172,7 @@ frappe.provide("whatsapp_next");
 			listview,
 			selectable: true,
 			columns: [
-				{ fieldname: "code", label: __("Command word"), sortable: true, format: (v) => `<strong class="sanad-tabular">${ui.escape(v || "")}</strong>` },
+				{ fieldname: "code", label: __("Command word"), sortable: true, format: (v) => `<strong class="whatsapp-kit-tabular">${ui.escape(v || "")}</strong>` },
 				{
 					fieldname: "function",
 					label: __("Function"),
@@ -192,7 +192,7 @@ frappe.provide("whatsapp_next");
 					format: (v, doc) => `<span class="text-muted">${ui.escape(doc.allowed_group || (doc._extra && doc._extra.parties.length ? doc._extra.parties.join(__(", ")) : __("Everyone")))}</span>`,
 				},
 				{ fieldname: "status", label: __("Status"), type: "status", sortable: true },
-				{ fieldname: "_runs", label: __("Runs (30d)"), type: "number", fieldtype: "Int", sortable: false, format: (v, doc) => ui.format_int(doc._extra ? doc._extra.run_count_30d : 0) },
+				{ fieldname: "_runs", label: __("Runs (30d)"), type: "number", fieldtype: "Int", sortable: false, format: (v, doc) => ui.format_integer(doc._extra ? doc._extra.run_count_30d : 0) },
 			],
 			on_row_click: (doc) => view_command(listview, doc),
 			footer: { count: (total) => ui.plural(total, { one: __("{0} command"), other: __("{0} commands") }) },
@@ -201,7 +201,7 @@ frappe.provide("whatsapp_next");
 	};
 
 	function setup_row_actions(listview) {
-		if (typeof ui.RowActions !== "function" || listview._sanad_datalist) return;
+		if (typeof ui.RowActions !== "function" || listview._whatsapp_datalist) return;
 		new ui.RowActions({
 			listview,
 			actions: [
@@ -238,13 +238,13 @@ frappe.provide("whatsapp_next");
 		},
 		onload(listview) {
 			ensure_modal_loaded();
-			listview._sanad_header = make_header(listview);
+			listview._whatsapp_header = make_header(listview);
 			set_primary(listview);
 			// the WhatsApp hub: ready-made commands from the platform (owner, 2026-10-29)
 			if (frappe.user.has_role(["WhatsApp Manager", "System Manager"]))
 				listview.page.add_inner_button(__("Hub"), () => whatsapp_next.hub.open("Command", { on_installed: () => listview.refresh() }));
 			if (typeof ui.FilterBar === "function") {
-				listview._sanad_filterbar = new ui.FilterBar({
+				listview._whatsapp_filterbar = new ui.FilterBar({
 					listview,
 					presets: [
 						{ type: "search", fieldname: "search", fields: ["code", "synonyms", "title", "function"], placeholder: __("Command word, synonym or function…") },
@@ -254,8 +254,8 @@ frappe.provide("whatsapp_next");
 					actions: ["group_by", "export"],
 				});
 			}
-			listview._sanad_datalist = make_datalist(listview);
-			ui.on_list_render(listview, () => enrich_rows(listview, listview._sanad_datalist));
+			listview._whatsapp_datalist = make_datalist(listview);
+			ui.on_list_render(listview, () => enrich_rows(listview, listview._whatsapp_datalist));
 			setup_row_actions(listview);
 			setup_bulk_actions(listview);
 			// The list re-sets "Add …" whenever the selection is cleared — restore the label after it.

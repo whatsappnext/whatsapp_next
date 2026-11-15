@@ -18,7 +18,7 @@ from frappe.utils import cint, now_datetime
 from whatsapp_next.exceptions import WAValidationError
 from whatsapp_next.services import alerts_dates, attachments, dispatch, report_render, templates
 from whatsapp_next.services.dispatch import OutboundSpec
-from whatsapp_next.services.phone import normalize
+from whatsapp_next.services.phone import normalize_phone_to_e164
 
 MAX_COLUMN_RECIPIENTS = 200
 MAX_BUILDER_ROWS = 1000
@@ -114,8 +114,8 @@ def resolve_filters(alert) -> dict[str, Any]:
 				filters[item[-3] if len(item) == 4 else item[0]] = item[-1]
 	dynamic = _load_json(getattr(alert, "dynamic_filters_json", None))
 	if isinstance(dynamic, dict):
-		for k, v in dynamic.items():
-			filters[k] = alerts_dates.resolve(v)
+		for filter_name, v in dynamic.items():
+			filters[filter_name] = alerts_dates.resolve(v)
 	if filters.get("company") == COMPANY_TOKEN:
 		filters.pop("company")
 		wants_company = True
@@ -178,7 +178,7 @@ def _user_phone(user: str) -> str | None:
 	row = frappe.db.get_value("User", user, ["mobile_no", "phone", "enabled"], as_dict=True)
 	if not row or not cint(row.enabled):
 		return None
-	return normalize(row.mobile_no) or normalize(row.phone)
+	return normalize_phone_to_e164(row.mobile_no) or normalize_phone_to_e164(row.phone)
 
 
 def expand_recipients(
@@ -189,7 +189,7 @@ def expand_recipients(
 	out: list[Recipient] = []
 	seen: set[tuple[str, Any]] = set()
 
-	def add(
+	def add_recipient(
 		phone: str | None, source: str, display_name: str | None = None, column_value: Any = None
 	) -> None:
 		if not phone or (phone, column_value) in seen:
@@ -201,7 +201,7 @@ def expand_recipients(
 
 	for row in alert.get("recipients") or []:
 		if row.recipient_type == "User" and row.user:
-			add(_user_phone(row.user), "User", frappe.db.get_value("User", row.user, "full_name"))
+			add_recipient(_user_phone(row.user), "User", frappe.db.get_value("User", row.user, "full_name"))
 		elif row.recipient_type == "Role" and row.role:
 			# one query for the role's enabled users (two lookups per user before)
 			members = frappe.get_all(
@@ -213,12 +213,16 @@ def expand_recipients(
 				fields=["name", "full_name", "mobile_no", "phone"],
 				order_by="name asc",
 			):
-				add(normalize(user.mobile_no) or normalize(user.phone), "Role", user.full_name)
+				add_recipient(
+					normalize_phone_to_e164(user.mobile_no) or normalize_phone_to_e164(user.phone),
+					"Role",
+					user.full_name,
+				)
 		elif row.recipient_type == "Phone":
-			add(row.phone_e164 or normalize(row.phone), "Phone")
+			add_recipient(row.phone_e164 or normalize_phone_to_e164(row.phone), "Phone")
 		elif row.recipient_type == "Report Column" and row.report_column and rows is not None:
 			cols = report_render.normalize_columns(columns or [])
-			idx = next(
+			column_index = next(
 				(
 					i
 					for i, c in enumerate(cols)
@@ -228,15 +232,17 @@ def expand_recipients(
 			)
 			values: list[Any] = []
 			for r in rows:
-				v = (
+				cell_value = (
 					r.get(row.report_column)
 					if isinstance(r, dict)
-					else (r[idx] if idx is not None and idx < len(r) else None)
+					else (r[column_index] if column_index is not None and column_index < len(r) else None)
 				)
-				if v not in (None, "") and v not in values:
-					values.append(v)
-			for v in values[:MAX_COLUMN_RECIPIENTS]:
-				add(normalize(str(v)), "Report Column", column_value=v)
+				if cell_value not in (None, "") and cell_value not in values:
+					values.append(cell_value)
+			for cell_value in values[:MAX_COLUMN_RECIPIENTS]:
+				add_recipient(
+					normalize_phone_to_e164(str(cell_value)), "Report Column", column_value=cell_value
+				)
 	return out
 
 
@@ -244,11 +250,17 @@ def _rows_for(recipient: Recipient, rows: list[Any], columns: list[Any], column:
 	if recipient.source != "Report Column" or not column:
 		return rows
 	cols = report_render.normalize_columns(columns)
-	idx = next((i for i, c in enumerate(cols) if c["fieldname"] == column or c["label"] == column), None)
+	column_index = next(
+		(i for i, c in enumerate(cols) if c["fieldname"] == column or c["label"] == column), None
+	)
 	return [
 		r
 		for r in rows
-		if (r.get(column) if isinstance(r, dict) else (r[idx] if idx is not None and idx < len(r) else None))
+		if (
+			r.get(column)
+			if isinstance(r, dict)
+			else (r[column_index] if column_index is not None and column_index < len(r) else None)
+		)
 		== recipient.column_value
 	]
 
@@ -349,11 +361,11 @@ def execute(alert, *, preview: bool = False, test_phone: str | None = None) -> A
 		from frappe.translate import print_language
 
 		with print_language(alert.language):
-			return _execute(alert, preview=preview, test_phone=test_phone)
-	return _execute(alert, preview=preview, test_phone=test_phone)
+			return _render_and_send_alert(alert, preview=preview, test_phone=test_phone)
+	return _render_and_send_alert(alert, preview=preview, test_phone=test_phone)
 
 
-def _execute(alert, *, preview: bool = False, test_phone: str | None = None) -> AlertRun:
+def _render_and_send_alert(alert, *, preview: bool = False, test_phone: str | None = None) -> AlertRun:
 	name = alert.name if not alert.is_new() else None
 	run = AlertRun(alert=name or alert.alert_name, preview=preview)
 	try:
@@ -377,7 +389,7 @@ def _execute(alert, *, preview: bool = False, test_phone: str | None = None) -> 
 		source = source or alert.message
 		for recipient in recipients:
 			r_rows = _rows_for(recipient, rows, columns, column)
-			ctx = templates.context_for(
+			template_context = templates.context_for(
 				None,
 				None,
 				{
@@ -391,7 +403,7 @@ def _execute(alert, *, preview: bool = False, test_phone: str | None = None) -> 
 				doc=frappe._dict(),
 				recipient={"phone_e164": recipient.phone_e164, "display_name": recipient.display_name},
 			)
-			rendered = templates.render(source, ctx)
+			rendered = templates.render_message_template(source, template_context)
 			body = rendered.text if rendered.ok else _("Report {0}").format(alert.report or alert.alert_name)
 			attach: dict[str, Any] = {"message_type": "Text"}
 			if preview and alert.content_type == "Report" and alert.attachment_format in ("PDF", "PNG"):

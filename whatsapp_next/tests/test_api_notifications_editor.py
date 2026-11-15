@@ -15,18 +15,18 @@ from whatsapp_next.tests.conftest_frappe import as_user, delete_all, ensure_devi
 NAME = "ApiTest Notif Editor"
 RENAMED = "ApiTest Notif Editor 2"
 TEMPLATE = "ApiTest Notif Editor Template"
-PHONE = "+966500930301"
+PHONE = "+967784499996"
 
 
 class TestApiNotificationsEditor(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		cls.device = ensure_device("ApiTest NotifEd Device", "WAD-APITEST-NE", phone="+966500930300")
+		cls.device = ensure_device("ApiTest NotifEd Device", "WAD-APITEST-NE", phone="+967777667663")
 		ensure_settings(send_only_to_known_numbers=0)
 
 	def setUp(self):
-		self._clean()
+		self._delete_test_notifications()
 		self.todo = frappe.get_doc({"doctype": "ToDo", "description": "apitest notifed body"}).insert(
 			ignore_permissions=True
 		)
@@ -40,10 +40,10 @@ class TestApiNotificationsEditor(IntegrationTestCase):
 		).insert(ignore_permissions=True)
 
 	def tearDown(self):
-		self._clean()
+		self._delete_test_notifications()
 
 	@staticmethod
-	def _clean():
+	def _delete_test_notifications():
 		delete_all("WhatsApp Notification", {"notification_name": ("in", [NAME, RENAMED])})
 		delete_all("WhatsApp Template", {"template_name": TEMPLATE})
 		delete_all("ToDo", {"description": ("like", "apitest notifed%")})

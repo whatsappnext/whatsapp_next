@@ -7,11 +7,11 @@
 (function () {
 	const APP_TITLE = "WhatsappNext";
 
-	function mark() {
+	function add_beta_tag_to_sidebar() {
 		document.querySelectorAll(".body-sidebar .sidebar-header .header-subtitle").forEach((sub) => {
 			// the subtitle is long enough to be cut with an ellipsis; the title line has room
 			const el = sub.parentElement && sub.parentElement.querySelector(".header-title");
-			if (!el || el.querySelector(".wa-beta")) return;
+			if (!el || el.querySelector(".whatsapp-beta")) return;
 			const title = sub.textContent.trim();
 			// the module's name ("WhatsApp Next") reaches the header too, depending on the route
 			const ours = [APP_TITLE, "WhatsApp Next"].flatMap((n) => [n, __(n)]);
@@ -19,7 +19,7 @@
 			// the product's name is drawn as its wordmark (`desk/brand.js`)
 			if (!sub.querySelector(".wn-wordmark")) sub.innerHTML = whatsapp_next.brand.wordmark();
 			const tag = document.createElement("span");
-			tag.className = "wa-beta";
+			tag.className = "whatsapp-beta";
 			// the word alone (owner, 2026-10-08): the β glyph read as a stray letter beside it
 			tag.textContent = __("Beta");
 			tag.title = __("This app is in beta: screens and features may still change.");
@@ -30,7 +30,7 @@
 	let pending = null;
 	const schedule = () => {
 		window.clearTimeout(pending);
-		pending = window.setTimeout(mark, 50);
+		pending = window.setTimeout(add_beta_tag_to_sidebar, 50);
 	};
 
 	$(document).on("page-change", schedule);

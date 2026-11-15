@@ -1,4 +1,4 @@
-# `sanad.ui.Stepper`
+# `whatsapp.ui.Stepper`
 
 A multi-step flow (wizard): a spoken "Step 2 of 4" progress line, a step list whose current step
 carries `aria-current="step"`, one lazily rendered pane per step, and a footer with Back /
@@ -36,13 +36,13 @@ Fully portable: the component never looks at step content — `render`, `validat
 
 ## Methods
 
-- `go(index)` — show a step without validation (Back and header clicks use it).
-- `next()` — validate the current step, then advance or finish; returns `Promise<boolean>`.
-- `back()`, `skip()` — previous step; next step when `can_skip`.
+- `go_to_step(index)` — show a step without validation (Back and header clicks use it).
+- `go_to_next_step()` — validate the current step, then advance or finish; returns `Promise<boolean>`.
+- `go_to_previous_step()`, `skip_current_step()` — previous step; next step when `can_skip`.
 - `set_step_valid(bool)` — enable/disable Next for the current step.
 - `set_finish_label(text)` — change the Finish text and re-render the footer.
 - `show_error(message)`, `clear_error()` — inline error in the current pane.
-- `busy(on)` — disable Next/Back while work runs (used by `next()`).
+- `set_footer_busy(on)` — disable Next/Back while work runs (used by `go_to_next_step()`).
 - `destroy()` — remove the markup.
 - Getters: `current` (current step spec), `steps`; properties `index`, `ctx`.
 
@@ -57,7 +57,7 @@ None.
 ## Usage
 
 ```js
-const stepper = new sanad.ui.Stepper({
+const stepper = new whatsapp.ui.Stepper({
   wrapper: $panel,
   ctx: { device: null },
   steps: [
@@ -75,9 +75,9 @@ const stepper = new sanad.ui.Stepper({
 
 ## CSS hooks
 
-- Root `sanad-kit sanad-stepper` (with a generated `id`).
+- Root `whatsapp-kit whatsapp-kit-stepper` (with a generated `id`).
 - `__header`, `__progress` (`aria-live="polite"`), `__list` (`<ol role="list">`), `__step`
-  (`data-index`) with modifiers `--current`, `--done`, `--todo`; `__step-btn`, `__num`,
+  (`data-index`) with modifiers `--current`, `--done`, `--todo`; `__step-button`, `__number`,
   `__check`, `__label`, `__optional`.
 - `__body`, `__pane` (`data-index`, `hidden`), `__error`, `__content`, `__footer`,
   `__footer-start`, `__footer-end`.

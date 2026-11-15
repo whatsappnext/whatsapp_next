@@ -9,20 +9,13 @@ export class WhatsAppNumbersSource extends BaseSource {
 		return "WhatsApp Number";
 	}
 
-	static label() {
+	static default_tab_label() {
 		return __("WhatsApp contacts not in the system");
 	}
 
 	render() {
 		this.txt = "";
-		const $head = $('<div class="sanad-picker__head"></div>');
-		$head.append(this.search_box(__("Search by name or phone"), (txt) => this.reload({ txt })));
-		this.$results = $('<div class="sanad-picker__results"></div>');
-		this.$pager = this.pager((p) => this.reload({ page: p }));
-		this.$foot = $('<div class="sanad-picker__foot"></div>');
-		this.$pane.append($head, this.$results, this.$pager, this.$foot);
-		this.state = this.state_for(this.$results);
-		this.reload();
+		this.search_pane();
 	}
 
 	reload({ txt, page } = {}) {
@@ -30,7 +23,7 @@ export class WhatsAppNumbersSource extends BaseSource {
 		this.page = page || (txt !== undefined ? 1 : this.page);
 		this.state.loading();
 		this.$foot.empty();
-		return this.call("picker.search_whatsapp_numbers", { txt: this.txt || null, page: this.page, page_length: this.page_length }, { silent: true })
+		return this.call_picker_api("picker.search_whatsapp_numbers", { txt: this.txt || null, page: this.page, page_length: this.page_length }, { silent: true })
 			.then((r) => {
 				this.rows = (r && r.rows) || [];
 				this.total = r && r.total != null ? cint(r.total) : null;
