@@ -14,7 +14,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, add_to_date, cint, get_datetime, now_datetime, nowdate
+from frappe.utils import add_days, add_to_date, cint, get_datetime, getdate, now_datetime, nowdate
 from frappe.utils.data import evaluate_filters
 
 from whatsapp_next.exceptions import WANotFoundError, WAValidationError
@@ -519,15 +519,39 @@ def preview_for_document(notification: str, reference_name: str) -> dict[str, An
 # ---- scheduled events ----------------------------------------------------------------------
 
 
-def documents_due(notification) -> list[str]:
-	"""Names of documents whose date / datetime field hits the notification's offset now."""
+#: a «Days Before / After» notification makes up for this many days its daily run missed
+DAYS_CATCH_UP = 7
+
+
+def _days_run_key(notification: str) -> str:
+	return f"wa_notification_days_run:{notification}"
+
+
+def days_run(notification: str):
+	"""The last day the notification's «Days» run covered, or None before its first run."""
+	value = frappe.db.get_default(_days_run_key(notification))
+	return getdate(value) if value else None
+
+
+def set_days_run(notification: str, day) -> None:
+	frappe.db.set_default(_days_run_key(notification), str(getdate(day)))
+
+
+def forget_days_run(notification: str) -> None:
+	frappe.defaults.clear_default(key=_days_run_key(notification), parent="__default")
+
+
+def documents_due(notification, on_day=None) -> list[str]:
+	"""Names of documents whose date / datetime field hits the notification's offset now (for a
+	«Days» event: on `on_day`, today by default). Every one of them, a page at a time: one run
+	sent the first BATCH_PER_RUN and dropped the rest (security review 2026-11-16)."""
 	doctype = notification.document_type
 	if notification.event in ("Days Before", "Days After"):
 		field = notification.date_changed
 		if not field:
 			return []
 		delta = cint(notification.days_in_advance) * (1 if notification.event == "Days Before" else -1)
-		target = add_days(nowdate(), delta)
+		target = add_days(on_day or nowdate(), delta)
 		filters: list[list[Any]] = [[field, "=", target]]
 	else:
 		field = notification.datetime_changed
@@ -544,8 +568,59 @@ def documents_due(notification) -> list[str]:
 		filters = [[field, ">=", get_datetime(lower)], [field, "<", get_datetime(upper)]]
 	if frappe.get_meta(doctype).is_submittable:
 		filters.append(["docstatus", "=", 1])
-	return frappe.get_all(
-		doctype, filters=filters, pluck="name", limit=BATCH_PER_RUN, ignore_permissions=True
+	names: list[str] = []
+	while True:
+		page = frappe.get_all(
+			doctype,
+			filters=[*filters, ["name", ">", names[-1]]] if names else filters,
+			pluck="name",
+			order_by="name asc",
+			limit=BATCH_PER_RUN,
+			ignore_permissions=True,
+		)
+		names.extend(page)
+		if len(page) < BATCH_PER_RUN:
+			return names
+
+
+def _already_notified(notification, name: str) -> bool:
+	"""A document a caught-up day would send to again: the notification already went for it."""
+	return bool(
+		frappe.db.exists(
+			"WhatsApp Log",
+			{"notification": notification.name, "reference_doctype": notification.document_type, "reference_name": name},
+		)
+	)
+
+
+def _days_to_cover(notification) -> list:
+	"""The days a «Days» run covers: today, and the days since its last run that it missed (at
+	most DAYS_CATCH_UP). A day the daily job did not run lost its documents for good (security
+	review 2026-11-16). A notification's first run covers today only."""
+	today = getdate(nowdate())
+	last = days_run(notification.name)
+	if not last:
+		return [today]
+	first = max(getdate(add_days(last, 1)), getdate(add_days(today, -(DAYS_CATCH_UP - 1))))
+	days = []
+	day = first
+	while day <= today:
+		days.append(day)
+		day = getdate(add_days(day, 1))
+	return days
+
+
+def _queue_send(notif, name: str) -> None:
+	frappe.enqueue(
+		"whatsapp_next.services.notifications.send_for_document",
+		notification=notif.name,
+		doctype=notif.document_type,
+		name=name,
+		doc_event=notif.event,
+		queue="short",
+		job_id=f"wa-notif-{notif.name}-{name}-{notif.event}",
+		deduplicate=True,
+		timeout=120,
 	)
 
 
@@ -555,18 +630,18 @@ def _trigger(events: tuple[str, ...]) -> int:
 		"WhatsApp Notification", filters={"enabled": 1, "event": ("in", list(events))}, pluck="name"
 	):
 		notif = frappe.get_cached_doc("WhatsApp Notification", row)
+		if notif.event in ("Days Before", "Days After"):
+			today = getdate(nowdate())
+			for day in _days_to_cover(notif):
+				for name in documents_due(notif, day):
+					if day < today and _already_notified(notif, name):
+						continue
+					_queue_send(notif, name)
+					queued_count += 1
+			set_days_run(notif.name, today)
+			continue
 		for name in documents_due(notif):
-			frappe.enqueue(
-				"whatsapp_next.services.notifications.send_for_document",
-				notification=notif.name,
-				doctype=notif.document_type,
-				name=name,
-				doc_event=notif.event,
-				queue="short",
-				job_id=f"wa-notif-{notif.name}-{name}-{notif.event}",
-				deduplicate=True,
-				timeout=120,
-			)
+			_queue_send(notif, name)
 			queued_count += 1
 	return queued_count
 

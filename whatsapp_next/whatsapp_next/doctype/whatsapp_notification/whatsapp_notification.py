@@ -48,9 +48,19 @@ class WhatsAppNotification(Document):
 		"""Invalidate the per-DocType cache (old and new `document_type`)."""
 		self.invalidate_cache()
 
+	def after_insert(self) -> None:
+		"""A new notification starts its «Days» runs afresh, never from a deleted one's of the
+		same name (it would cover no day, or a stranger's)."""
+		from whatsapp_next.services.notifications import forget_days_run
+
+		forget_days_run(self.name)
+
 	def on_trash(self) -> None:
-		"""Invalidate the per-DocType cache."""
+		"""Invalidate the per-DocType cache; forget its «Days» runs."""
+		from whatsapp_next.services.notifications import forget_days_run
+
 		self.invalidate_cache()
+		forget_days_run(self.name)
 
 	def invalidate_cache(self) -> None:
 		"""Clear the cache for the current and (when changed) the previous `document_type`."""
