@@ -130,6 +130,16 @@ def match_command_text(text: str | None) -> Match | None:
 	rest = rest.strip()
 	tokens = help_tokens()
 	words = command_map()
+	# a synonym of several words («كشف حساب») is read whole: its second word was taken for the
+	# first argument, and the command answered «the months must be a number» (owner, 2026-11-17)
+	typed = text.lstrip(prefixes).split()
+	for phrase in sorted((w for w in words if " " in w), key=len, reverse=True):
+		size = len(phrase.split())
+		if " ".join(typed[:size]).casefold() == phrase:
+			after = " ".join(typed[size:])
+			if after.casefold() in tokens:
+				return Match(command=words[phrase], word=phrase, rest="", is_help=True)
+			return Match(command=words[phrase], word=phrase, rest=after)
 	if word in tokens:
 		target = words.get(rest.split(" ")[0].casefold().lstrip(prefixes)) if rest else None
 		return Match(command=target or "", word=word, rest="" if target else rest, is_help=True)
@@ -302,6 +312,13 @@ def sender_for(inbound, allowed_types: list[str] | None = None) -> Sender:
 	primary contact the sender is, else the first."""
 	get = inbound.get if hasattr(inbound, "get") else lambda k: getattr(inbound, k, None)
 	contact = get("contact")
+	if not contact and cint(get("is_group")) and get("phone_e164"):
+		# a group's message is stored without the member's contact, so it stays out of their own
+		# conversation; the command still answers for the member who wrote it (owner, 2026-11-17:
+		# «كشف» in a group answered «your number is not linked»)
+		from whatsapp_next.services.permissions import resolve_contact_by_phone
+
+		contact = resolve_contact_by_phone(get("phone_e164"))
 	party_type = party_name = None
 	if contact:
 		links = frappe.get_all(
