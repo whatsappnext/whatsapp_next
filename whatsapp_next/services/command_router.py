@@ -811,7 +811,8 @@ def _route_inbound_message_to_command(
 	text = get("body") or ""
 	command_match = match_inbound(inbound)
 	allowed = allowed_for(inbound)
-	if not cint(get("is_group")) and command_menu.is_menu_request(inbound):
+	# the menu answers in a group too (owner, 2026-11-17); a group still gets no question session
+	if command_menu.is_menu_request(inbound):
 		menu = command_menu.menu_list(allowed=allowed)
 		if menu:
 			from whatsapp_next.services import command_sessions
