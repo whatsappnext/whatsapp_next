@@ -69,12 +69,14 @@ class TestCommandSessions(IntegrationTestCase):
 		)
 		self.addCleanup(command_sessions.clear_question_session, self.device, self.phone)
 
-	def _inbound(self, body, selected=None):
+	def _inbound(self, body, selected=None, group=None, phone=None):
 		doc = frappe.get_doc(
 			{
 				"doctype": "WhatsApp Inbound Message",
 				"device": self.device,
-				"phone_e164": self.phone,
+				"phone_e164": phone or self.phone,
+				"chat_jid": group,
+				"is_group": 1 if group else 0,
 				"message_type": "Interactive Reply" if selected else "Text",
 				"body": body,
 				"selected_option_id": selected,
@@ -119,6 +121,29 @@ class TestCommandSessions(IntegrationTestCase):
 		self.assertEqual(res.status, "Executed")
 		self.assertEqual(runs, [{"as_on": str(get_first_day(getdate(nowdate())))}])
 		self.assertIsNone(command_sessions.load_question_session(self.device, self.phone))
+
+	def test_a_group_asks_like_a_direct_chat_and_only_the_asker_answers(self):
+		"""Owner 2026-11-17: commands in a group work as in a direct chat. The question belongs to
+		the group and the member who asked; another member's message is not its answer."""
+		from whatsapp_next.services import inbound as inbound_service
+
+		self._setup()
+		group = "120363427813808210@g.us"
+		other = "+967777999579"
+		self.addCleanup(command_sessions.clear_question_session, self.device, f"{group}|{self.phone}")
+		res, sent, runs = self._route_and_capture_replies(self._inbound(CODE, group=group))
+		self.assertEqual((res.status, runs, sent[0]["message_type"]), ("Awaiting Input", [], "List"))
+		self.assertIsNotNone(command_sessions.load_question_session(self.device, f"{group}|{self.phone}"))
+		self.assertIsNone(command_sessions.load_question_session(self.device, self.phone), "the direct chat has none")
+		# the asker's typed answer is routed in the group; another member's is not
+		asker = {"is_group": 1, "chat_jid": group, "phone_e164": self.phone}
+		self.assertTrue(inbound_service._answers_an_open_question(self.device, asker, "Text"))
+		self.assertFalse(inbound_service._answers_an_open_question(self.device, {**asker, "phone_e164": other}, "Text"))
+		res, sent, runs = self._route_and_capture_replies(
+			self._inbound("بداية هذا الشهر", selected=command_sessions.ARG_PREFIX + "month_start", group=group)
+		)
+		self.assertEqual(res.status, "Executed")
+		self.assertEqual(runs, [{"as_on": str(get_first_day(getdate(nowdate())))}])
 
 	def test_typed_command_with_the_value_is_not_asked(self):
 		self._setup()
