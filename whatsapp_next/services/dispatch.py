@@ -153,6 +153,15 @@ def _is_known_number(key: str | None) -> bool:
 
 
 def _resolve_device(name: str | None) -> str:
+	from whatsapp_next.services.permissions import allowed_devices
+
+	# a User Permission on WhatsApp Device limits sending as it limits reading: an Agent limited
+	# to one device sent from another branch's number (security review 2026-11-16)
+	permitted = allowed_devices()
+	if name and permitted is not None and name not in permitted:
+		frappe.throw(_("You may not send from the device {0}").format(name), frappe.PermissionError)
+	if not name and permitted:
+		name = permitted[0]
 	if not name:
 		from whatsapp_next.services.devices import default_device
 
