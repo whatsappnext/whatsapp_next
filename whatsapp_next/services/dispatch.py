@@ -198,6 +198,16 @@ def _recipient_fields(spec: OutboundSpec) -> dict[str, Any]:
 	e164 = normalize_phone_to_e164(raw)
 	if not e164:
 		frappe.throw(_("Invalid WhatsApp number: {0}").format(raw or ""), WAInvalidPhoneError)
+	if is_group_or_lid(e164):
+		# a group's (or a LID's) id given as the phone — a notification's or an alert's recipient
+		# saved on a contact: it goes as that group, not as a person's number (owner, 2026-11-16)
+		kind, key = classify(e164)
+		return {
+			"recipient_type": "Group" if kind == "Group" else "Individual",
+			"jid": key,
+			"phone": raw,
+			"phone_e164": None if kind == "Group" else e164,
+		}
 	return {"recipient_type": "Individual", "phone": raw, "phone_e164": e164, "jid": None}
 
 
