@@ -502,6 +502,21 @@ class TestDispatch(IntegrationTestCase):
 		self.assertEqual(sorted(waiting), ["Completed", "Queued", "Queued"])
 		self.assertTrue(all(self._get_queue_item(item).attempts == 0 for _o, item in outs if self._get_queue_item(item).status == "Queued"))
 
+	def test_a_sign_in_failure_is_logged_once_not_every_minute(self):
+		"""Security review 2026-11-16 (low): every failed call while the platform refused the keys
+		wrote an Error Log entry per device, every minute and on every new message."""
+		title = "WhatsApp dispatch: provider auth failed"
+		ensure_settings(connection_status="OK")
+		before = frappe.db.count("Error Log", {"method": title})
+		self._queued(1)
+		for _ in range(3):
+			with fake_provider() as fp:
+				fp.batch_mode = "auth"
+				dispatch.dispatch_device_batch(self.device)
+			frappe.db.set_value("WhatsApp Queue Item", {"status": "Queued"}, "next_attempt_at", None)
+		self.assertEqual(frappe.db.count("Error Log", {"method": title}) - before, 1)
+		ensure_settings(connection_status="Untested")
+
 	def test_batch_auth_failure_marks_settings(self):
 		_out, item = self._queued(1)[0]
 		with fake_provider() as fp:

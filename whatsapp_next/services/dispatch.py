@@ -873,12 +873,16 @@ def apply_call_failure(items: list[frappe._dict], exc: Exception, *, device: str
 
 		devices.apply_state(device, "Disconnected", source="dispatch", reason=cls.message)
 	if isinstance(exc, pex.AuthError):
+		was_failing = frappe.db.get_single_value("WhatsApp Settings", "connection_status") == "Failed"
 		frappe.db.set_single_value(
 			"WhatsApp Settings", {"connection_status": "Failed", "last_connection_error": cls.message[:500]}
 		)
-		frappe.log_error(
-			title="WhatsApp dispatch: provider auth failed", message=f"device={device} code={exc.code}"
-		)
+		if not was_failing:
+			# once, when the keys stop working: every call after it wrote one more entry, every
+			# minute and on every new message (security review 2026-11-16); the Settings show it
+			frappe.log_error(
+				title="WhatsApp dispatch: provider auth failed", message=f"device={device} code={exc.code}"
+			)
 	return cls.code
 
 
