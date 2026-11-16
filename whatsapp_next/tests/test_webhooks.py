@@ -134,7 +134,10 @@ class TestWebhooks(IntegrationTestCase):
 
 		def only_this(doctype, *args, filters=None, **kwargs):
 			if doctype == "WhatsApp Webhook Event":
-				filters = {**(filters or {}), "name": event}
+				if isinstance(filters, list):  # the Failed query lists its conditions
+					filters = [*filters, ["name", "=", event]]
+				else:
+					filters = {**(filters or {}), "name": event}
 			return real(doctype, *args, filters=filters, **kwargs)
 
 		with patch.object(frappe, "get_all", side_effect=only_this):
