@@ -456,7 +456,7 @@ def _after_insert(
 	# The Numbers upsert is enqueued by the `after_insert` doc hook
 	# (`numbers_materializer.on_message_insert`); only the realtime event and the router go here.
 	_publish(name, device, _conversation_key(fields))
-	if should_route(message_type, body, bool(fields["is_group"])):
+	if should_route(message_type, body, bool(fields["is_group"])) or _answers_an_open_question(device, fields, message_type):
 		frappe.enqueue(
 			"whatsapp_next.services.command_router.route_inbound_message",
 			inbound_name=name,
@@ -469,6 +469,18 @@ def _after_insert(
 	from whatsapp_next.services import receipts
 
 	receipts.on_received(name)
+
+
+def _answers_an_open_question(device: str, fields: dict[str, Any], message_type: str) -> bool:
+	"""A group member's message while a command waits for their answer (a number of months typed,
+	not tapped): it goes to the command like in a direct chat (owner, 2026-11-17)."""
+	if not fields.get("is_group") or message_type not in ("Text", "Interactive Reply"):
+		return False
+	if not cint(frappe.get_cached_doc("WhatsApp Settings").enable_commands):
+		return False
+	from whatsapp_next.services import command_sessions
+
+	return bool(command_sessions.load_question_session(device, command_sessions.chat_key(fields)))
 
 
 def should_route(message_type: str, body: str | None, is_group: bool, *, enabled: bool | None = None) -> bool:

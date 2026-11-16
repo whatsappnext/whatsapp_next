@@ -811,7 +811,8 @@ def _route_inbound_message_to_command(
 	text = get("body") or ""
 	command_match = match_inbound(inbound)
 	allowed = allowed_for(inbound)
-	# the menu answers in a group too (owner, 2026-11-17); a group still gets no question session
+	# a group works as a direct chat (owner, 2026-11-17): the menu, its questions, the menu after a
+	# reply; only a message that is no command gets no "unknown command" answer there
 	if command_menu.is_menu_request(inbound):
 		menu = command_menu.menu_list(allowed=allowed)
 		if menu:
@@ -823,7 +824,7 @@ def _route_inbound_message_to_command(
 			result.replies = [menu]
 			_set_status(inbound_name, "Executed", command_text=text[:140])
 			return _deliver_route_replies(result, inbound, dry_run, create_simulated_rows, command=None)
-	if not dry_run and not cint(get("is_group")):
+	if not dry_run:
 		from whatsapp_next.services import command_sessions
 
 		session = command_sessions.load_question_session(get("device"), command_sessions.chat_key(inbound))
@@ -899,7 +900,7 @@ def _route_inbound_message_to_command(
 		)
 		return _deliver_route_replies(result, inbound, dry_run, create_simulated_rows, command=command)
 	asking = to_ask(command, provided, missing)
-	if asking and not dry_run and not cint(get("is_group")):
+	if asking and not dry_run:
 		return _ask_first(command, inbound, inbound_name, provided, asking, text, result)
 	if missing:
 		labels = ", ".join(_(m_["label"]) for m_ in missing)
@@ -1113,8 +1114,7 @@ def _deliver_route_replies(
 	if not result.replies or (command is None and result.status not in ("Executed", "Not Matched")):
 		return result
 	get = inbound.get if hasattr(inbound, "get") else lambda k: getattr(inbound, k, None)
-	if not cint(get("is_group")):
-		result.replies = command_menu.decorate(result.replies, result.status, allowed=allowed_for(inbound))
+	result.replies = command_menu.decorate(result.replies, result.status, allowed=allowed_for(inbound))
 	if dry_run and not create_simulated_rows:
 		return result
 	if command is None:
