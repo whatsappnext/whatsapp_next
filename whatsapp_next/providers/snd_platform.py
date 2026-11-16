@@ -966,7 +966,15 @@ class SndPlatformProvider(BaseProvider):
 		messages = [m for m in messages if recipient_allowed(m)]
 		if not messages:
 			return BatchResult(batch_id=batch_id[:64], accepted=(), errors=refused)
-		body = {"messages": [self._message_payload(m) for m in messages], "batch_id": batch_id[:64]}
+		body = {
+			"messages": [self._message_payload(m) for m in messages],
+			"batch_id": batch_id[:64],
+			# a batch sent again after a lost answer (a timeout, a dead worker) carries the same
+			# client_refs: the platform refuses the ones it already has instead of sending them
+			# twice, answering CLIENT_REF_DUPLICATE with the first send's queue id, which
+			# dispatch takes as accepted (owner 2026-11-16). An older platform ignores the key.
+			"strict_client_ref": 1,
+		}
 		data = self._request("POST", "enqueue_messages_api", body=body)
 		accepted = tuple(
 			BatchAccepted(
