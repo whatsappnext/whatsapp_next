@@ -105,12 +105,14 @@ class TestCommandMenu(IntegrationTestCase):
 		replies = [_build_text_reply("Choose a date", "prompt")]
 		self.assertEqual(command_menu.decorate(replies, "Awaiting Input"), replies)
 
-	def _route_inbound_and_capture_replies(self, body, selected=None):
+	def _route_inbound_and_capture_replies(self, body, selected=None, group=None):
 		doc = frappe.get_doc(
 			{
 				"doctype": "WhatsApp Inbound Message",
 				"device": self.device,
 				"phone_e164": self.phone,
+				"chat_jid": group,
+				"is_group": 1 if group else 0,
 				"message_type": "Interactive Reply" if selected else "Text",
 				"body": body,
 				"selected_option_id": selected,
@@ -135,6 +137,19 @@ class TestCommandMenu(IntegrationTestCase):
 	def test_menu_button_and_words_send_the_list(self):
 		for body, selected in (("القائمة الرئيسية", command_menu.MENU_ID), ("Menu", None)):
 			res, sent = self._route_inbound_and_capture_replies(body, selected)
+			self.assertEqual(res.status, "Executed")
+			self.assertEqual([r["message_type"] for r in sent], ["List"])
+
+	def test_the_menu_answers_in_a_group(self):
+		"""Owner 2026-11-17: «القائمة» in a group got nothing, and a tap on its list was not read."""
+		from whatsapp_next.services import inbound
+
+		group = "120363427813808210@g.us"
+		self.assertTrue(inbound.should_route("Text", "القائمة", True, enabled=True))
+		self.assertTrue(inbound.should_route("Interactive Reply", "any title", True, enabled=True))
+		self.assertFalse(inbound.should_route("Text", "القائمة وين", True, enabled=True))
+		for body, selected in (("القائمة", None), ("القائمة الرئيسية", command_menu.MENU_ID)):
+			res, sent = self._route_inbound_and_capture_replies(body, selected, group=group)
 			self.assertEqual(res.status, "Executed")
 			self.assertEqual([r["message_type"] for r in sent], ["List"])
 
