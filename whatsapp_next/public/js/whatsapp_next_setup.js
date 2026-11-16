@@ -144,6 +144,12 @@ whatsapp_next.wa_groups = {
 		frappe.user.has_role(["WhatsApp Manager", "System Manager"]) &&
 		typeof whatsapp.ui.GroupCreate === "function",
 	open: (opts) => new whatsapp.ui.GroupCreate(opts || {}),
+	// a group's row (WhatsApp Numbers): add members through a device that administers it
+	add_members: (doc, on_done) =>
+		new whatsapp.ui.GroupCreate({
+			group: { jid: doc.phone_e164 || doc.jid || doc.name, name: doc.display_name, device: doc.synced_device || doc.last_device },
+			on_created: on_done,
+		}),
 };
 
 // "Check on WhatsApp": the numbers behind a selection of contacts, contact groups or WhatsApp

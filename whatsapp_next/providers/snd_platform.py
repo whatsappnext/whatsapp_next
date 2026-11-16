@@ -34,6 +34,7 @@ from whatsapp_next.providers.schemas import (
 	ContactProfile,
 	DeviceState,
 	GroupCreated,
+	GroupMembersAdded,
 	GroupMember,
 	HealthStatus,
 	HistoryMessage,
@@ -1165,6 +1166,27 @@ class SndPlatformProvider(BaseProvider):
 		return GroupCreated(
 			jid=str(data.get("group_jid") or ""),
 			name=str(data.get("name") or name),
+			members=[
+				GroupMember(
+					phone=str(m.get("phone") or ""), status=str(m.get("status") or "failed"), jid=m.get("jid")
+				)
+				for m in data.get("members") or []
+				if isinstance(m, dict)
+			],
+			invite_link=data.get("invite_link"),
+		)
+
+	def add_group_members(self, platform_device: str, group_jid: str, participants: list[str]) -> GroupMembersAdded:
+		data = self._request(
+			"POST",
+			"add_group_participants_api",
+			body={
+				"device": platform_device,
+				"group_jid": group_jid,
+				"participants": [str(p).lstrip("+") for p in participants],
+			},
+		)
+		return GroupMembersAdded(
 			members=[
 				GroupMember(
 					phone=str(m.get("phone") or ""), status=str(m.get("status") or "failed"), jid=m.get("jid")

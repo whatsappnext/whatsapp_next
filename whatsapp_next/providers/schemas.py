@@ -256,8 +256,9 @@ class ContactProfile:
 
 @dataclass(frozen=True)
 class GroupMember:
-	"""A number asked for when a group was created, and what became of it: `added`,
-	`invite_required` (their privacy settings refuse being added), `not_on_whatsapp` or `failed`."""
+	"""A number asked for when a group was created or members were added, and what became of it:
+	`added`, `invite_required` (their privacy settings refuse being added), `not_on_whatsapp`,
+	`already_member`, `not_allowed` (off "Send only to") or `failed`."""
 
 	phone: str
 	status: str
@@ -268,6 +269,14 @@ class GroupMember:
 class GroupCreated:
 	jid: str
 	name: str
+	members: list[GroupMember] = field(default_factory=list)
+	invite_link: str | None = None
+
+
+@dataclass(frozen=True)
+class GroupMembersAdded:
+	"""What became of each number asked for, and the group's invite link when someone needs it."""
+
 	members: list[GroupMember] = field(default_factory=list)
 	invite_link: str | None = None
 
