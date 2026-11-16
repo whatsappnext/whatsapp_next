@@ -16,7 +16,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, add_months, cstr, get_first_day, get_last_day, getdate, nowdate
+from frappe.utils import cint, add_days, add_months, cstr, get_first_day, get_last_day, getdate, nowdate
 
 SESSION_TTL = 600  # seconds a chat has to answer
 ARG_PREFIX = "__arg__:"
@@ -88,9 +88,14 @@ def _cache_key(device: str | None, chat: str | None) -> str:
 
 
 def chat_key(inbound) -> str | None:
-	"""The chat a session belongs to: the sender's number, else its JID."""
+	"""The chat a session belongs to: the sender's number, else its JID. In a group, the group and
+	the member who asked: only they answer its question, and their own chat keeps its own session
+	(owner, 2026-11-17: commands in a group work as in a direct chat)."""
 	get = inbound.get if hasattr(inbound, "get") else lambda k: getattr(inbound, k, None)
-	return get("phone_e164") or get("sender_jid") or get("jid")
+	sender = get("phone_e164") or get("sender_jid") or get("jid")
+	if cint(get("is_group")) and get("chat_jid") and sender:
+		return f"{get('chat_jid')}|{sender}"
+	return sender
 
 
 def load_question_session(device: str | None, chat: str | None) -> dict[str, Any] | None:
