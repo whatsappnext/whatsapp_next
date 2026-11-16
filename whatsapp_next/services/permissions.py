@@ -1195,6 +1195,9 @@ def toggle_blacklist(key: str, blocked: bool, note: str | None = None, user: str
 		for r in rows:
 			group.remove(r)
 	group.flags.ignore_permissions = True
+	# the one change of the blacklist an Agent or a Contact User may make: block or unblock a
+	# number, audited below (the group's own guard leaves every other change to a Manager)
+	group.flags.wa_blacklist_toggle = True
 	group.save(ignore_permissions=True)
 	audit.record_audit_entry(
 		"Contact Group Members Changed",

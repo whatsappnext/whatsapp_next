@@ -34,6 +34,15 @@ class WhatsAppContactGroup(Document):
 		if self.is_new() or set(frappe.get_roles()) & ACCESS_GROUP_EDITORS:
 			return
 		reason = access_group_reason(self)
+		if reason and self.flags.wa_blacklist_toggle and not frappe.get_all(
+			"WhatsApp Command",
+			or_filters={"allowed_group": self.name, "blocked_group": self.name},
+			pluck="name",
+			limit=1,
+		):
+			# blocking or unblocking one number (`permissions.toggle_blacklist`, audited) is the
+			# blacklist change these roles may make; a command's access group stays a Manager's
+			return
 		if reason:
 			frappe.throw(
 				_("{0} {1}: only a WhatsApp Manager may change it").format(self.name, reason),
