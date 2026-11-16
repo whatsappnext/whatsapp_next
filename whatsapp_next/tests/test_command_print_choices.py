@@ -175,3 +175,14 @@ class TestCommandPrintSettingsSaved(IntegrationTestCase):
 			self._save([{"reply": "result_text", "letter_head": self.letter_head}])  # a text has no file
 		with self.assertRaises(frappe.ValidationError):
 			self._save([{"reply": "sheet", "print_format": other}])  # not one of the report's
+
+	def test_latin_text_on_an_arabic_page_keeps_its_punctuation(self):
+		"""Owner 2026-11-17: «(SANAD Digital (Demo» and «.Grant Plastics Ltd» on an Arabic page."""
+		from whatsapp_next.services.report_render import LEFT_TO_RIGHT_MARK as M
+		from whatsapp_next.services.report_render import keep_latin_text_upright
+
+		page = '<style>.a{b:c}</style><div class="x"> SANAD Digital (Demo) </div><b>كشف حساب</b><td>Grant Plastics Ltd.</td><td>20,000.00</td><p>كشف ACME</p>'
+		self.assertEqual(
+			keep_latin_text_upright(page),
+			f'<style>.a{{b:c}}</style><div class="x"> {M}SANAD Digital (Demo){M} </div><b>كشف حساب</b><td>{M}Grant Plastics Ltd.{M}</td><td>20,000.00</td><p>كشف ACME</p>',
+		)

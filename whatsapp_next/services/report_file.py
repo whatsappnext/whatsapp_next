@@ -68,7 +68,7 @@ def _render_report_pdf(
 ) -> bytes:
 	from frappe.utils.pdf import get_pdf
 
-	from whatsapp_next.services.report_render import _letter_head_html, letter_head_document
+	from whatsapp_next.services.report_render import _letter_head_html, keep_latin_text_upright, letter_head_document
 
 	# the command's letter head on top (owner, 2026-11-17); None: the site's default one
 	letter_head = letter_head or frappe.db.get_value("Letter Head", {"is_default": 1, "disabled": 0}, "name")
@@ -127,7 +127,7 @@ def render_report_with_print_format(
 	`letter_head` (the chosen letter head, rendered); its CSS (`css`) goes into the page."""
 	from frappe.utils.pdf import get_pdf
 
-	from whatsapp_next.services.report_render import _letter_head_html, letter_head_document
+	from whatsapp_next.services.report_render import _letter_head_html, keep_latin_text_upright, letter_head_document
 
 	pf = frappe.db.get_value("Print Format", print_format, ["html", "css", "report", "print_format_type"], as_dict=True)
 	if not pf or pf.report != title or pf.print_format_type != "Jinja":
@@ -149,7 +149,7 @@ def render_report_with_print_format(
 	)
 	rtl = frappe.local.lang in ("ar", "fa", "he", "ur")
 	html = f"""<!doctype html><html dir="{"rtl" if rtl else "ltr"}"><head><meta charset="utf-8"><style>{pf.css or ""}</style></head><body>{body}</body></html>"""
-	return get_pdf(html, {"orientation": "Portrait"})
+	return get_pdf(keep_latin_text_upright(html) if rtl else html, {"orientation": "Portrait"})
 
 
 def render_report_file(
