@@ -217,6 +217,54 @@ frappe.provide("whatsapp.ui");
 
 			restore();
 			if (tab === "preview") this.mount_thread();
+			this.mount_link_fields();
+		}
+
+		/**
+		 * The file outputs' print format and letter head as Frappe Link fields (owner, 2026-11-17: «الحقول
+		 * تكون من نوع link»): type to search, open the record from its arrow. A field is made once per
+		 * output and kind and moved back into its slot after every render, so a render never loses
+		 * what is being typed. Print formats are limited to the output's own (`print_format_filters`).
+		 */
+		mount_link_fields() {
+			this._link_fields = this._link_fields || {};
+			const make_link_control = (slot, i, kind) => {
+				const output = this.draft.outputs[i];
+				const key = `${kind}-${i}-${output.output_key}`;
+				let control = this._link_fields[key];
+				if (!control) {
+					const field = kind === "pf" ? "print_format" : "letter_head";
+					control = frappe.ui.form.make_control({
+						parent: $("<div>"),
+						df: {
+							fieldtype: "Link",
+							fieldname: `${field}_${i}`,
+							options: kind === "pf" ? "Print Format" : "Letter Head",
+							placeholder: kind === "pf" ? __("Default of {0}", [__(output.doctype || output.report_name || "")]) : output.default_letter_head ? __("Default ({0})", [output.default_letter_head]) : __("Default"),
+							get_query: () => ({ filters: kind === "pf" ? output.print_format_filters || {} : { disabled: 0 } }),
+							read_only: this.read_only ? 1 : 0,
+							change: () => {
+								const value = control.get_value() || null;
+								if ((this.draft.outputs[i] || {})[field] === value) return;
+								this.draft.outputs[i][field] = value;
+								this.touch();
+							},
+						},
+						render_input: true,
+						only_input: true,
+					});
+					control.set_value(output[field] || "");
+					// the field may sit at the bottom of its column: brought to the middle, its search list
+					// opens in full instead of under the column's edge
+					control.$input.on("focus", () => control.$wrapper[0].scrollIntoView({ block: "center", behavior: "smooth" }));
+					this._link_fields[key] = control;
+				}
+				slot.replaceWith(control.$wrapper);
+			};
+			this.$body.find("[data-link-slot]").each((_, el) => {
+				const [kind, index] = el.getAttribute("data-link-slot").split("-");
+				make_link_control($(el), cint(index), kind);
+			});
 		}
 
 		render_header() {
@@ -490,23 +538,14 @@ frappe.provide("whatsapp.ui");
 		}
 
 		/**
-		 * A file output's print format and letter head, chosen from lists the host gives
-		 * (`print_format_choices[]` for a printed document, `letter_head_choices[]`): an empty choice
-		 * keeps the default (the document type's format, the site's letter head).
+		 * A file output's print format and letter head: two slots that `mount_link_fields` fills with
+		 * Frappe Link fields (print formats filtered by `print_format_filters`). Empty keeps the default:
+		 * the document type's or report's format, the site's letter head.
 		 */
 		render_print_choices(o, i, compact) {
-			const select = (kind, label, choices, value, default_label) => `<label class="whatsapp-kit-command-editor__subtitle" for="${this.id}-${kind}-${i}">${escape_html(label)}</label>
-				<select id="${this.id}-${kind}-${i}" class="whatsapp-kit-command-editor__input whatsapp-kit-command-editor__select whatsapp-kit-command-editor__input--sm" data-ch="out-${kind}" data-key="${i}" ${this.read_only ? "disabled" : ""}>
-					<option value="" ${value ? "" : "selected"}>${escape_html(default_label)}</option>
-					${(choices || []).map((c) => `<option value="${escape_html(c)}" ${value === c ? "selected" : ""}>${escape_html(c)}</option>`).join("")}
-				</select>`;
 			if (compact) return "";
-			return `${
-				o.print_format_choices
-					? select("pf", __("Print format"), o.print_format_choices, o.print_format || "", __("Default of {0}", [__(o.doctype || o.report_name || "")]))
-					: ""
-			}
-			${select("lh", __("Letter head"), o.letter_head_choices, o.letter_head || "", o.default_letter_head ? __("Default ({0})", [o.default_letter_head]) : __("Default"))}`;
+			const slot = (kind, label) => `<span class="whatsapp-kit-command-editor__subtitle">${escape_html(label)}</span><span class="whatsapp-kit-command-editor__link-field" data-link-slot="${kind}-${i}"></span>`;
+			return `${o.print_format_filters ? slot("pf", __("Print format")) : ""}${slot("lh", __("Letter head"))}`;
 		}
 
 		// ---- permissions --------------------------------------------------------------------------
@@ -1063,8 +1102,6 @@ frappe.provide("whatsapp.ui");
 			else if (kind === "ask") this.set_ask(key, target_element.checked);
 			else if (kind === "ask-choices") this.set_ask(key, true, target_element.value.trim());
 			else if (kind === "setting") this.set_setting(key, target_element.type === "checkbox" ? (target_element.checked ? 1 : 0) : target_element.value);
-			else if (kind === "out-pf") draft.outputs[cint(key)].print_format = target_element.value || null;
-			else if (kind === "out-lh") draft.outputs[cint(key)].letter_head = target_element.value || null;
 			this.render();
 			this.touch();
 		}

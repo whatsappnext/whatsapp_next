@@ -49,8 +49,11 @@ frappe.provide("whatsapp_next.functions");
 			report_name: reply.report_name || null,
 			print_format: (chosen && chosen.print_format) || null,
 			letter_head: (chosen && chosen.letter_head) || null,
-			print_format_choices:
-				reply.type === "print" ? (choices.print_formats || {})[reply.doctype] || [] : (choices.report_print_formats || {})[reply.report_name] || [],
+			// the Link fields' filters: the document type's print formats, or the report's own Jinja ones
+			print_format_filters:
+				reply.type === "print"
+					? { doc_type: reply.doctype, disabled: 0 }
+					: { print_format_for: "Report", report: reply.report_name, print_format_type: "Jinja", disabled: 0 },
 			letter_head_choices: choices.letter_heads || [],
 			default_letter_head: choices.default_letter_head || null,
 			notes: reply.type === "print" ? __("Printed: {0}", [__(reply.doctype || "")]) : __("Report: {0}", [__(reply.report_name || "")]),
