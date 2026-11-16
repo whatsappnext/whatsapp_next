@@ -274,6 +274,40 @@ class TestCommandRouter(IntegrationTestCase):
 		self.assertEqual((res.status, res.replies[0]["body"]), ("Executed", f"doc SINV-1 of {self.customer}"))
 		self.assertEqual(res.data["days"], 2)
 
+	def test_a_group_runs_a_command_typed_without_a_mark(self):
+		"""Owner 2026-11-17: «كشف» in a group, without `#`. Other talk in the group is not routed,
+		and «؟» alone there is a question to the others, not a call for the command list."""
+		from whatsapp_next.services import inbound as inbound_service
+
+		def routed(text):
+			return inbound_service.should_route("Text", text, True, enabled=True)
+
+		self.assertEqual(
+			[routed(t) for t in ("tping", "tping hello", "tبنق", "#tping", "tping ؟", "؟", "hello tping", "tpingx")],
+			[True, True, True, True, False, False, False, False],
+		)
+
+	def test_a_member_of_a_group_is_found_by_their_number(self):
+		"""Owner 2026-11-17: a linked number wrote «كشف» in a group and was told it is not linked;
+		the group's message carries no contact."""
+		group_message = frappe._dict(
+			phone_e164=P_LINKED, chat_jid="120363427813808210@g.us", is_group=1, contact=None, message_type="Text"
+		)
+		sender = cr.sender_for(group_message)
+		self.assertEqual(sender.contact, self.contact)
+		self.assertTrue(sender.is_group)
+		self.assertIsNone(cr.sender_for({**group_message, "is_group": 0}).contact, "a direct chat keeps what was stored")
+
+	def test_a_synonym_of_several_words_is_read_whole(self):
+		"""Owner 2026-11-17: «كشف حساب» took «حساب» for the months and answered with an error."""
+		ff.make_command("tmulti", "_test_echo", synonyms="tرصيد الحساب")
+		cr.clear_map()
+		match = cr.match_command_text("tرصيد  الحساب SINV-1 -3d")
+		self.assertEqual((match.command, match.word, match.rest), ("tmulti", "tرصيد الحساب", "SINV-1 -3d"))
+		self.assertTrue(cr.match_command_text("#tرصيد الحساب ؟").is_help)
+		self.assertEqual(cr.match_command_text("tmulti x").rest, "x")
+		self.assertIsNone(cr.match_command_text("tرصيد"))
+
 	def test_typed_parsing_follows_the_header(self):
 		cmd = frappe.get_doc("WhatsApp Command", "tdoc")
 		self.assertEqual(
