@@ -145,6 +145,19 @@ class TestAlerts(IntegrationTestCase):
 		col = next(r for r in recips if r.source == "Report Column" and r.phone_e164 == "+967777999579")
 		self.assertEqual(len(alerts._rows_for(col, REPORT_ROWS, REPORT_COLUMNS, "mobile")), 2)
 
+	def test_a_group_number_is_a_recipient(self):
+		"""Owner, 2026-11-16: a group's number without `@g.us` was refused as «no valid number»."""
+		from whatsapp_next.services.dispatch import OutboundSpec, _recipient_fields
+
+		alert = _alert()
+		alert.set("recipients", [{"recipient_type": "Phone", "phone": "120363429729694596"}])
+		alert.save(ignore_permissions=True)
+		recips = alerts.expand_recipients(alert, REPORT_ROWS, REPORT_COLUMNS)
+		self.assertEqual([r.phone_e164 for r in recips], ["120363429729694596@g.us"])
+		# the send path the alert takes (`phone=`) makes a group row, not a person's
+		fields = _recipient_fields(OutboundSpec(phone=recips[0].phone_e164))
+		self.assertEqual((fields["recipient_type"], fields["jid"], fields["phone_e164"]), ("Group", "120363429729694596@g.us", None))
+
 	def test_render(self):
 		alert = _alert()
 		html_text = report_render.report_html(

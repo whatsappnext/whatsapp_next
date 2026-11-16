@@ -219,6 +219,10 @@ def _contact_primary_phone(contact: str | None) -> str | None:
 	return phones[0] if phones else None
 
 
+#: where a linked record keeps its contact, in the order they are tried
+LINKED_CONTACT_FIELDS = ("contact", "contact_person", "customer_primary_contact", "supplier_primary_contact")
+
+
 def _phone_from_field(doc, fieldname: str | None) -> tuple[str | None, str | None]:
 	"""`(phone_e164, contact)` from a phone field, a Link-to-Contact field, or a Link to a
 	document that has a `contact`/`mobile_no` field."""
@@ -239,9 +243,16 @@ def _phone_from_field(doc, fieldname: str | None) -> tuple[str | None, str | Non
 					linked_phone = frappe.db.get_value(target, value, f)
 					if linked_phone and normalize_phone_to_e164(linked_phone):
 						return normalize_phone_to_e164(linked_phone), None
-			if meta.has_field("contact"):
-				linked_contact = frappe.db.get_value(target, value, "contact")
-				return _contact_primary_phone(linked_contact), linked_contact
+			# the linked record's contact: its own `contact`, or a party's primary contact (a
+			# Customer or Supplier keeps it in `customer_primary_contact` / `supplier_primary_contact`,
+			# and a customer with no number of its own was nobody — owner, 2026-11-16)
+			for contact_field in LINKED_CONTACT_FIELDS:
+				if not meta.has_field(contact_field):
+					continue
+				linked_contact = frappe.db.get_value(target, value, contact_field)
+				linked_phone = _contact_primary_phone(linked_contact)
+				if linked_phone:
+					return linked_phone, linked_contact
 		return None, None
 	return normalize_phone_to_e164(str(value)), None
 

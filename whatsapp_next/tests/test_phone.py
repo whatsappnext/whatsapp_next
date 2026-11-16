@@ -58,6 +58,20 @@ class TestPhone(IntegrationTestCase):
 		self.assertRegex(yemen["example"], r"^07\d{2} \d{3} \d{3}$")
 		self.assertEqual(yemen["international"], "+967 " + yemen["example"][1:])
 
+	def test_a_group_number_written_without_its_suffix_is_a_group(self):
+		"""Owner, 2026-11-16: a group's number saved on a contact as `120363…` (18 digits, no
+		`@g.us`) was refused as «no valid number», so a notification could not reach the group.
+		No phone number is that long (E.164: 15 digits at most)."""
+		for raw in ("120363429729694596", "120363429729694596@g.us", " 120363 4297 2969 4596 "):
+			with self.subTest(raw=raw):
+				self.assertEqual(phone.normalize_phone_to_e164(raw), "120363429729694596@g.us")
+				self.assertEqual(phone.classify(raw), ("Group", "120363429729694596@g.us"))
+		# a group of the old kind: its creator's number and a time
+		self.assertEqual(phone.classify("967784499996-1600000000"), ("Group", "967784499996-1600000000@g.us"))
+		# a phone stays a phone
+		self.assertEqual(phone.classify("967784499996"), ("Individual", "+967784499996"))
+		self.assertEqual(phone.normalize_phone_to_e164("078-449-9996", "YE"), "+967784499996")
+
 	def test_classify(self):
 		self.assertEqual(phone.classify("+967784499996"), ("Individual", "+967784499996"))
 		self.assertEqual(phone.classify("120363000000000001@g.us"), ("Group", "120363000000000001@g.us"))
