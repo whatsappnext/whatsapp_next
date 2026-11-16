@@ -214,14 +214,22 @@ def _parse_try_count_from_error(error: str | None) -> int:
 
 
 STUCK_MINUTES = 10
+#: the try numbers an exhausted event may carry: MAX_TRIES, or a few more when two runs overlapped
+EXHAUSTED_TRIES_SPAN = 5
 
 
 def reprocess_failed(limit: int = 100) -> int:
 	"""Cron `*/10`: re-run `Failed` events that have fewer than 3 tries, and `Received` events
 	whose job never ran (> 10 min old: a lost or dropped job). Returns the count."""
+	# the events that used their tries are left out in the query, not after it: read first, they
+	# filled the page, and once 100 of them existed no newer failure was ever tried again
+	# (security review 2026-11-16). An exhausted event's error starts `[try N] ` with N >= MAX_TRIES.
 	rows = frappe.get_all(
 		"WhatsApp Webhook Event",
-		filters={"status": "Failed"},
+		filters=[
+			["status", "=", "Failed"],
+			*(["error", "not like", f"[try {n}] %"] for n in range(MAX_TRIES, MAX_TRIES + EXHAUSTED_TRIES_SPAN)),
+		],
 		fields=["name", "error"],
 		order_by="received_at asc",
 		limit=cint(limit) or 100,

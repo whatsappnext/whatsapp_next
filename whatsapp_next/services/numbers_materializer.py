@@ -129,7 +129,11 @@ def upsert_from_message(doctype: str, name: str) -> RefreshStats:
 		return RefreshStats()
 	row["doctype"] = doctype
 	key = message_key(row)
-	return refresh_keys([key]) if key else RefreshStats()
+	stats = refresh_keys([key]) if key else RefreshStats()
+	sender = row.get("sender_jid") or ""
+	if doctype == "WhatsApp Inbound Message" and sender.endswith("@lid") and (row.phone_e164 or "").startswith("+"):
+		fill_hidden_id_numbers(hidden_id_user=_hidden_id_user(sender))
+	return stats
 
 
 # ---- core ----------------------------------------------------------------------------------
@@ -235,6 +239,79 @@ def refresh_group_name(jid: str, name: str | None) -> bool:
 	return True
 
 
+# ---- a hidden id (`…@lid`) and its real number ------------------------------------------------
+# WhatsApp hides a group member's number behind a hidden id; the members' list brings such rows
+# in. A member's own messages carry the real number beside the hidden id: the hidden id's row
+# then shows that number (`phone`) and takes the number's contact, so a member already linked
+# is not shown as "Not Linked" (owner, 2026-11-17).
+
+
+def _hidden_id_user(jid: str | None) -> str:
+	"""`1555…:34@lid` → `1555…`: the account part, without the linked device."""
+	return str(jid or "").split("@")[0].split(":")[0]
+
+
+def known_number_of_hidden_id(hidden_id: str) -> str | None:
+	"""The real number the newest message from this hidden id came with, if any."""
+	user = _hidden_id_user(hidden_id)
+	if not user:
+		return None
+	rows = frappe.get_all(
+		"WhatsApp Inbound Message",
+		filters={"phone_e164": ("like", "+%")},
+		or_filters=[
+			["sender_jid", "=", f"{user}@lid"],
+			["sender_jid", "like", f"{user}:%@lid"],
+		],
+		pluck="phone_e164",
+		order_by="creation desc",
+		limit=1,
+	)
+	return rows[0] if rows else None
+
+
+def fill_hidden_id_numbers(
+	hidden_id_user: str | None = None, number: str | None = None
+) -> int:
+	"""Write the real number and its contact on hidden-id rows: all of them, the rows of one
+	hidden id (`hidden_id_user`), or those already showing `number` (after it was linked or
+	unlinked). A row whose number is not known yet is left as it is. Returns the rows changed."""
+	from whatsapp_next.services.permissions import resolve_contact_by_phone
+
+	filters: dict[str, Any] = {"number_type": "LID"}
+	or_filters = None
+	if hidden_id_user:
+		or_filters = [["name", "=", f"{hidden_id_user}@lid"], ["name", "like", f"{hidden_id_user}:%@lid"]]
+	if number:
+		filters["phone"] = number
+	changed_rows = 0
+	for row in frappe.get_all(
+		"WhatsApp Number",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["name", "phone", "contact", "link_status", "display_name"],
+	):
+		real = known_number_of_hidden_id(row.name) or (row.phone if (row.phone or "").startswith("+") else None)
+		if not real:
+			continue
+		contact = frappe.db.get_value("WhatsApp Number", real, "contact") or resolve_contact_by_phone(real)
+		if not contact and not row.phone:
+			# a hidden id linked by hand before its number was known keeps its link
+			contact = row.contact
+		values: dict[str, Any] = {
+			"phone": real,
+			"contact": contact,
+			"link_status": "Linked" if contact else "Not Linked",
+		}
+		if contact:
+			values["display_name"] = _contact_name(contact) or row.display_name
+		changed = {k: v for k, v in values.items() if _differs(row.get(k), v)}
+		if changed:
+			frappe.db.set_value("WhatsApp Number", row.name, changed, update_modified=True)
+			changed_rows += 1
+	return changed_rows
+
+
 # ---- nightly -------------------------------------------------------------------------------
 
 
@@ -260,6 +337,7 @@ def nightly_reconcile(full: bool = False, batch: int = NIGHTLY_BATCH) -> dict[st
 		batches += 1
 		frappe.db.commit()
 	drift = _drift_check()
+	hidden_ids = fill_hidden_id_numbers()
 	frappe.db.set_single_value(
 		"WhatsApp Settings",
 		{"numbers_watermark": upper, "numbers_last_run_at": now_datetime()},
@@ -271,6 +349,7 @@ def nightly_reconcile(full: bool = False, batch: int = NIGHTLY_BATCH) -> dict[st
 		"batches": batches,
 		"watermark": str(upper),
 		"drift": drift,
+		"hidden_ids": hidden_ids,
 		**{k: getattr(totals, k) for k in ("visited", "inserted", "updated", "unchanged", "invalid")},
 	}
 

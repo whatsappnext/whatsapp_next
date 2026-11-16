@@ -18,7 +18,9 @@ from frappe.utils import add_days, cint, get_first_day, get_year_start, getdate,
 BEGIN = "WA-FUNCTION"
 END = "END WA-FUNCTION"
 FIELDTYPES = ("Link", "Dynamic", "Date", "Check", "Int", "Data", "Select", "Template")
-REPLY_TYPES = ("text", "report")
+#: text; report: a report printed (PDF / Excel); print: one document printed with a print format
+#: and a letter head the command chooses (owner, 2026-11-17)
+REPLY_TYPES = ("text", "report", "print")
 REQUIRE_KINDS = ("report", "doctype", "app")
 SOURCES = ("sender", "command")
 # a Server Script whose API method starts with this prefix is a function; its guard refuses the
@@ -238,7 +240,7 @@ def parse_function_header(script: str | None) -> dict[str, Any]:
 			cols = [c.strip() for c in value.split("|")]
 			if len(cols) != 4 or cols[1] not in REPLY_TYPES:
 				raise HeaderError(
-					_("@reply takes key | text/report | options | title")
+					_("@reply takes key | text/report/print | options | title")
 					+ _format_line_number_suffix(line_no)
 				)
 			parsed_options = _parse_header_options(cols[2], line_no)
@@ -246,11 +248,16 @@ def parse_function_header(script: str | None) -> dict[str, Any]:
 				raise HeaderError(
 					_("A report reply needs report=<report name>") + _format_line_number_suffix(line_no)
 				)
+			if cols[1] == "print" and not parsed_options.get("doctype"):
+				raise HeaderError(
+					_("A print reply needs doctype=<document type>") + _format_line_number_suffix(line_no)
+				)
 			spec["replies"].append(
 				{
 					"key": cols[0],
 					"type": cols[1],
 					"report_name": parsed_options.get("report"),
+					"doctype": parsed_options.get("doctype"),
 					"format": parsed_options.get("format") or ("PDF" if cols[1] == "report" else None),
 					"label": cols[3],
 				}
@@ -491,6 +498,21 @@ def validate_messages(
 			if not text:
 				raise ValueError(_("Message {0}: the text is empty").format(i))
 			ready.append({"reply": reply["key"], "type": "text", "text": text})
+			continue
+		if reply["type"] == "print":
+			name = str(msg.get("name") or "").strip()
+			if not name:
+				raise ValueError(_("Message {0}: the document to print has no name").format(i))
+			ready.append(
+				{
+					"reply": reply["key"],
+					"type": "print",
+					"doctype": reply["doctype"],
+					"name": name,
+					"file_name": msg.get("file_name") or name,
+					"caption": msg.get("caption") or "",
+				}
+			)
 			continue
 		report_name = msg.get("report_name") or reply["report_name"]
 		if report_name != reply["report_name"]:

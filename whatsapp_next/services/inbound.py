@@ -473,7 +473,9 @@ def _after_insert(
 
 def should_route(message_type: str, body: str | None, is_group: bool, *, enabled: bool | None = None) -> bool:
 	"""Commands enabled (`Settings.enable_commands` unless `enabled` is given), text message,
-	and (direct chat or a group message starting with a command token)."""
+	and a direct chat, or a group message that starts with a command token or with a command's
+	name (owner 2026-11-17: «كشف» in a group, without `#`). A group's other talk is not routed,
+	and its help word needs the token: «؟» alone in a group is a question to the others."""
 	if enabled is None:
 		enabled = bool(cint(frappe.get_cached_doc("WhatsApp Settings").enable_commands))
 	if not enabled:
@@ -482,7 +484,17 @@ def should_route(message_type: str, body: str | None, is_group: bool, *, enabled
 	if message_type not in ("Text", "Interactive Reply") or not (body or "").strip():
 		return False
 	if is_group:
-		return (body or "").lstrip().startswith(COMMAND_TOKENS)
+		# a tap on the menu's list or buttons is meant for the device (owner, 2026-11-17: the menu
+		# in groups)
+		if message_type == "Interactive Reply" or (body or "").lstrip().startswith(COMMAND_TOKENS):
+			return True
+		from whatsapp_next.services import command_menu
+		from whatsapp_next.services.command_router import match_command_text
+
+		if command_menu.is_menu_request({"body": body}):
+			return True
+		matched = match_command_text(body)
+		return bool(matched and matched.command and not matched.is_help)
 	return True
 
 

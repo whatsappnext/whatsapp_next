@@ -189,29 +189,51 @@ def requeue_stale_claims(older_than_minutes: int = STALE_MINUTES) -> int:
 	if not rows:
 		return 0
 	now = now_datetime()
+	from whatsapp_next.services.dispatch import OUTBOUND_HANDED_OVER
+
 	with status_writer():
 		for r in rows:
+			outbound_status = frappe.db.get_value("WhatsApp Log", r.outbound_message, "status")
+			if outbound_status in OUTBOUND_HANDED_OVER:
+				# the platform took it (its receipts already came): the worker died after the
+				# platform accepted the batch and before it recorded the answer. Sending it again
+				# would repeat it, and writing Queued erased Delivered (security review 2026-11-16).
+				frappe.db.set_value(
+					"WhatsApp Queue Item",
+					r.name,
+					{"status": "Completed", "completed_at": now, "job_id": None},
+					update_modified=True,
+				)
+				continue
 			frappe.db.set_value(
 				"WhatsApp Queue Item",
 				r.name,
 				{"status": "Queued", "next_attempt_at": now, "job_id": None, "claimed_at": None},
 				update_modified=True,
 			)
-			frappe.db.set_value(
-				"WhatsApp Log", r.outbound_message, {"status": "Queued"}, update_modified=True
-			)
+			if outbound_status == "Sending":
+				frappe.db.set_value(
+					"WhatsApp Log", r.outbound_message, {"status": "Queued"}, update_modified=True
+				)
 	frappe.log_error(
 		title="WhatsApp reconcile: stale claims requeued", message="\n".join(r.name for r in rows)
 	)
 	return len(rows)
 
 
-def assert_coherence(fix: bool = False) -> list[Drift]:
-	"""Pairs whose `(Queue Item.status, outbound.status)` is not allowed. With `fix`, the outbound
-	is corrected from the Queue Item (the dispatcher's own state) and the count is logged."""
+def _drifting_pairs() -> list[frappe._dict]:
+	"""The (Queue Item, message) pairs whose statuses do not go together, found by the query: the
+	check read every pair of the last 7 days (Completed included) into Python every 5 minutes to
+	find the few that drift (security review 2026-11-16)."""
 	queue_table = frappe.qb.DocType("WhatsApp Queue Item")
 	log_table = frappe.qb.DocType("WhatsApp Log")
-	rows = (
+	drifting = None
+	for queue_status, allowed in ALLOWED.items():
+		pair = (queue_table.status == queue_status) & (
+			log_table.status.notin(list(allowed)) | log_table.status.isnull()
+		)
+		drifting = pair if drifting is None else (drifting | pair)
+	return (
 		frappe.qb.from_(queue_table)
 		.join(log_table)
 		.on(log_table.name == queue_table.outbound_message)
@@ -221,9 +243,15 @@ def assert_coherence(fix: bool = False) -> list[Drift]:
 			log_table.name.as_("outbound"),
 			log_table.status.as_("os"),
 		)
-		.where(queue_table.status.isin(list(ALLOWED)))
+		.where(drifting)
 		.run(as_dict=True)
 	)
+
+
+def assert_coherence(fix: bool = False) -> list[Drift]:
+	"""Pairs whose `(Queue Item.status, outbound.status)` is not allowed. With `fix`, the outbound
+	is corrected from the Queue Item (the dispatcher's own state) and the count is logged."""
+	rows = _drifting_pairs()
 	drifts: list[Drift] = []
 	fix_to = {
 		"Queued": "Queued",
@@ -286,9 +314,41 @@ def finalize_campaigns() -> int:
 		from whatsapp_next.services import campaign_runner
 	except ImportError:  # phase order: campaign_runner lands in B-15
 		return 0
+	restart_unfinished_builds()
 	closed_count = 0
 	for name in frappe.get_all("WhatsApp Campaign", filters={"status": "Running"}, pluck="name"):
 		campaign_runner.refresh_counters(name)
 		if frappe.db.get_value("WhatsApp Campaign", name, "status") != "Running":
 			closed_count += 1
 	return closed_count
+
+
+def restart_unfinished_builds() -> list[str]:
+	"""A campaign whose build job stopped part-way (a restart during a large campaign) kept
+	recipients `Pending` with no message, and a campaign cannot close while any is `Pending`:
+	it stayed Running for ever (security review 2026-11-16). Queued campaigns, and Running ones
+	with such recipients, get their build queued again under the campaign's own job id: while the
+	first build still runs (or waits), Frappe refuses the copy, so a build never runs twice."""
+	started = []
+	for campaign in frappe.get_all("WhatsApp Campaign", filters={"status": ("in", ["Queued", "Running"])}, fields=["name", "status"]):
+		if campaign.status == "Running" and not frappe.db.exists(
+			"WhatsApp Campaign Recipient",
+			{"parenttype": "WhatsApp Campaign", "parent": campaign.name, "status": "Pending", "outbound_message": ("is", "not set")},
+		):
+			continue
+		method = "materialize" if campaign.status == "Queued" else "materialize_pending"
+		try:
+			frappe.enqueue(
+				f"whatsapp_next.services.campaign_runner.{method}",
+				campaign=campaign.name,
+				queue="long",
+				job_id=f"wa-campaign-{campaign.name}",
+				deduplicate=True,
+				timeout=3600,
+			)
+		except frappe.QueueOverloaded:
+			frappe.clear_last_message()
+			continue  # the next run tries again
+		started.append(campaign.name)
+	return started
+

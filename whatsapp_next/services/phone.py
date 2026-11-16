@@ -169,6 +169,27 @@ def _strip_phone_formatting(raw: str) -> str:
 	return _STRIP_CHARS.sub("", value)
 
 
+#: a group's id written without its `@g.us`: today's groups are `120363` and 12 more digits,
+#: longer than any phone number (E.164: 15 digits at most)
+_BARE_GROUP_ID = re.compile(r"^120363\d{10,14}$")
+#: an older group's id: its creator's number, a dash, the time it was made
+_OLD_GROUP_ID = re.compile(r"^\+?\d{8,15}-\d{9,10}$")
+
+
+def bare_group_jid(raw: str | None) -> str | None:
+	"""The group JID of an id written without `@g.us` (as saved on a contact or typed as a fixed
+	number, owner 2026-11-16), or None when the value is not one."""
+	if raw is None:
+		return None
+	text = str(raw).strip().translate(_ARABIC_DIGITS)
+	if _OLD_GROUP_ID.match(text):
+		return text.lstrip("+") + GROUP_SUFFIX
+	digits = _STRIP_CHARS.sub("", text)
+	if _BARE_GROUP_ID.match(digits):
+		return digits + GROUP_SUFFIX
+	return None
+
+
 def normalize_phone_to_e164(raw: str | None, region: str | None = None) -> str | None:
 	"""Normalize a phone or individual JID to E.164 (`+9665…`); return None when invalid.
 
@@ -178,6 +199,9 @@ def normalize_phone_to_e164(raw: str | None, region: str | None = None) -> str |
 	"""
 	if raw is None:
 		return None
+	group = bare_group_jid(raw)
+	if group:
+		return group
 	value = _strip_phone_formatting(raw)
 	if not value:
 		return None
@@ -217,6 +241,9 @@ def classify(value: str | None) -> tuple[str | None, str | None]:
 	"""Return `(kind, key)`: `("Individual", e164)`, `("Group", jid)`, `("LID", jid)` or `(None, None)`."""
 	if not value:
 		return None, None
+	group = bare_group_jid(value)
+	if group:
+		return "Group", group
 	cleaned_value = _strip_phone_formatting(value)
 	lower = cleaned_value.lower()
 	if lower.endswith(GROUP_SUFFIX):

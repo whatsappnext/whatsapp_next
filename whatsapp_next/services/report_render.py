@@ -45,15 +45,58 @@ def _inline_images(html_text: str) -> str:
 	return _IMG_TAG.sub(lambda m: m.group(0) if 'src="data:' in m.group(0) else "", html_text)
 
 
-def _letter_head_html(letter_head: str | None) -> str:
+_TEXT_OR_TAG = re.compile(r"(<style\b.*?</style>|<script\b.*?</script>|<[^>]+>)|([^<]+)", re.IGNORECASE | re.DOTALL)
+_LATIN = re.compile(r"[A-Za-z]")
+_RIGHT_TO_LEFT = re.compile(r"[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]")
+LEFT_TO_RIGHT_MARK = "\u200e"
+
+
+def keep_latin_text_upright(html_text: str) -> str:
+	"""A right-to-left page with a Latin text in it («SANAD Digital (Demo)», «Grant Plastics
+	Ltd.») printed its end punctuation on the wrong side: «(SANAD Digital (Demo», «.Grant Plastics
+	Ltd» (owner, 2026-11-17). Every text with Latin letters and no right-to-left ones is held
+	between two left-to-right marks, which settle the punctuation at its ends; tags, styles and
+	scripts are left as they are."""
+
+	def mark(m: re.Match) -> str:
+		text = m.group(2)
+		if text is None or not _LATIN.search(text) or _RIGHT_TO_LEFT.search(text):
+			return m.group(0)
+		stripped = text.strip()
+		start = text.index(stripped)
+		return f"{text[:start]}{LEFT_TO_RIGHT_MARK}{stripped}{LEFT_TO_RIGHT_MARK}{text[start + len(stripped):]}"
+
+	return _TEXT_OR_TAG.sub(mark, html_text)
+
+
+def letter_head_document(company: str | None, title: str | None = None) -> frappe._dict:
+	"""The `doc` a letter head is rendered with when the file is no document (a report): the
+	company and its default address, which a company letter head reads (`doc.company`,
+	`doc.company_address`); without them it printed «None» (owner, 2026-11-17)."""
+	# a letter head names the document in its corner (`doc.doctype`, `doc.name`): the report's
+	# title, and no number
+	shown = {"doctype": _(title) if title else "", "name": ""}
+	if not company:
+		return frappe._dict(shown)
+	address = None
+	try:
+		from erpnext.setup.doctype.company.company import get_default_company_address
+
+		address = get_default_company_address(company)
+	except Exception:
+		address = None
+	return frappe._dict(shown, company=company, company_address=address)
+
+
+def _letter_head_html(letter_head: str | None, doc: frappe._dict | None = None) -> str:
 	"""Rendered Letter Head content (they are Jinja: `{{ frappe.utils.get_url(company_logo) }}`),
-	with images inlined or removed."""
+	with images inlined or removed. `doc` is what the letter head reads (`letter_head_document`)."""
 	if not letter_head or not frappe.db.exists("Letter Head", letter_head):
 		return ""
 	row = frappe.db.get_value("Letter Head", letter_head, ["content", "image"], as_dict=True)
 	content = row.content or ""
 	try:
-		content = frappe.render_template(content, {"company_logo": row.image, "doc": frappe._dict()})
+		content = frappe.render_template(content, {"company_logo": row.image, "doc": doc or frappe._dict()})
 	except Exception:
 		# the PDF goes out without its letterhead; the template error is kept for whoever fixes it
 		frappe.log_error(title=f"WhatsApp report: letter head {letter_head}")
@@ -154,7 +197,7 @@ def report_html(
 	size, pad = (11, 6) if len(cols) <= 8 else (9, 4) if len(cols) <= 13 else (8, 3)
 	heading = title or getattr(alert, "report", None) or getattr(alert, "alert_name", "") or ""
 	# every rule is scoped to the report's own table: the letter head is a table too
-	return f"""<!DOCTYPE html><html lang="{lang}" dir="{"rtl" if rtl else "ltr"}"><head><meta charset="utf-8">
+	page = f"""<!DOCTYPE html><html lang="{lang}" dir="{"rtl" if rtl else "ltr"}"><head><meta charset="utf-8">
 <style>
 body {{ font-family: "Noto Sans Arabic", "Noto Sans", Arial, sans-serif; font-size: 11px; color: #1f272e; }}
 h2 {{ font-size: 16px; margin: 0 0 4px; }}
@@ -171,6 +214,7 @@ table.wa-report tr:nth-child(even) td {{ background: #fafbfc; }}
 <table class="wa-report"><thead><tr>{head}</tr></thead><tbody>{"".join(body_rows) or f'<tr><td colspan="{max(len(cols), 1)}">{html.escape(_("No data"))}</td></tr>'}</tbody></table>
 {truncated}
 </body></html>"""
+	return keep_latin_text_upright(page) if rtl else page
 
 
 def _filter_value(value: Any) -> str:

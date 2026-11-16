@@ -144,7 +144,7 @@ PARAM_FIELDS = (
 	"select_options",
 	"depends_on",
 )
-REPLY_FIELDS = ("type", "report_name", "format", "label")
+REPLY_FIELDS = ("type", "report_name", "doctype", "format", "label")
 
 
 def _rows_diff(current: list[dict], target: list[dict], key: str, fields: tuple[str, ...]) -> dict[str, list]:

@@ -19,10 +19,35 @@ class WhatsAppContactGroup(Document):
 
 	def validate(self) -> None:
 		"""Normalize members, reject duplicates, maintain counters, guard the global blacklist."""
+		self.check_access_group_editor()
 		self.normalize_members()
 		self.check_duplicate_members()
 		self.update_member_stats()
 		self.check_blacklist_disable()
+
+	def check_access_group_editor(self) -> None:
+		"""A group that decides access — a blacklist, the global blacklist, a command's allowed or
+		blocked group — is changed by a Manager only. An Agent or a Contact User may write groups,
+		and could add an outside number to a sensitive command's allowed group (security review
+		2026-11-16). Checked whatever the path, the picker's own included (it saves with
+		`ignore_permissions` after its write check)."""
+		if self.is_new() or set(frappe.get_roles()) & ACCESS_GROUP_EDITORS:
+			return
+		reason = access_group_reason(self)
+		if reason and self.flags.wa_blacklist_toggle and not frappe.get_all(
+			"WhatsApp Command",
+			or_filters={"allowed_group": self.name, "blocked_group": self.name},
+			pluck="name",
+			limit=1,
+		):
+			# blocking or unblocking one number (`permissions.toggle_blacklist`, audited) is the
+			# blacklist change these roles may make; a command's access group stays a Manager's
+			return
+		if reason:
+			frappe.throw(
+				_("{0} {1}: only a WhatsApp Manager may change it").format(self.name, reason),
+				frappe.PermissionError,
+			)
 
 	def normalize_members(self) -> None:
 		"""Fill `phone_e164` on every row (required) and stamp `added_by` / `added_on` on new rows."""
@@ -70,6 +95,30 @@ class WhatsAppContactGroup(Document):
 				_("{0} is the global blacklist and cannot be disabled").format(self.name),
 				WAStateConflictError,
 			)
+
+
+#: who may change a group that decides access
+ACCESS_GROUP_EDITORS = {"Administrator", "System Manager", "WhatsApp Manager"}
+
+
+def access_group_reason(group) -> str | None:
+	"""Why the group decides access (stored values: a change in this save is judged by what the
+	group already is), or None."""
+	stored_kind = frappe.db.get_value("WhatsApp Contact Group", group.name, "kind")
+	if "Blacklist" in (stored_kind, group.kind):
+		return _("is a blacklist")
+	if frappe.db.exists("DocType", "WhatsApp Settings") and frappe.db.get_single_value(
+		"WhatsApp Settings", "global_blacklist_group"
+	) == group.name:
+		return _("is the global blacklist")
+	if frappe.get_all(
+		"WhatsApp Command",
+		or_filters={"allowed_group": group.name, "blocked_group": group.name},
+		pluck="name",
+		limit=1,
+	):
+		return _("decides who may run a command")
+	return None
 
 
 def _member_signature(doc: Document) -> list[tuple]:

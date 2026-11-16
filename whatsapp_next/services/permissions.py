@@ -958,6 +958,8 @@ def link_number(phone_e164: str, contact: str, user: str | None = None) -> str:
 	}
 	frappe.db.set_value("WhatsApp Number", key, values, update_modified=True)
 	_add_number_to_contact(contact, key, kind)
+	if kind == "Individual":
+		_follow_on_hidden_ids(key)
 	audit.record_audit_entry(
 		"Number Linked",
 		reference=("WhatsApp Number", key),
@@ -966,6 +968,13 @@ def link_number(phone_e164: str, contact: str, user: str | None = None) -> str:
 		user=user,
 	)
 	return key
+
+
+def _follow_on_hidden_ids(number: str) -> None:
+	"""A group member's hidden id that shows this number takes its new link (owner, 2026-11-17)."""
+	from whatsapp_next.services.numbers_materializer import fill_hidden_id_numbers
+
+	fill_hidden_id_numbers(number=number)
 
 
 def _add_number_to_contact(contact: str, key: str, kind: str) -> bool:
@@ -1089,6 +1098,8 @@ def unlink_number(phone_e164: str, user: str | None = None) -> str:
 	frappe.db.set_value("WhatsApp Number", key, values, update_modified=True)
 	if previous:
 		_remove_number_from_contact(previous, key)
+	if kind == "Individual":
+		_follow_on_hidden_ids(key)
 	audit.record_audit_entry(
 		"Number Linked",
 		reference=("WhatsApp Number", key),
@@ -1195,6 +1206,9 @@ def toggle_blacklist(key: str, blocked: bool, note: str | None = None, user: str
 		for r in rows:
 			group.remove(r)
 	group.flags.ignore_permissions = True
+	# the one change of the blacklist an Agent or a Contact User may make: block or unblock a
+	# number, audited below (the group's own guard leaves every other change to a Manager)
+	group.flags.wa_blacklist_toggle = True
 	group.save(ignore_permissions=True)
 	audit.record_audit_entry(
 		"Contact Group Members Changed",

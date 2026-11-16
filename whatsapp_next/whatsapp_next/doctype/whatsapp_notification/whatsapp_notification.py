@@ -48,9 +48,19 @@ class WhatsAppNotification(Document):
 		"""Invalidate the per-DocType cache (old and new `document_type`)."""
 		self.invalidate_cache()
 
+	def after_insert(self) -> None:
+		"""A new notification starts its «Days» runs afresh, never from a deleted one's of the
+		same name (it would cover no day, or a stranger's)."""
+		from whatsapp_next.services.notifications import forget_days_run
+
+		forget_days_run(self.name)
+
 	def on_trash(self) -> None:
-		"""Invalidate the per-DocType cache."""
+		"""Invalidate the per-DocType cache; forget its «Days» runs."""
+		from whatsapp_next.services.notifications import forget_days_run
+
 		self.invalidate_cache()
+		forget_days_run(self.name)
 
 	def invalidate_cache(self) -> None:
 		"""Clear the cache for the current and (when changed) the previous `document_type`."""
@@ -69,6 +79,16 @@ class WhatsAppNotification(Document):
 					self.document_type
 				),
 				WAValidationError,
+			)
+		# the body renders the whole document and the job reads the documents with no permission
+		# check: whoever sets a notification up must be able to read its DocType (a Manager with no
+		# HR rights sent Salary Slips to a number of their own; security review 2026-11-16)
+		if not (frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch) and not frappe.has_permission(
+			self.document_type, "read"
+		):
+			frappe.throw(
+				_("You cannot read {0}, so you cannot send it in a notification").format(_(self.document_type)),
+				frappe.PermissionError,
 			)
 		meta = frappe.get_meta(self.document_type)
 		if meta.istable:

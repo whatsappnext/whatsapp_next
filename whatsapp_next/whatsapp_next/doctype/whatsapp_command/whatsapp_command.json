@@ -31,6 +31,7 @@
   "settings_overrides",
   "templates",
   "disabled_replies",
+  "print_settings",
   "notes_section",
   "description",
   "stats_section",
@@ -237,6 +238,13 @@
    "description": "Replies of the function (@reply keys) this command does not send, one per line — e.g. the text without the file."
   },
   {
+   "fieldname": "print_settings",
+   "fieldtype": "Table",
+   "label": "Print Settings",
+   "options": "WhatsApp Command Print Setting",
+   "description": "For each file reply: the print format its document is printed with and the letter head on top (owner, 2026-11-17)."
+  },
+  {
    "fieldname": "notes_section",
    "fieldtype": "Section Break"
   },
@@ -288,7 +296,7 @@
    "link_fieldname": "command"
   }
  ],
- "modified": "2026-10-29 12:00:00.000000",
+ "modified": "2026-11-17 01:00:00.000000",
  "modified_by": "Administrator",
  "module": "WhatsApp Next",
  "name": "WhatsApp Command",

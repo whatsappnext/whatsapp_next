@@ -431,6 +431,36 @@ class TestFunctionScripts(IntegrationTestCase):
 			run_script(name, cmd=name)
 		frappe.clear_last_message()
 
+	def test_11b_no_api_route_runs_a_function(self):
+		"""Security review 2026-11-16 (critical): the script's own guard reads `cmd`, which only
+		`/api/method` sets. `/api/v2/method/<name>` and the MCP tool call (`/api/v2/mcp`) ran the
+		function as any signed-in user, a portal user too, with the inputs they chose. A function
+		script now refuses any run the engine did not start, whatever the route."""
+		from frappe.api import v2
+
+		ff.ensure_function("_test_echo")
+		name = ff.FUNCTIONS["_test_echo"][0]
+		saved = frappe.local.form_dict
+		try:
+			# what `/api/v2/method/wa_fn__test_echo` does: no `cmd`
+			frappe.local.form_dict = frappe._dict(text="hi")
+			with self.assertRaises(frappe.PermissionError):
+				v2.handle_rpc_call(name)
+			frappe.clear_last_message()
+			try:
+				from frappe.mcp.tools import methods as mcp_methods
+			except ImportError:  # Frappe 15 has no MCP endpoint
+				mcp_methods = None
+			if mcp_methods:
+				with self.assertRaises(frappe.PermissionError):
+					mcp_methods.call_method(name, {"text": "hi"})
+				frappe.clear_last_message()
+		finally:
+			frappe.local.form_dict = saved
+		# the engine still runs it
+		out = function_runner.run_function(name, {"text": "hi"}, fc.manifest_of("_test_echo"))
+		self.assertEqual(out["messages"][0]["text"], "pong: hi")
+
 	# 12 --------------------------------------------------------------------------------------------
 
 	def test_12_try_and_a_command_dry_run_give_the_same_messages(self):

@@ -73,8 +73,8 @@ class TestApiNumbers(IntegrationTestCase):
 		with as_user("WhatsApp Viewer"):
 			self.assertEqual(api.get_number(phone_e164=N1)["phone_e164"], N1)
 		with as_user("WhatsApp Contact User"):
-			# the site may hold other numbers with the same digits: the search finds at least these
-			found = {r["name"] for r in api.search_numbers(txt="+96777", page_length="500")["rows"]}
+			# searched one by one: a site with real chats holds hundreds of numbers under +96777
+			found = {r["name"] for n in (N1, N2, N3) for r in api.search_numbers(txt=n)["rows"]}
 			self.assertLessEqual({N1, N2, N3}, found)
 
 	def test_get_and_search(self):
@@ -97,7 +97,8 @@ class TestApiNumbers(IntegrationTestCase):
 			self.assertEqual(set(res["rows"][0]), set(api.SEARCH_FIELDS))
 			not_linked = {
 				r["name"]
-				for r in api.search_numbers(txt="+96777", link_status="Not Linked", page_length="500")["rows"]
+				for n in (N1, N2, N3)
+				for r in api.search_numbers(txt=n, link_status="Not Linked")["rows"]
 			}
 			self.assertEqual(not_linked & {N1, N2, N3}, {N2, N3})
 			self.assertEqual(api.search_numbers(txt="ApiTest Group")["rows"][0]["name"], GROUP)
