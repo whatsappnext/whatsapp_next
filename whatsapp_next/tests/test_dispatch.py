@@ -517,6 +517,19 @@ class TestDispatch(IntegrationTestCase):
 		self.assertEqual(frappe.db.count("Error Log", {"method": title}) - before, 1)
 		ensure_settings(connection_status="Untested")
 
+	def test_the_coherence_check_reads_only_pairs_that_drift(self):
+		"""Security review 2026-11-16 (low): every 5 minutes the check read every Queue Item with its
+		message for 7 days (Completed included) into Python, to find the few that drift."""
+		from whatsapp_next.services import reconcile
+
+		_coherent, item = self._queued(1)[0]
+		drifting, item2 = dispatch.create_and_enqueue(_build_outbound_spec(phone=P3))
+		with status_writer():
+			frappe.db.set_value("WhatsApp Log", drifting, "status", "Read")  # Queued item, Read message
+		pairs = {r.queue_item for r in reconcile._drifting_pairs()}
+		self.assertIn(item2, pairs)
+		self.assertNotIn(item, pairs)
+
 	def test_batch_auth_failure_marks_settings(self):
 		_out, item = self._queued(1)[0]
 		with fake_provider() as fp:
