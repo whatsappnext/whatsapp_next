@@ -292,3 +292,68 @@ class TestNumbersMaterializer(IntegrationTestCase):
 			fourth = nm.nightly_reconcile()
 		self.assertEqual(fourth["drift"]["link_status_fixed"], 1)
 		self.assertEqual(_numbers()[K1].link_status, "Linked")
+
+
+HIDDEN = "888000000000501@lid"
+HIDDEN_QUIET = "888000000000502@lid"
+
+
+class TestHiddenIdNumbers(IntegrationTestCase):
+	"""Owner 2026-11-17: a group member brought in by the group's member list shows as a hidden id
+	(`…@lid`), "Not Linked", while their messages come with their real number, already linked."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		ensure_settings()
+		cls.device = ensure_device("Numbers Device", "WAD-TEST-NM01", phone="+967775040850")
+
+	def setUp(self):
+		self._clean()
+		self.addCleanup(self._clean)
+		self.contact = ensure_contact("NM Hidden Contact", K1)
+		with status_writer():
+			for name in (HIDDEN, HIDDEN_QUIET):
+				frappe.get_doc(
+					{"doctype": "WhatsApp Number", "phone_e164": name, "number_type": "LID", "display_name": "member"}
+				).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{"doctype": "WhatsApp Number", "phone_e164": K1, "number_type": "Individual", "contact": self.contact, "link_status": "Linked"}
+			).insert(ignore_permissions=True)
+
+	@staticmethod
+	def _clean():
+		delete_all("WhatsApp Inbound Message", {"body": ("like", f"{TAG}%")})
+		delete_all("WhatsApp Number", {"name": ("in", [K1, HIDDEN, HIDDEN_QUIET])})
+		delete_all("Contact", {"first_name": "NM Hidden Contact"})
+
+	def _row(self, name=HIDDEN):
+		return frappe.db.get_value("WhatsApp Number", name, ["phone", "contact", "link_status", "display_name"], as_dict=True)
+
+	def test_a_member_message_gives_the_hidden_id_its_number_and_link(self):
+		from whatsapp_next.services import permissions
+
+		message = _insert_inbound_message(
+			self.device, phone=K1, chat_jid=GROUP, sender_jid="888000000000501:34@lid"
+		)
+		nm.upsert_from_message("WhatsApp Inbound Message", message)
+		row = self._row()
+		self.assertEqual(
+			(row.phone, row.contact, row.link_status, row.display_name),
+			(K1, self.contact, "Linked", "NM Hidden Contact"),
+		)
+		self.assertIsNone(self._row(HIDDEN_QUIET).phone, "a hidden id with no message stays as it was")
+		# the number unlinked, then linked again: its hidden id follows
+		permissions.unlink_number(K1)
+		self.assertEqual((self._row().contact, self._row().link_status), (None, "Not Linked"))
+		permissions.link_number(K1, self.contact)
+		self.assertEqual((self._row().contact, self._row().link_status), (self.contact, "Linked"))
+
+	def test_the_nightly_job_fills_rows_brought_in_before(self):
+		_insert_inbound_message(self.device, phone=K1, chat_jid=GROUP, sender_jid="888000000000501@lid")
+		self.assertIsNone(self._row().phone)
+		nm.fill_hidden_id_numbers()
+		self.assertEqual((self._row().phone, self._row().link_status), (K1, "Linked"))
+		modified = frappe.db.get_value("WhatsApp Number", HIDDEN, "modified")
+		self.assertEqual(nm.fill_hidden_id_numbers(hidden_id_user="888000000000501"), 0, "running again changes nothing")
+		self.assertEqual(frappe.db.get_value("WhatsApp Number", HIDDEN, "modified"), modified)

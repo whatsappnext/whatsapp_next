@@ -10,7 +10,8 @@ frappe.provide("whatsapp_next.numbers");
 
 	function open_conversation(doc, listview) {
 		return whatsapp.ui.ConversationDrawer.open({
-			key: doc.phone_e164 || doc.jid || doc.name,
+			// a group member's hidden id opens the real number's conversation once it is known
+			key: (doc.number_type === "LID" && (doc.phone || "").startsWith("+") ? doc.phone : null) || doc.phone_e164 || doc.jid || doc.name,
 			device: doc.last_device || undefined,
 			on_link: (number) => link_convert_dialog(number || doc, () => listview && listview.refresh()),
 			on_close: () => listview && listview.refresh(),
