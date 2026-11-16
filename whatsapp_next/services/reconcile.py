@@ -189,17 +189,32 @@ def requeue_stale_claims(older_than_minutes: int = STALE_MINUTES) -> int:
 	if not rows:
 		return 0
 	now = now_datetime()
+	from whatsapp_next.services.dispatch import OUTBOUND_HANDED_OVER
+
 	with status_writer():
 		for r in rows:
+			outbound_status = frappe.db.get_value("WhatsApp Log", r.outbound_message, "status")
+			if outbound_status in OUTBOUND_HANDED_OVER:
+				# the platform took it (its receipts already came): the worker died after the
+				# platform accepted the batch and before it recorded the answer. Sending it again
+				# would repeat it, and writing Queued erased Delivered (security review 2026-11-16).
+				frappe.db.set_value(
+					"WhatsApp Queue Item",
+					r.name,
+					{"status": "Completed", "completed_at": now, "job_id": None},
+					update_modified=True,
+				)
+				continue
 			frappe.db.set_value(
 				"WhatsApp Queue Item",
 				r.name,
 				{"status": "Queued", "next_attempt_at": now, "job_id": None, "claimed_at": None},
 				update_modified=True,
 			)
-			frappe.db.set_value(
-				"WhatsApp Log", r.outbound_message, {"status": "Queued"}, update_modified=True
-			)
+			if outbound_status == "Sending":
+				frappe.db.set_value(
+					"WhatsApp Log", r.outbound_message, {"status": "Queued"}, update_modified=True
+				)
 	frappe.log_error(
 		title="WhatsApp reconcile: stale claims requeued", message="\n".join(r.name for r in rows)
 	)
