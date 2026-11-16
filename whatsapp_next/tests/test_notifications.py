@@ -52,6 +52,8 @@ class TestNotifications(IntegrationTestCase):
 
 	def setUp(self):
 		self._delete_test_notifications()
+		# ToDos earlier runs left behind fall due on the same days as this run's
+		frappe.db.delete("ToDo", {"description": ("like", "notif-test%")})
 
 	def tearDown(self):
 		self._delete_test_notifications()
@@ -326,9 +328,15 @@ class TestNotifications(IntegrationTestCase):
 		self.assertIn("template:", frappe.db.get_value("WhatsApp Notification", notif.name, "last_error"))
 
 	def _queued_days(self):
+		"""The ToDos of this test the daily run queued: the site keeps other ToDos due on the same
+		days (earlier runs', its own), which are not this test's to count."""
 		with patch.object(frappe, "enqueue") as enq:
 			svc.trigger_daily()
-		return sorted(c.kwargs["name"] for c in enq.call_args_list if c.args[0].endswith("send_for_document"))
+		mine = set(frappe.get_all("ToDo", filters={"description": ("like", "notif-test%")}, pluck="name"))
+		return sorted(
+			c.kwargs["name"] for c in enq.call_args_list if c.args[0].endswith("send_for_document") and c.kwargs["name"] in mine
+		)
+
 
 	def test_a_missed_day_is_caught_up_and_nothing_goes_twice(self):
 		"""Security review 2026-11-16 (medium): «Days Before» matched only `date == today + N`; a day
