@@ -99,6 +99,9 @@ const STATS = () => [
 	},
 ];
 
+/** The real number behind a group member's hidden id (`…@lid`), once one of their messages told it. */
+const hidden_id_number = (doc) => (doc.number_type === "LID" && (doc.phone || "").startsWith("+") ? doc.phone : null);
+
 /** Columns of the prototype table (proto-numbers): name (avatar) · number · link status · contact · last message · since. */
 const COLUMNS = () => [
 	{
@@ -112,7 +115,8 @@ const COLUMNS = () => [
 		fieldname: "phone_e164",
 		label: __("Number"),
 		sortable: true,
-		format: (value, doc) => `<span class="whatsapp-kit-tabular" dir="ltr">${frappe.utils.escape_html(whatsapp.ui.phone(value || doc.jid || ""))}</span>`,
+		// a group member's hidden id shows the real number its messages came with (owner, 2026-11-17)
+		format: (value, doc) => `<span class="whatsapp-kit-tabular" dir="ltr">${frappe.utils.escape_html(whatsapp.ui.phone(hidden_id_number(doc) || value || doc.jid || ""))}</span>`,
 	},
 	// a Select: shown on each row and offered as a grouping level
 	{ fieldname: "number_type", label: __("Number type"), sortable: true, hidden_xs: true, format: (v) => (v ? frappe.utils.escape_html(__(v)) : "") },
@@ -136,7 +140,7 @@ const COLUMNS = () => [
 
 frappe.listview_settings[DOCTYPE] = {
 	hide_name_column: true,
-	add_fields: ["phone_e164", "jid", "display_name", "saved_name", "synced_device", "contact", "link_status", "number_type", "last_device", "last_seen", "conversation_confirmed", "on_whatsapp"],
+	add_fields: ["phone_e164", "phone", "jid", "display_name", "saved_name", "synced_device", "contact", "link_status", "number_type", "last_device", "last_seen", "conversation_confirmed", "on_whatsapp"],
 
 	get_indicator(doc) {
 		// "Not linked" is a neutral state, not a warning → gray.
@@ -183,7 +187,7 @@ frappe.listview_settings[DOCTYPE] = {
 				actions: ["group_by", "export"],
 				intro: has_header ? null : __("Every number you have exchanged messages with. Link it to a contact or open the conversation."),
 				presets: [
-					{ fieldname: "phone_e164", type: "search", fields: ["phone_e164", "display_name"], placeholder: __("Search name or number…") },
+					{ fieldname: "phone_e164", type: "search", fields: ["phone_e164", "phone", "display_name"], placeholder: __("Search name or number…") },
 					{ fieldname: "link_status", type: "select", label: __("Link status") },
 					{ fieldname: "number_type", type: "select" },
 					{ fieldname: "on_whatsapp", type: "select", label: __("Registered on WhatsApp") },
