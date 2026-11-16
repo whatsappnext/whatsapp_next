@@ -98,9 +98,10 @@ whatsapp_next.command_modal = function (name, opts = {}) {
 	// the function's header drawn as the editor's variables · options · outputs (`function_spec.js`):
 	// the command's own message texts become output rows, and go back as `templates` on save
 	let original = [];
+	let original_print = [];
 	let spec_outputs = [];
 	const adapt_spec = (spec) => {
-		const shaped = function_helpers.editor_spec(spec, original);
+		const shaped = function_helpers.editor_spec(spec, original, original_print);
 		spec_outputs = (shaped && function_helpers.editor_spec(spec, []).outputs) || [];
 		return shaped;
 	};
@@ -111,6 +112,7 @@ whatsapp_next.command_modal = function (name, opts = {}) {
 		load: (n) =>
 			call_commands_api("get_editor", { name: n }).then((r) => {
 				original = (r.command && r.command.templates) || [];
+				original_print = (r.command && r.command.print_settings) || [];
 				r.function = r.function ? adapt_spec(r.function) : r.function;
 				r.command.outputs = r.function ? r.function.outputs : [];
 				return r;
@@ -120,6 +122,7 @@ whatsapp_next.command_modal = function (name, opts = {}) {
 				// another function: the command's texts for the old one's messages do not carry over
 				const keys = new Set((spec.templates || []).map((t) => t.key));
 				original = original.filter((r) => keys.has(r.param));
+				original_print = [];
 				return adapt_spec(spec);
 			}),
 		save: (payload) => call_commands_api("save_editor", { payload: function_helpers.payload_of(payload, spec_outputs, original) }),

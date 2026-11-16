@@ -16,6 +16,7 @@ EDITABLE_STATES = ("Draft", "Scheduled", "Failed")
 
 class WhatsAppStatusPost(Document):
 	def validate(self):
+		self.check_media_readable()
 		if self.kind == "Text" and len(self.text or "") > MAX_TEXT:
 			frappe.throw(
 				_("The status text is longer than {0} characters").format(MAX_TEXT), WAValidationError
@@ -24,6 +25,16 @@ class WhatsAppStatusPost(Document):
 			frappe.throw(
 				_("A posted status cannot be changed; delete it and post a new one"), WAValidationError
 			)
+
+	def check_media_readable(self) -> None:
+		"""The media is posted as the device's status: its author must be able to open the file
+		(security review 2026-11-16: any File was read by its URL). A changed media only, so the
+		scheduler's run, as Administrator, never trips over it."""
+		if not self.media or not (self.is_new() or self.has_value_changed("media")):
+			return
+		from whatsapp_next.services.attachments import require_readable
+
+		require_readable(self.media)
 
 	def has_value_changed_any(self) -> bool:
 		"""True when any field that shapes the post changed since it was last saved."""

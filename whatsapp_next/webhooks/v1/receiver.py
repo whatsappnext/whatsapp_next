@@ -127,29 +127,53 @@ def handle_webhook_request(
 	)
 	if claimed_event.duplicate:
 		return Outcome(200, {"ok": True, "duplicate": True}, event=claimed_event.name)
+	_note_last_event_time()
+	if status == "Ignored":
+		return Outcome(200, {"ok": True, "ignored": True}, event=claimed_event.name)
+	# 9. process in a job
+	try:
+		_queue_event_processing(claimed_event.name)
+	except frappe.QueueOverloaded:
+		# the job queue is full: the stored event stays Received, answered as received, and
+		# `handlers.reprocess_failed` takes it as a stuck one. Answering 503 rolled the stored event
+		# back and left it to the platform's retries (security review 2026-11-16).
+		frappe.clear_last_message()
+		return Outcome(200, {"ok": True, "queued": False}, event=claimed_event.name)
+	return Outcome(200, {"ok": True}, event=claimed_event.name)
+
+
+#: set while the last event time was written less than a minute ago
+LAST_EVENT_WRITTEN_KEY = "wa:webhook:last_event_written"
+
+
+def _note_last_event_time() -> None:
+	"""`webhook_last_event_at` (the Settings' «last event» line), at most once a minute: written on
+	every delivery it locked the Settings row and cleared their cache per webhook (security review
+	2026-11-16). The minute is enough for what it shows."""
+	if not frappe.cache.set(frappe.cache.make_key(LAST_EVENT_WRITTEN_KEY), 1, nx=True, ex=60):
+		return
 	frappe.db.set_single_value(
 		"WhatsApp Settings",
 		"webhook_last_event_at",
 		now_datetime(),
 		update_modified=False,
 	)
-	if status == "Ignored":
-		return Outcome(200, {"ok": True, "ignored": True}, event=claimed_event.name)
-	# 9. process in a job
+
+
+def _queue_event_processing(webhook_event: str) -> None:
 	frappe.enqueue(
 		"whatsapp_next.webhooks.handlers.process_event",
 		# not `event=`: `frappe.enqueue` keeps that keyword for itself and the job got no row
-		webhook_event=claimed_event.name,
+		webhook_event=webhook_event,
 		queue="short",
 		# the stored row, not the event id: the platform sends a message's id as the event id, so
 		# its `delivered` and `read` share one, and a `read` arriving while `delivered` was still
 		# queued was dropped as a duplicate job and never handled
-		job_id=f"wa-webhook-{claimed_event.name}",
+		job_id=f"wa-webhook-{webhook_event}",
 		deduplicate=True,
 		enqueue_after_commit=True,
 		timeout=120,
 	)
-	return Outcome(200, {"ok": True}, event=claimed_event.name)
 
 
 @api_endpoint(allow_guest=True, methods=("POST",))

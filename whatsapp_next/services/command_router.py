@@ -610,7 +610,9 @@ def render_outputs(
 	command, result: FunctionRun, sender: Sender | None = None, *, dry_run: bool = False
 ) -> list[dict[str, Any]]:
 	"""The replies of a run, in its messages' order (`function_runner.replies_of`)."""
-	return function_runner.replies_of(result, dry_run=dry_run)
+	return function_runner.replies_of(
+		result, dry_run=dry_run, print_settings=function_runner.print_settings_of(command)
+	)
 
 
 # ---- route ---------------------------------------------------------------------------------
@@ -722,6 +724,9 @@ def _send_replies(command, inbound, replies: list[dict[str, Any]], *, is_simulat
 def _send_now_or_queue(outbound: str) -> None:
 	"""`dispatch.send_now`; a send that breaks before the provider answers falls back to the queue,
 	so an automatic reply is never lost and never stops the command behind it."""
+	# the reply's row is committed before it goes: its sent / delivered receipts can come back
+	# while this job still runs, and found no row to apply to (security review 2026-11-16)
+	frappe.db.commit()
 	try:
 		dispatch.send_now(outbound, source="direct")
 	except Exception as exc:

@@ -203,6 +203,36 @@ class WhatsAppCommand(Document):
 					WAValidationError,
 				)
 
+		self.check_print_settings(spec)
+
+	def check_print_settings(self, spec) -> None:
+		"""A print setting names a file reply of the function; a print format is the reply's document
+		type's (owner, 2026-11-17)."""
+		files = {r["key"]: r for r in spec.get("replies") or [] if r["type"] in ("report", "print")}
+		for row in self.get("print_settings") or []:
+			reply = files.get(row.reply)
+			if not reply:
+				frappe.throw(
+					_("Print settings: {0} is not a file reply of function {1}").format(row.reply, self.function),
+					WAValidationError,
+				)
+			if row.print_format and reply["type"] == "report":
+				from whatsapp_next.services.report_file import report_print_formats
+
+				if row.print_format not in report_print_formats(reply["report_name"]):
+					frappe.throw(
+						_("Print settings: {0} is not a Jinja print format of report {1}").format(
+							row.print_format, _(reply["report_name"])
+						),
+						WAValidationError,
+					)
+			elif row.print_format:
+				if frappe.db.get_value("Print Format", row.print_format, "doc_type") != reply["doctype"]:
+					frappe.throw(
+						_("Print settings: {0} is not a print format of {1}").format(row.print_format, _(reply["doctype"])),
+						WAValidationError,
+					)
+
 	def overrides_dict(self) -> dict[str, Any]:
 		"""`settings_overrides` parsed as a dict (empty when unset)."""
 		value = self.settings_overrides

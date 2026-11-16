@@ -18,6 +18,7 @@ from whatsapp_next.exceptions import (
 	WAUnknownNumberPolicyError,
 	WAValidationError,
 )
+from whatsapp_next.providers import exceptions as pex
 from whatsapp_next.providers.schemas import MessageStatus
 from whatsapp_next.services import dispatch, quick_send, reconcile
 from whatsapp_next.services.dispatch import OutboundSpec
@@ -80,6 +81,7 @@ class TestDispatch(IntegrationTestCase):
 	def _delete_test_messages_and_queue():
 		delete_test_rows("WhatsApp Queue Item")
 		delete_all("WhatsApp Log", {"body": ("like", "dispatch-test%")})
+		delete_all("WhatsApp Log", {"caption": ("like", "dispatch-test%")})  # file messages carry no body
 		delete_all("WhatsApp Inbound Message", {"body": ("like", "dispatch-test%")})
 		delete_all(
 			"WhatsApp Audit Log",
@@ -296,6 +298,22 @@ class TestDispatch(IntegrationTestCase):
 		finally:
 			frappe.flags.wa_kick_dispatch_in_test = False
 
+	def test_a_full_job_queue_leaves_the_message_to_the_minute_tick(self):
+		"""Security review 2026-11-16 (medium): asking for the device's batch raised QueueOverloaded
+		when the job queue was full, and the send that queued the message failed with it."""
+		frappe.flags.wa_kick_dispatch_in_test = True
+
+		def full(*args, **kwargs):
+			frappe.throw("Too many queued background jobs", exc=frappe.QueueOverloaded)
+
+		try:
+			with patch.object(frappe, "enqueue", side_effect=full):
+				name = dispatch.create_outbound(_build_outbound_spec(body="dispatch-test queue full"))
+				dispatch.enqueue([name])
+		finally:
+			frappe.flags.wa_kick_dispatch_in_test = False
+		self.assertEqual(frappe.db.get_value("WhatsApp Log", name, "status"), "Queued")
+
 	def test_batch_asks_for_another_when_a_message_arrived_meanwhile(self):
 		"""A row queued while a batch runs cannot start one (the job id is taken): the batch asks for
 		a follow-up when it sent something and a non-campaign row is due — and only then."""
@@ -440,6 +458,114 @@ class TestDispatch(IntegrationTestCase):
 			counts = dispatch.dispatch_device_batch(self.device)
 		self.assertEqual(counts["dead"], 1)
 		self.assertEqual(self._get_queue_item(item).status, "Dead Letter")
+
+	def test_a_send_the_platform_already_has_is_not_failed(self):
+		"""Security review 2026-11-16 (high): a batch accepted by the platform whose answer was lost
+		(a timeout, a dead worker) is sent again with the same client_ref; a platform that refuses
+		the repeat answers CLIENT_REF_DUPLICATE with the first send's queue id. That was a final
+		failure: the message, sent, was marked Failed for ever."""
+		from whatsapp_next.providers.schemas import BatchError, BatchResult
+
+		out, item = self._queued(1)[0]
+		with fake_provider() as fp:
+			fp.send_batch = lambda messages, batch_id: BatchResult(
+				batch_id=batch_id,
+				errors=tuple(
+					BatchError(client_ref=m.client_ref, error="client_ref is already queued or sent", code="CLIENT_REF_DUPLICATE", queue_id="WAQ-FIRST-SEND")
+					for m in messages
+				),
+			)
+			counts = dispatch.dispatch_device_batch(self.device)
+		self.assertEqual(counts.get("dead", 0), 0)
+		qi = self._get_queue_item(item)
+		self.assertEqual((qi.status, qi.platform_queue_id), ("Completed", "WAQ-FIRST-SEND"))
+		self.assertNotEqual(self._get_outbound_log(out).status, "Failed")
+
+	def test_a_stale_claim_the_platform_already_sent_is_not_sent_again(self):
+		"""Security review 2026-11-16 (high): the worker died after the platform accepted the batch
+		and before it recorded the answer; the receipts had moved the message to Delivered.
+		Reconcile put it back to Queued (overwriting Delivered) and it was sent again."""
+		from whatsapp_next.services import reconcile
+
+		out, item = dispatch.create_and_enqueue(_build_outbound_spec(phone=P3))
+		dispatch.claim_batch(self.device, 10)
+		frappe.db.set_value("WhatsApp Queue Item", item, "claimed_at", add_to_date(now_datetime(), minutes=-20), update_modified=False)
+		with status_writer():
+			frappe.db.set_value("WhatsApp Log", out, "status", "Delivered")
+		reconcile.requeue_stale_claims()
+		self.assertEqual(self._get_outbound_log(out).status, "Delivered")
+		self.assertEqual(self._get_queue_item(item).status, "Completed")
+
+	def test_an_automatic_reply_waits_in_the_queue_while_the_platform_is_unreachable(self):
+		"""Security review 2026-11-16 (medium): a reply sent at once (a command's receipt or help)
+		was Failed for good when the platform could not be reached; it now waits in the queue and
+		goes when the platform is back."""
+		out = dispatch.create_outbound(_build_outbound_spec(body="dispatch-test reply"))
+		with fake_provider() as fp:
+			def unreachable(message):
+				raise pex.TransientError("Platform connection failed", code="CONNECTION")
+
+			fp.send_message = unreachable
+			result = dispatch.send_now(out)
+		self.assertFalse(result.ok)
+		self.assertEqual(self._get_outbound_log(out).status, "Queued")
+		self.assertTrue(frappe.db.exists("WhatsApp Queue Item", {"outbound_message": out}))
+
+	def test_a_batch_carries_no_more_file_than_its_budget(self):
+		"""Security review 2026-11-16 (medium): every message of a batch carries its own copy of its
+		file, so a 20 MB video to 20 recipients built a ~530 MB request in the worker. A batch takes
+		the messages whose files fit the budget (one at least); the others wait for the next run."""
+		file_doc = frappe.get_doc(
+			{"doctype": "File", "file_name": "dispatch-test-budget.txt", "content": "x" * 60, "is_private": 1}
+		).insert(ignore_permissions=True)
+		outs = [
+			dispatch.create_and_enqueue(
+				_build_outbound_spec(phone=p, body=None, message_type="Document", caption="dispatch-test file", attachment=file_doc.file_url)
+			)
+			for p in (P1, P2, P3)
+		]
+		sent = []
+		with fake_provider() as fp, patch.object(dispatch, "BATCH_FILE_BUDGET_BYTES", 100):
+			real = fp.send_batch
+
+			def record(messages, batch_id):
+				sent.append(len(messages))
+				return real(messages, batch_id)
+
+			fp.send_batch = record
+			dispatch.dispatch_device_batch(self.device)
+		self.assertEqual(sent, [1], "one 60-byte file fits a 100-byte budget, two do not")
+		waiting = [self._get_queue_item(item).status for _out, item in outs]
+		self.assertEqual(sorted(waiting), ["Completed", "Queued", "Queued"])
+		self.assertTrue(all(self._get_queue_item(item).attempts == 0 for _o, item in outs if self._get_queue_item(item).status == "Queued"))
+
+	def test_a_sign_in_failure_is_logged_once_not_every_minute(self):
+		"""Security review 2026-11-16 (low): every failed call while the platform refused the keys
+		wrote an Error Log entry per device, every minute and on every new message."""
+		title = "WhatsApp dispatch: provider auth failed"
+		ensure_settings(connection_status="OK")
+		before = frappe.db.count("Error Log", {"method": title})
+		self._queued(1)
+		for _ in range(3):
+			with fake_provider() as fp:
+				fp.batch_mode = "auth"
+				dispatch.dispatch_device_batch(self.device)
+			frappe.db.set_value("WhatsApp Queue Item", {"status": "Queued"}, "next_attempt_at", None)
+		self.assertEqual(frappe.db.count("Error Log", {"method": title}) - before, 1)
+		ensure_settings(connection_status="Untested")
+
+	def test_the_coherence_check_reads_only_pairs_that_drift(self):
+		"""Security review 2026-11-16 (low): every 5 minutes the check read every Queue Item with its
+		message for 7 days (Completed included) into Python, to find the few that drift."""
+		from whatsapp_next.services import reconcile
+
+		_coherent, item = self._queued(1)[0]
+		drifting, item2 = dispatch.create_and_enqueue(_build_outbound_spec(phone=P3))
+		with status_writer():
+			frappe.db.set_value("WhatsApp Log", drifting, "status", "Read")  # Queued item, Read message
+		pairs = {r.queue_item for r in reconcile._drifting_pairs()}
+		self.assertIn(item2, pairs)
+		self.assertNotIn(item, pairs)
 
 	def test_batch_auth_failure_marks_settings(self):
 		_out, item = self._queued(1)[0]

@@ -52,6 +52,8 @@ class TestNotifications(IntegrationTestCase):
 
 	def setUp(self):
 		self._delete_test_notifications()
+		# ToDos earlier runs left behind fall due on the same days as this run's
+		frappe.db.delete("ToDo", {"description": ("like", "notif-test%")})
 
 	def tearDown(self):
 		self._delete_test_notifications()
@@ -63,6 +65,25 @@ class TestNotifications(IntegrationTestCase):
 		delete_all("WhatsApp Notification", {"notification_name": ("like", "NotifTest%")})
 		delete_all("ToDo", {"description": ("like", "notif-test%")})
 		svc.clear_cache()
+
+	def test_a_full_job_queue_never_stops_a_document_being_saved(self):
+		"""Security review 2026-11-16 (medium): the notification hook runs on every DocType's save;
+		`frappe.enqueue` raises QueueOverloaded when the queue is full, so saving any document (a
+		Sales Invoice) failed with 503. The document is saved; the notification records why it did
+		not go."""
+		notif = _notification()
+
+		def full(*args, **kwargs):
+			frappe.throw("Too many queued background jobs", exc=frappe.QueueOverloaded)
+
+		with patch.object(frappe, "enqueue", side_effect=full):
+			todo = frappe.get_doc({"doctype": "ToDo", "description": "notif-test queue full"}).insert(
+				ignore_permissions=True
+			)
+		self.assertTrue(frappe.db.exists("ToDo", todo.name))
+		error = frappe.db.get_value("WhatsApp Notification", notif.name, "last_error") or ""
+		self.assertIn(todo.name, error)
+		self.assertEqual(frappe.local.message_log, [], "nothing on the user's screen")
 
 	def test_hook_short_circuit_and_new_event(self):
 		self.assertEqual(svc.active_for("ToDo"), [])
@@ -194,6 +215,56 @@ class TestNotifications(IntegrationTestCase):
 			}
 			self.assertEqual(stored, {log.attachment})
 
+	def test_a_group_number_reaches_the_group(self):
+		"""Owner, 2026-11-16: a group's number, written as `120363…` without `@g.us`, as a fixed
+		number or on the document, was refused as «no valid number»."""
+		group = "120363429729694596"
+		notif = _notification(
+			recipients=[
+				{"recipient_type": "Fixed Number", "phone": group},
+				{"recipient_type": "Document Field", "receiver_by_document_field": "description"},
+			]
+		)
+		todo = frappe.get_doc({"doctype": "ToDo", "description": "120363000000000077"}).insert(ignore_permissions=True)
+		recips = svc.resolve_recipients(frappe.get_doc("WhatsApp Notification", notif.name), todo)
+		self.assertEqual([r.phone_e164 for r in recips], [f"{group}@g.us", "120363000000000077@g.us"])
+		with patch.object(frappe, "enqueue"):
+			result = svc.send_for_document(notif.name, "ToDo", todo.name, "New")
+		self.assertEqual((result["sent"], result["error"]), (2, None))
+		out = frappe.get_all(
+			"WhatsApp Log", filters={"notification": notif.name}, fields=["recipient_type", "jid", "phone_e164"], order_by="jid"
+		)
+		self.assertEqual(
+			[(r.recipient_type, r.jid, r.phone_e164) for r in out],
+			# a group's row keeps its id as its key too, as every group row does
+			[("Group", "120363000000000077@g.us", "120363000000000077@g.us"), ("Group", f"{group}@g.us", f"{group}@g.us")],
+		)
+
+	def test_a_customer_field_follows_the_customers_primary_contact(self):
+		"""Owner, 2026-11-16 (a Sales Invoice notification, «row 2: no valid number»): a recipient
+		row on the `customer` field read the Customer's own number, then a `contact` field Customer
+		does not have. A customer with no number of its own, whose primary contact holds it (here a
+		WhatsApp group's id), got nobody."""
+		group = "120363000000000088"
+		# no real worker may run a notification this test's records set off (the site has its own)
+		enqueue = patch.object(frappe, "enqueue")
+		enqueue.start()
+		self.addCleanup(enqueue.stop)
+		contact = frappe.get_doc(
+			{"doctype": "Contact", "first_name": "NotifTest Group Contact", "phone_nos": [{"phone": group}]}
+		).insert(ignore_permissions=True)
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": f"NotifTest Group {frappe.generate_hash(length=4)}", "customer_primary_contact": contact.name}
+		)
+		customer.flags.ignore_mandatory = True
+		customer.insert(ignore_permissions=True)
+		todo = frappe.get_doc(
+			{"doctype": "ToDo", "description": "notif-test customer", "reference_type": "Customer", "reference_name": customer.name}
+		).insert(ignore_permissions=True)
+		notif = _notification(recipients=[{"recipient_type": "Document Field", "receiver_by_document_field": "reference_name"}])
+		recips = svc.resolve_recipients(frappe.get_doc("WhatsApp Notification", notif.name), todo)
+		self.assertEqual([(r.phone_e164, r.contact) for r in recips], [(f"{group}@g.us", contact.name)])
+
 	def test_send_for_document(self):
 		contact = ensure_contact("Notif Contact", PHONE)
 		notif = _notification(
@@ -305,6 +376,40 @@ class TestNotifications(IntegrationTestCase):
 			result = svc.send_for_document(notif.name, "ToDo", todo2.name, "New")
 		self.assertEqual(result["sent"], 0)
 		self.assertIn("template:", frappe.db.get_value("WhatsApp Notification", notif.name, "last_error"))
+
+	def _queued_days(self):
+		"""The ToDos of this test the daily run queued: the site keeps other ToDos due on the same
+		days (earlier runs', its own), which are not this test's to count."""
+		with patch.object(frappe, "enqueue") as enq:
+			svc.trigger_daily()
+		mine = set(frappe.get_all("ToDo", filters={"description": ("like", "notif-test%")}, pluck="name"))
+		return sorted(
+			c.kwargs["name"] for c in enq.call_args_list if c.args[0].endswith("send_for_document") and c.kwargs["name"] in mine
+		)
+
+
+	def test_a_missed_day_is_caught_up_and_nothing_goes_twice(self):
+		"""Security review 2026-11-16 (medium): «Days Before» matched only `date == today + N`; a day
+		the daily job did not run (the scheduler off, a deploy) lost that day's documents for good."""
+		notif = _notification(event="Days Before", date_changed="date", days_in_advance=1)
+		missed = frappe.get_doc({"doctype": "ToDo", "description": "notif-test missed", "date": nowdate()}).insert(ignore_permissions=True)
+		today = frappe.get_doc({"doctype": "ToDo", "description": "notif-test today", "date": add_days(nowdate(), 1)}).insert(ignore_permissions=True)
+		svc.set_days_run(notif.name, add_days(nowdate(), -2))  # yesterday's run did not happen
+		self.assertEqual(self._queued_days(), sorted([missed.name, today.name]))
+		# a second run the same day sends nothing again
+		self.assertEqual(self._queued_days(), [])
+
+	def test_more_than_a_page_of_due_documents_all_go(self):
+		"""Security review 2026-11-16 (medium): one run sent the first 500 due documents and dropped
+		the rest."""
+		notif = _notification(event="Days Before", date_changed="date", days_in_advance=1)
+		names = [
+			frappe.get_doc({"doctype": "ToDo", "description": f"notif-test page {i}", "date": add_days(nowdate(), 1)}).insert(ignore_permissions=True).name
+			for i in range(5)
+		]
+		svc.set_days_run(notif.name, add_days(nowdate(), -1))
+		with patch.object(svc, "BATCH_PER_RUN", 2):
+			self.assertEqual(self._queued_days(), sorted(names))
 
 	def test_scheduled_triggers(self):
 		notif = _notification(event="Days Before", date_changed="date", days_in_advance=2)

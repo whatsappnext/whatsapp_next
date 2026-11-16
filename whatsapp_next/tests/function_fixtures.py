@@ -171,6 +171,14 @@ NEEDS_LINES = [
 OK_BODY = """frappe.flags.wa_result = {"error": None, "messages": [{"reply": "result_text", "type": "text", "text": "ok"}], "data": {}}
 """
 
+PRINT_LINES = [
+	"@param  doc_name | Data | optional | source=command | The document",
+	"@reply  doc       | print | doctype=ToDo | The document printed",
+	"@reply  sheet     | report | report=General Ledger | The ledger",
+	"@reply  result_text | text |  | Result",
+]
+PRINT_BODY = """frappe.flags.wa_result = {"error": None, "messages": [{"reply": "doc", "type": "print", "name": frappe.form_dict.get("doc_name"), "caption": "your document"}], "data": {}}
+"""
 # {function key: (script name, source)}
 FUNCTIONS: dict[str, tuple[str, str]] = {
 	"_test_echo": ("wa_fn__test_echo", source("_test_echo", ECHO_LINES, ECHO_BODY, title="Test Echo")),
@@ -185,6 +193,7 @@ FUNCTIONS: dict[str, tuple[str, str]] = {
 	"_test_misbehave": ("wa_fn__test_misbehave", source("_test_misbehave", MISBEHAVE_LINES, MISBEHAVE_BODY)),
 	"_test_ason": ("wa_fn__test_ason", source("_test_ason", ASON_LINES, ASON_BODY, title="Test As On")),
 	"_test_needs": ("wa_fn__test_needs", source("_test_needs", NEEDS_LINES, OK_BODY)),
+	"_test_print": ("wa_fn__test_print", source("_test_print", PRINT_LINES, PRINT_BODY, title="Test Print")),
 }
 
 

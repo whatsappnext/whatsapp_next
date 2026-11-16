@@ -217,6 +217,54 @@ frappe.provide("whatsapp.ui");
 
 			restore();
 			if (tab === "preview") this.mount_thread();
+			this.mount_link_fields();
+		}
+
+		/**
+		 * The file outputs' print format and letter head as Frappe Link fields (owner, 2026-11-17: «الحقول
+		 * تكون من نوع link»): type to search, open the record from its arrow. A field is made once per
+		 * output and kind and moved back into its slot after every render, so a render never loses
+		 * what is being typed. Print formats are limited to the output's own (`print_format_filters`).
+		 */
+		mount_link_fields() {
+			this._link_fields = this._link_fields || {};
+			const make_link_control = (slot, i, kind) => {
+				const output = this.draft.outputs[i];
+				const key = `${kind}-${i}-${output.output_key}`;
+				let control = this._link_fields[key];
+				if (!control) {
+					const field = kind === "pf" ? "print_format" : "letter_head";
+					control = frappe.ui.form.make_control({
+						parent: $("<div>"),
+						df: {
+							fieldtype: "Link",
+							fieldname: `${field}_${i}`,
+							options: kind === "pf" ? "Print Format" : "Letter Head",
+							placeholder: kind === "pf" ? __("Default of {0}", [__(output.doctype || output.report_name || "")]) : output.default_letter_head ? __("Default ({0})", [output.default_letter_head]) : __("Default"),
+							get_query: () => ({ filters: kind === "pf" ? output.print_format_filters || {} : { disabled: 0 } }),
+							read_only: this.read_only ? 1 : 0,
+							change: () => {
+								const value = control.get_value() || null;
+								if ((this.draft.outputs[i] || {})[field] === value) return;
+								this.draft.outputs[i][field] = value;
+								this.touch();
+							},
+						},
+						render_input: true,
+						only_input: true,
+					});
+					control.set_value(output[field] || "");
+					// the field may sit at the bottom of its column: brought to the middle, its search list
+					// opens in full instead of under the column's edge
+					control.$input.on("focus", () => control.$wrapper[0].scrollIntoView({ block: "center", behavior: "smooth" }));
+					this._link_fields[key] = control;
+				}
+				slot.replaceWith(control.$wrapper);
+			};
+			this.$body.find("[data-link-slot]").each((_, el) => {
+				const [kind, index] = el.getAttribute("data-link-slot").split("-");
+				make_link_control($(el), cint(index), kind);
+			});
 		}
 
 		render_header() {
@@ -470,7 +518,9 @@ frappe.provide("whatsapp.ui");
 						</span>
 						${o.notes && !compact ? `<span class="whatsapp-kit-command-editor__note">${escape_html(__(o.notes))}</span>` : ""}
 						${
-							is_doc
+							is_doc && o.letter_head_choices
+								? this.render_print_choices(o, i, compact)
+								: is_doc
 								? `${compact ? "" : `<label class="whatsapp-kit-command-editor__subtitle" for="${this.id}-pf-${i}">${escape_html(__("Print format"))}</label><input id="${this.id}-pf-${i}" type="text" dir="ltr" class="whatsapp-kit-command-editor__input whatsapp-kit-command-editor__mono whatsapp-kit-command-editor__input--sm" data-f="out-pf-${i}-${k}" data-in="out-pf" data-key="${i}" value="${escape_html(o.print_format || "")}" placeholder="${escape_html(__("Standard"))}" />`}
 								   ${compact ? "" : `<label class="whatsapp-kit-command-editor__subtitle" for="${this.id}-fn-${i}">${escape_html(__("Attached file name"))}</label>`}<input ${compact ? "" : `id="${this.id}-fn-${i}"`} type="text" class="whatsapp-kit-command-editor__input whatsapp-kit-command-editor__input--sm" data-f="out-file-${i}-${k}" data-in="out-file" data-key="${i}" value="${escape_html(o.file_name_template || "")}" aria-label="${escape_html(__("Attached file name"))}" />`
 								: `<textarea class="whatsapp-kit-command-editor__textarea" rows="${rows}" data-f="out-${i}-${k}" data-in="out-text" data-key="${i}" aria-label="${escape_html(o.label || o.output_key)}">${escape_html(text)}</textarea>`
@@ -485,6 +535,17 @@ frappe.provide("whatsapp.ui");
 					</div>`;
 				})
 				.join("");
+		}
+
+		/**
+		 * A file output's print format and letter head: two slots that `mount_link_fields` fills with
+		 * Frappe Link fields (print formats filtered by `print_format_filters`). Empty keeps the default:
+		 * the document type's or report's format, the site's letter head.
+		 */
+		render_print_choices(o, i, compact) {
+			if (compact) return "";
+			const slot = (kind, label) => `<span class="whatsapp-kit-command-editor__subtitle">${escape_html(label)}</span><span class="whatsapp-kit-command-editor__link-field" data-link-slot="${kind}-${i}"></span>`;
+			return `${o.print_format_filters ? slot("pf", __("Print format")) : ""}${slot("lh", __("Letter head"))}`;
 		}
 
 		// ---- permissions --------------------------------------------------------------------------

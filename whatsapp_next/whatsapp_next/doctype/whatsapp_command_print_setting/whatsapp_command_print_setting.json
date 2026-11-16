@@ -1,0 +1,49 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 01:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "reply",
+  "print_format",
+  "letter_head"
+ ],
+ "fields": [
+  {
+   "fieldname": "reply",
+   "fieldtype": "Data",
+   "label": "Reply",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "The key of a file reply the function declares (@reply)."
+  },
+  {
+   "fieldname": "print_format",
+   "fieldtype": "Link",
+   "label": "Print Format",
+   "options": "Print Format",
+   "in_list_view": 1,
+   "description": "A print reply only: the format its document is printed with. Empty: the document type's default."
+  },
+  {
+   "fieldname": "letter_head",
+   "fieldtype": "Link",
+   "label": "Letter Head",
+   "options": "Letter Head",
+   "in_list_view": 1,
+   "description": "Empty: the default letter head."
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-17 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WhatsApp Next",
+ "name": "WhatsApp Command Print Setting",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

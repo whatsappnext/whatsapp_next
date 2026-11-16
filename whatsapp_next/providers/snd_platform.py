@@ -383,8 +383,12 @@ class SndPlatformProvider(BaseProvider):
 		lower = text.lower()
 		exc_type = str(data.get("exc_type") or "")
 		kwargs = {"code": code, "http_status": status}
+		retry_after = response.headers.get("Retry-After")
+		if status == 503 and retry_after and retry_after.isdigit():
+			# busy, and saying when to come back (the platform's queue full): retried then, not after
+			# the fixed backoff (security review 2026-11-16)
+			raise pex.RateLimitError(text, retry_after=int(retry_after), **kwargs)
 		if status == 429 or code == "RATE_LIMITED" or "RateLimit" in exc_type:
-			retry_after = response.headers.get("Retry-After")
 			raise pex.RateLimitError(
 				text,
 				retry_after=int(retry_after) if retry_after and retry_after.isdigit() else None,
@@ -966,7 +970,15 @@ class SndPlatformProvider(BaseProvider):
 		messages = [m for m in messages if recipient_allowed(m)]
 		if not messages:
 			return BatchResult(batch_id=batch_id[:64], accepted=(), errors=refused)
-		body = {"messages": [self._message_payload(m) for m in messages], "batch_id": batch_id[:64]}
+		body = {
+			"messages": [self._message_payload(m) for m in messages],
+			"batch_id": batch_id[:64],
+			# a batch sent again after a lost answer (a timeout, a dead worker) carries the same
+			# client_refs: the platform refuses the ones it already has instead of sending them
+			# twice, answering CLIENT_REF_DUPLICATE with the first send's queue id, which
+			# dispatch takes as accepted (owner 2026-11-16). An older platform ignores the key.
+			"strict_client_ref": 1,
+		}
 		data = self._request("POST", "enqueue_messages_api", body=body)
 		accepted = tuple(
 			BatchAccepted(

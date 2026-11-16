@@ -102,7 +102,8 @@
    "fieldname": "chat_jid",
    "fieldtype": "Data",
    "label": "Chat JID",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "description": "For a message sent in a group: the group's name on WhatsApp.",
@@ -120,7 +121,8 @@
    "fieldname": "sender_jid",
    "fieldtype": "Data",
    "label": "Sender JID",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "default": "0",
@@ -434,7 +436,7 @@
    "link_fieldname": "trigger_inbound"
   }
  ],
- "modified": "2026-10-27 21:14:16.181352",
+ "modified": "2026-11-16 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "WhatsApp Next",
  "name": "WhatsApp Inbound Message",

@@ -319,9 +319,26 @@ def _render_for(source: str | None, recipient, campaign_doc) -> str | None:
 		recipient.source_doctype
 		and recipient.source_name
 		and frappe.db.exists(recipient.source_doctype, recipient.source_name)
+		and source_document_readable(recipient, campaign_doc)
 	):
 		template_context["doc"] = frappe.get_doc(recipient.source_doctype, recipient.source_name)
 	return templates.render_text(source, template_context, fallback=source)
+
+
+def source_document_readable(recipient, campaign_doc) -> bool:
+	"""Whether a recipient's source document may be rendered into the campaign (its body or its
+	printed file): only when everyone who set the campaign up, and whoever looks at it now, may
+	read it. A recipient row names its document as given (the picker, `/api/resource`), and a
+	Manager rendered any field of any document, a Salary Slip's pay included (security review
+	2026-11-16). The scheduler runs as Administrator, so the campaign's owner and starter count."""
+	users = {campaign_doc.get("owner"), campaign_doc.get("started_by")}
+	if frappe.session.user not in ("Administrator", "Guest"):
+		users.add(frappe.session.user)
+	return all(
+		frappe.has_permission(recipient.source_doctype, "read", recipient.source_name, user=user)
+		for user in users
+		if user
+	)
 
 
 def _recipient_attachment(msg, recipient, campaign_doc) -> dict[str, Any]:
@@ -332,6 +349,7 @@ def _recipient_attachment(msg, recipient, campaign_doc) -> dict[str, Any]:
 		and msg.print_format
 		and recipient.source_doctype
 		and recipient.source_name
+		and source_document_readable(recipient, campaign_doc)
 	):
 		pdf, message_type = attachments.as_sent(
 			attachments.render_print_pdf(
@@ -642,9 +660,21 @@ def _sync_recipient_statuses(campaign: str) -> None:
 	for r in rows:
 		by_recipient.setdefault(r.campaign_recipient, []).append(r.status)
 	rank = ["Failed", "Cancelled", "Queued", "Sent", "Delivered", "Read"]
+	# written only where it changes: every refresh (each batch, each receipt, every 5 minutes)
+	# wrote every recipient, 10k writes for a 10k campaign (security review 2026-11-16)
+	current = dict(
+		frappe.get_all(
+			"WhatsApp Campaign Recipient",
+			filters={"parent": campaign, "parenttype": "WhatsApp Campaign"},
+			fields=["name", "status"],
+			as_list=True,
+		)
+	)
 	for recipient, statuses in by_recipient.items():
 		mapped = [_RECIPIENT_BY_OUTBOUND.get(s, "Queued") for s in statuses]
 		worst = min(mapped, key=lambda s: rank.index(s) if s in rank else 99)
+		if current.get(recipient) == worst:
+			continue
 		with status_writer():
 			frappe.db.set_value(
 				"WhatsApp Campaign Recipient", recipient, "status", worst, update_modified=False

@@ -61,7 +61,19 @@ class TestCommandRouter(IntegrationTestCase):
 			"tdoc", "_test_typed", requires_linked_contact=1, allowed_party_types=[{"party_type": "Customer"}]
 		)
 		cls.contact = ensure_contact("Router Linked Contact", P_LINKED)
-		customer = frappe.get_all("Customer", limit=1, pluck="name")
+		# a site with real chats may already link this number to a customer through another
+		# contact; the router finds that one first, so the test takes it
+		customer = frappe.get_all(
+			"Dynamic Link",
+			filters={
+				"parenttype": "Contact",
+				"link_doctype": "Customer",
+				"parent": ("in", frappe.get_all("Contact Phone", {"phone": P_LINKED}, pluck="parent")),
+			},
+			pluck="link_name",
+			order_by="creation asc",
+			limit=1,
+		) or frappe.get_all("Customer", limit=1, pluck="name")
 		if customer:
 			c = frappe.get_doc("Contact", cls.contact)
 			if not any(l.link_doctype == "Customer" for l in c.links):

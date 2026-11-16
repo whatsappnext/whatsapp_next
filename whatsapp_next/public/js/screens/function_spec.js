@@ -35,8 +35,33 @@ frappe.provide("whatsapp_next.functions");
 		};
 	}
 
-	/** The editor's function spec: `templates` drawn as text outputs; `settings` keep their choices. */
-	function editor_spec(spec, command_templates) {
+	/**
+	 * A file reply (`report` or `print`) as an editor output row with its print choices: the print
+	 * format (a printed document only) and the letter head the command keeps in `print_settings`.
+	 */
+	function file_output_of(reply, chosen, choices) {
+		return {
+			output_key: reply.key,
+			label: reply.label,
+			output_type: "Document",
+			file_kind: reply.type,
+			doctype: reply.doctype || null,
+			report_name: reply.report_name || null,
+			print_format: (chosen && chosen.print_format) || null,
+			letter_head: (chosen && chosen.letter_head) || null,
+			// the Link fields' filters: the document type's print formats, or the report's own Jinja ones
+			print_format_filters:
+				reply.type === "print"
+					? { doc_type: reply.doctype, disabled: 0 }
+					: { print_format_for: "Report", report: reply.report_name, print_format_type: "Jinja", disabled: 0 },
+			letter_head_choices: choices.letter_heads || [],
+			default_letter_head: choices.default_letter_head || null,
+			notes: reply.type === "print" ? __("Printed: {0}", [__(reply.doctype || "")]) : __("Report: {0}", [__(reply.report_name || "")]),
+		};
+	}
+
+	/** The editor's function spec: `templates` drawn as text outputs, file replies as document outputs; `settings` keep their choices. */
+	function editor_spec(spec, command_templates, command_print_settings) {
 		if (!spec) return spec;
 		// the command's own text: the row in the reader's language, else the one for every language
 		const own = {};
@@ -51,7 +76,13 @@ frappe.provide("whatsapp_next.functions");
 					notes: s.depends_on ? __("Only when {0} is {1}", [s.depends_on.param, s.depends_on.value]) : "",
 				})
 			),
-			outputs: (spec.templates || []).map((t) => output_of(t, own[t.key])),
+			outputs: (spec.templates || [])
+				.map((t) => output_of(t, own[t.key]))
+				.concat(
+					(spec.replies || [])
+						.filter((r) => r.type === "report" || r.type === "print")
+						.map((r) => file_output_of(r, (command_print_settings || []).find((p) => p.reply === r.key), spec.print_choices || {}))
+				),
 			party_types: (spec.party_types && spec.party_types.mode === "only" ? spec.party_types.types : []) || [],
 			when_to_use: spec.party_types_text ? __("Serves: {0}", [spec.party_types_text]) : "",
 		});
@@ -81,6 +112,10 @@ frappe.provide("whatsapp_next.functions");
 		const out = Object.assign({}, payload);
 		if ("outputs" in out) {
 			out.templates = templates_of(out.outputs, spec_outputs, original);
+			// the file outputs' print format and letter head (owner, 2026-11-17)
+			out.print_settings = (out.outputs || [])
+				.filter((o) => o.output_type === "Document" && o.file_kind && (o.print_format || o.letter_head))
+				.map((o) => ({ reply: o.output_key, print_format: o.print_format || null, letter_head: o.letter_head || null }));
 			delete out.outputs;
 		}
 		return out;

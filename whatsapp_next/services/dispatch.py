@@ -55,6 +55,10 @@ OUTBOUND_TERMINAL = frozenset({"Sent", "Delivered", "Read", "Failed", "Cancelled
 _DELIVERY_RANK = {"Unsent": 0, "Queued": 1, "Sending": 2, "Held": 2, "Sent": 3, "Delivered": 4, "Read": 5}
 
 QUEUE_STATUSES = ("Queued", "Sending", "Paused", "Deleted", "Completed", "Dead Letter")
+#: the platform's answer to a client_ref it already has: the message was sent by an earlier try
+CLIENT_REF_ALREADY_SENT = "CLIENT_REF_DUPLICATE"
+#: an outbound the platform took: its receipts moved it on (or it is held there)
+OUTBOUND_HANDED_OVER = ("Sent", "Delivered", "Read", "Held")
 QUEUE_OPEN = frozenset({"Queued", "Sending", "Paused"})
 
 PRIORITY_BY_SOURCE: dict[str, int] = {
@@ -153,6 +157,15 @@ def _is_known_number(key: str | None) -> bool:
 
 
 def _resolve_device(name: str | None) -> str:
+	from whatsapp_next.services.permissions import allowed_devices
+
+	# a User Permission on WhatsApp Device limits sending as it limits reading: an Agent limited
+	# to one device sent from another branch's number (security review 2026-11-16)
+	permitted = allowed_devices()
+	if name and permitted is not None and name not in permitted:
+		frappe.throw(_("You may not send from the device {0}").format(name), frappe.PermissionError)
+	if not name and permitted:
+		name = permitted[0]
 	if not name:
 		from whatsapp_next.services.devices import default_device
 
@@ -198,6 +211,16 @@ def _recipient_fields(spec: OutboundSpec) -> dict[str, Any]:
 	e164 = normalize_phone_to_e164(raw)
 	if not e164:
 		frappe.throw(_("Invalid WhatsApp number: {0}").format(raw or ""), WAInvalidPhoneError)
+	if is_group_or_lid(e164):
+		# a group's (or a LID's) id given as the phone — a notification's or an alert's recipient
+		# saved on a contact: it goes as that group, not as a person's number (owner, 2026-11-16)
+		kind, key = classify(e164)
+		return {
+			"recipient_type": "Group" if kind == "Group" else "Individual",
+			"jid": key,
+			"phone": raw,
+			"phone_e164": None if kind == "Group" else e164,
+		}
 	return {"recipient_type": "Individual", "phone": raw, "phone_e164": e164, "jid": None}
 
 
@@ -470,15 +493,20 @@ def _kick_dispatch(devices: Iterable[str]) -> None:
 	if frappe.flags.in_test and not frappe.flags.wa_kick_dispatch_in_test:
 		return
 	for device in sorted(set(devices)):
-		frappe.enqueue(
-			"whatsapp_next.services.dispatch.dispatch_device_batch",
-			device=device,
-			queue="short",
-			job_id=f"wa-dispatch-{device}",
-			deduplicate=True,
-			enqueue_after_commit=True,
-			timeout=300,
-		)
+		try:
+			frappe.enqueue(
+				"whatsapp_next.services.dispatch.dispatch_device_batch",
+				device=device,
+				queue="short",
+				job_id=f"wa-dispatch-{device}",
+				deduplicate=True,
+				enqueue_after_commit=True,
+				timeout=300,
+			)
+		except frappe.QueueOverloaded:
+			# the job queue is full: the message stays Queued for the minute tick
+			# (`dispatch_tick`); the send that queued it must not fail (security review 2026-11-16)
+			frappe.clear_last_message()
 
 
 def create_and_enqueue(
@@ -661,6 +689,48 @@ def _interactive_payload(message_type: str, value: Any) -> dict | None:
 	return interactive.to_provider(message_type, value)
 
 
+#: the files one batch may carry, in bytes before encoding. Every message carries its own copy
+#: of its file (base64, a third larger), so a 20 MB video to 20 recipients built a ~530 MB
+#: request in the worker (security review 2026-11-16).
+BATCH_FILE_BUDGET_BYTES = 25 * 1024 * 1024
+
+
+def _fit_file_budget(items: list[frappe._dict]) -> list[frappe._dict]:
+	"""The claimed rows whose files fit BATCH_FILE_BUDGET_BYTES, in claim order and one at least;
+	the others go back to Queued for the next run, no attempt counted."""
+	urls = dict(
+		frappe.get_all(
+			"WhatsApp Log",
+			filters={"name": ("in", [i.outbound_message for i in items]), "attachment": ("is", "set")},
+			fields=["name", "attachment"],
+			as_list=True,
+		)
+	)
+	if not urls:
+		return items
+	sizes = dict(
+		frappe.get_all("File", filters={"file_url": ("in", list(set(urls.values())))}, fields=["file_url", "file_size"], as_list=True)
+	)
+	kept, released, total = [], [], 0
+	for item in items:
+		size = cint(sizes.get(urls.get(item.outbound_message))) if item.outbound_message in urls else 0
+		if kept and total + size > BATCH_FILE_BUDGET_BYTES:
+			released.append(item)
+			continue
+		kept.append(item)
+		total += size
+	if released:
+		with status_writer():
+			for item in released:
+				_set_row_values(
+					"WhatsApp Queue Item",
+					item.name,
+					{"status": "Queued", "claimed_at": None, "job_id": None, "next_attempt_at": now_datetime()},
+				)
+				_set_row_values("WhatsApp Log", item.outbound_message, {"status": "Queued"})
+	return kept
+
+
 def build_messages(
 	items: list[frappe._dict], platform_device: str
 ) -> tuple[list[NormalizedMessage], list[tuple[frappe._dict, Exception]]]:
@@ -787,6 +857,25 @@ def apply_batch_result(items: list[frappe._dict], result: BatchResult) -> dict[s
 			item = by_ref.pop(err.client_ref, None) if err.client_ref else None
 			if not item:
 				continue
+			if err.code == CLIENT_REF_ALREADY_SENT:
+				# the platform has this message from an earlier try whose answer was lost (a
+				# timeout, a dead worker): it is the first send, accepted, not a failure (security
+				# review 2026-11-16). The receipts move the outbound on, as for any accepted send.
+				_set_row_values(
+					"WhatsApp Queue Item",
+					item.name,
+					{
+						"status": "Completed",
+						"platform_queue_id": err.queue_id,
+						"batch_id": result.batch_id,
+						"completed_at": now,
+						"attempts": cint(item.attempts) + 1,
+					},
+				)
+				if err.queue_id:
+					_set_row_values("WhatsApp Log", item.outbound_message, {"platform_queue_id": err.queue_id})
+				counts["accepted"] += 1
+				continue
 			cls = errors.classify(err.error, provider_code=err.code)
 			if cls.retryable:
 				outcome = _retry_later(item, cls.message or err.error, cls.code, at=now)
@@ -817,12 +906,16 @@ def apply_call_failure(items: list[frappe._dict], exc: Exception, *, device: str
 
 		devices.apply_state(device, "Disconnected", source="dispatch", reason=cls.message)
 	if isinstance(exc, pex.AuthError):
+		was_failing = frappe.db.get_single_value("WhatsApp Settings", "connection_status") == "Failed"
 		frappe.db.set_single_value(
 			"WhatsApp Settings", {"connection_status": "Failed", "last_connection_error": cls.message[:500]}
 		)
-		frappe.log_error(
-			title="WhatsApp dispatch: provider auth failed", message=f"device={device} code={exc.code}"
-		)
+		if not was_failing:
+			# once, when the keys stop working: every call after it wrote one more entry, every
+			# minute and on every new message (security review 2026-11-16); the Settings show it
+			frappe.log_error(
+				title="WhatsApp dispatch: provider auth failed", message=f"device={device} code={exc.code}"
+			)
 	return cls.code
 
 
@@ -841,6 +934,7 @@ def dispatch_device_batch(device: str) -> dict[str, int]:
 	items = claim_batch(device, limit)
 	if not items:
 		return {"claimed": 0}
+	items = _fit_file_budget(items)
 	frappe.db.commit()  # the claim is visible to other workers before the HTTP call
 	messages, build_failures = build_messages(items, dev.platform_device)
 	now = now_datetime()
@@ -1169,6 +1263,14 @@ def send_test_message(outbound: str) -> SendResult:
 	return send_now(outbound, source="test")
 
 
+def _platform_not_reached(exc: Exception) -> bool:
+	"""A failure that means the platform did not take the message: no connection, a busy answer
+	(429 / 503), not a timeout, after which it may have."""
+	if isinstance(exc, pex.RateLimitError):
+		return True
+	return isinstance(exc, pex.TransientError) and getattr(exc, "code", None) != "TIMEOUT"
+
+
 def send_now(outbound: str, *, source: str = "direct") -> SendResult:
 	"""One synchronous `send_message`, bypassing the queue, its rate and its batching: test sends
 	(D-024) and the router's automatic replies (receipt, unknown command), which the sender must
@@ -1185,6 +1287,14 @@ def send_now(outbound: str, *, source: str = "direct") -> SendResult:
 		result = registry.get_provider().send_message(build_message(doc, platform_device, priority=1))
 	except pex.ProviderError as exc:
 		cls = errors.classify(exc)
+		if _platform_not_reached(exc):
+			# the platform did not take it (no connection, busy, rate-limited): the reply waits in
+			# the queue and goes when the platform is back, instead of Failed for good (security
+			# review 2026-11-16). A timeout is left Failed: the platform may have sent it.
+			with status_writer():
+				_set_row_values("WhatsApp Log", outbound, {"status": "Unsent"})
+			enqueue([outbound], priority=1)
+			return SendResult(ok=False, rejected=False, reason=cls.message, code="QUEUED")
 		apply_status(outbound, "Failed", error_code=cls.code, reason=cls.message, source=source)
 		if isinstance(exc, pex.DeviceOfflineError):
 			from whatsapp_next.services import devices
