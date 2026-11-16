@@ -70,6 +70,16 @@ class WhatsAppNotification(Document):
 				),
 				WAValidationError,
 			)
+		# the body renders the whole document and the job reads the documents with no permission
+		# check: whoever sets a notification up must be able to read its DocType (a Manager with no
+		# HR rights sent Salary Slips to a number of their own; security review 2026-11-16)
+		if not (frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch) and not frappe.has_permission(
+			self.document_type, "read"
+		):
+			frappe.throw(
+				_("You cannot read {0}, so you cannot send it in a notification").format(_(self.document_type)),
+				frappe.PermissionError,
+			)
 		meta = frappe.get_meta(self.document_type)
 		if meta.istable:
 			frappe.throw(_("{0} is a child table").format(self.document_type), WAValidationError)
