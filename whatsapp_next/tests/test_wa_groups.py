@@ -8,8 +8,8 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from whatsapp_next.exceptions import WANotSupportedError, WAValidationError
-from whatsapp_next.providers.schemas import GroupCreated, GroupMember
+from whatsapp_next.exceptions import WANotFoundError, WANotSupportedError, WAValidationError
+from whatsapp_next.providers.schemas import GroupCreated, GroupMember, GroupMembersAdded
 from whatsapp_next.services import wa_groups
 from whatsapp_next.tests.conftest_frappe import ensure_device
 
@@ -33,6 +33,15 @@ class Provider:
 				GroupMember(phone=participants[-1].lstrip("+"), status="invite_required"),
 			],
 			invite_link="https://chat.whatsapp.com/x",
+		)
+
+
+	def add_group_members(self, platform_device, group_jid, participants):
+		self.calls.append(("add", platform_device, group_jid, participants))
+		statuses = ["added", "already_member", "invite_required"]
+		return GroupMembersAdded(
+			members=[GroupMember(phone=p.lstrip("+"), status=statuses[i % 3]) for i, p in enumerate(participants)],
+			invite_link="https://chat.whatsapp.com/y",
 		)
 
 
@@ -118,3 +127,41 @@ class TestWaGroups(IntegrationTestCase):
 		with self.assertRaises(WAValidationError):
 			wa_groups.members_from("WhatsApp Number", names)
 		self.assertEqual(wa_groups.members_from("WhatsApp Number", names, max_records=5000), [])
+
+
+	def test_members_are_added_to_an_existing_group(self):
+		"""Owner 2026-11-17: a group's row in WhatsApp Numbers adds members to the WhatsApp group."""
+		group = self._create()["jid"]
+		with patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider):
+			result = wa_groups.add_group_members(group, ["967784499996", "+967777667663", "+967784499996", "+967777999579"])
+		platform_device = frappe.db.get_value("WhatsApp Device", self.device, "platform_device")
+		self.assertEqual(self.provider.calls[-1], ("add", platform_device, group, ["+967784499996", "+967777667663", "+967777999579"]))
+		self.assertEqual(
+			[(m["phone"], m["status"]) for m in result["members"]],
+			[("967784499996", "added"), ("967777667663", "already_member"), ("967777999579", "invite_required")],
+		)
+		self.assertEqual((result["device"], result["invite_link"]), (self.device, "https://chat.whatsapp.com/y"))
+		self.assertTrue(
+			frappe.db.exists("WhatsApp Audit Log", {"action": "WhatsApp Group Members Added", "reference_name": group})
+		)
+
+	def test_a_number_off_send_only_to_is_not_asked(self):
+		group = self._create()["jid"]
+		with (
+			patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider),
+			patch("whatsapp_next.services.settings.chat_in", side_effect=lambda _f, key: key == "+967784499996"),
+		):
+			result = wa_groups.add_group_members(group, ["+967784499996", "+967775675566"])
+		self.assertEqual(self.provider.calls[-1][3], ["+967784499996"])
+		self.assertEqual([m["status"] for m in result["members"]], ["added", "not_allowed"])
+
+	def test_adding_needs_a_group_a_number_and_the_plan(self):
+		group = self._create()["jid"]
+		with patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider):
+			with self.assertRaises(WANotFoundError):
+				wa_groups.add_group_members("+967784499996", ["+967777667663"])  # not a group
+			with self.assertRaises(WAValidationError):
+				wa_groups.add_group_members(group, ["not a number"])
+			set_plan_allows_groups(False)
+			with self.assertRaises(WANotSupportedError):
+				wa_groups.add_group_members(group, ["+967777667663"])

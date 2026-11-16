@@ -1,5 +1,5 @@
 # Module role: creating WhatsApp groups from the product's screens (Contacts, WhatsApp Numbers,
-# Contact Groups). The device creates the group through the provider and becomes its admin; the
+# Contact Groups), and adding members to one (WhatsApp Numbers, a group's row). The device creates the group through the provider and becomes its admin; the
 # group then exists here as a WhatsApp Number of type Group, and — when it was created for a
 # Contact — as one of that contact's numbers too. Plan feature `allow_groups`.
 
@@ -143,6 +143,71 @@ def create_whatsapp_group(
 		"members": [asdict(m) for m in created.members],
 		"invite_link": created.invite_link,
 		"saved_to_contact": saved,
+	}
+
+
+def add_group_members(
+	group: str, members: list[str], device: str | None = None, user: str | None = None
+) -> dict[str, Any]:
+	"""Add `members` (numbers) to the WhatsApp group `group` (a WhatsApp Number of type Group) through
+	`device`, which must be one of its admins; by default the device the group was last seen on.
+	Returns `{jid, name, device, members[{phone, status, jid}], invite_link}`: a row per number, in
+	order. A number off Settings → "Send only to" is not asked for (`not_allowed`). Audited
+	`WhatsApp Group Members Added` (owner, 2026-11-17)."""
+	from whatsapp_next.providers import registry
+	from whatsapp_next.services.settings import chat_in
+
+	plan_features.require_groups()
+	kind, jid = classify(group)
+	row = frappe.db.get_value(
+		"WhatsApp Number", jid, ["number_type", "display_name", "synced_device", "last_device"], as_dict=True
+	) if kind == "Group" else None
+	if not row or row.number_type != "Group":
+		frappe.throw(_("{0} is not a WhatsApp group").format(group), WANotFoundError)
+	keys = []
+	for m in members or []:
+		m_kind, key = classify(m)
+		if m_kind == "Individual" and key not in keys:
+			keys.append(key)
+	if not keys:
+		frappe.throw(_("Choose at least one number to add"), WAValidationError)
+	if len(keys) > MAX_MEMBERS:
+		frappe.throw(_("A group holds at most {0} members").format(MAX_MEMBERS), WAValidationError)
+	device = device or row.synced_device or row.last_device
+	device_row = frappe.db.get_value(
+		"WhatsApp Device", device, ["platform_device", "status", "disabled"], as_dict=True
+	) if device else None
+	if not device_row:
+		frappe.throw(_("Choose the device that administers the group"), WAValidationError)
+	if cint(device_row.disabled):
+		frappe.throw(_("{0} is disabled").format(device), WAStateConflictError)
+	if device_row.status != "Connected":
+		frappe.throw(_("{0} is not connected").format(device), WAStateConflictError)
+
+	allowed = [k for k in keys if chat_in("send_only_to", k)]
+	result = (
+		registry.get_provider().add_group_members(device_row.platform_device, jid, allowed)
+		if allowed
+		else None
+	)
+	by_phone = {m.phone.lstrip("+"): asdict(m) for m in (result.members if result else [])}
+	rows = [
+		by_phone.get(k.lstrip("+")) or {"phone": k.lstrip("+"), "status": "not_allowed" if k not in allowed else "failed", "jid": None}
+		for k in keys
+	]
+	audit.record_audit_entry(
+		"WhatsApp Group Members Added",
+		reference=("WhatsApp Number", jid),
+		count=len(keys),
+		details={"device": device, "statuses": _count_members_by_status([frappe._dict(r) for r in rows])},
+		user=user,
+	)
+	return {
+		"jid": jid,
+		"name": row.display_name or jid,
+		"device": device,
+		"members": rows,
+		"invite_link": result.invite_link if result else None,
 	}
 
 

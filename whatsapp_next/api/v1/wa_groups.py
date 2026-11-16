@@ -1,5 +1,5 @@
-# Module role: whitelisted endpoints for creating WhatsApp groups (services.wa_groups): the
-# members behind a selection, and the creation itself.
+# Module role: whitelisted endpoints for WhatsApp groups (services.wa_groups): the members behind a
+# selection, the creation itself, and adding members to an existing group.
 
 from __future__ import annotations
 
@@ -32,3 +32,10 @@ def create_group(
 	return wa_groups.create_whatsapp_group(
 		device, name, [str(m) for m in members or []], description, contact, user=frappe.session.user
 	)
+
+
+@api_endpoint(roles=MANAGER)
+def add_members(group: str, members: list, device: str | None = None) -> dict[str, Any]:
+	"""Add `members` (numbers) to the WhatsApp group `group` through `device` (by default the one the
+	group was last seen on). → `{jid, name, device, members[{phone, status, jid}], invite_link}`."""
+	return wa_groups.add_group_members(group, [str(m) for m in members or []], device, user=frappe.session.user)

@@ -1,6 +1,8 @@
 // whatsapp.ui.GroupCreate — create a WhatsApp group from any screen: the device that will own it,
 // the group's name and description, and its members — the numbers the host passed in (a selection
 // of contacts, contact groups or numbers) plus any chosen with the ContactPicker (local mode).
+// With `group` it adds members to an existing group instead: the same members list, the device
+// that administers the group, no name (owner, 2026-11-17).
 // After creating, the dialog shows what became of every number: added, needs an invitation (their
 // privacy settings refuse being added; the invite link is offered), or not on WhatsApp.
 // Data through `wa_groups.*` and `devices.list_devices`; a `contact` option saves the group among
@@ -12,6 +14,8 @@ const STATUS = {
 	added: { label: () => __("Added"), colour: "green" },
 	invite_required: { label: () => __("Needs an invitation"), colour: "orange" },
 	not_on_whatsapp: { label: () => __("Not on WhatsApp"), colour: "gray" },
+	already_member: { label: () => __("Already a member"), colour: "blue" },
+	not_allowed: { label: () => __("Not in «Send only to»"), colour: "gray" },
 	failed: { label: () => __("Not added"), colour: "red" },
 };
 
@@ -22,6 +26,7 @@ whatsapp.ui.GroupCreate = class GroupCreate {
 	 * @param {{doctype: string, names: string[]}} [opts.source] — or: read the members behind these records
 	 * @param {string} [opts.contact] — save the new group among this Contact's numbers
 	 * @param {string} [opts.name] — a suggested group name
+	 * @param {{jid: string, name?: string, device?: string}} [opts.group] — add to this group instead
 	 * @param {Function} [opts.on_created] — `(result) => void`
 	 */
 	constructor(opts = {}) {
@@ -39,19 +44,26 @@ whatsapp.ui.GroupCreate = class GroupCreate {
 	}
 
 	build_dialog() {
+		const group = this.opts.group;
 		this.dialog = new frappe.ui.Dialog({
-			title: __("Create WhatsApp group"),
+			title: group ? __("Add members to {0}", [group.name || group.jid]) : __("Create WhatsApp group"),
 			size: "large",
-			fields: [
-				{ fieldtype: "Data", fieldname: "group_name", label: __("Group name"), reqd: 1, length: 100, default: this.opts.name || "" },
-				{ fieldtype: "Select", fieldname: "device", label: __("Device"), reqd: 1, options: [], description: __("The number that creates the group and becomes its admin.") },
-				{ fieldtype: "Column Break", fieldname: "col_1" },
-				{ fieldtype: "Small Text", fieldname: "description", label: __("Description") },
-				{ fieldtype: "Section Break", fieldname: "sec_members", label: __("Members") },
-				{ fieldtype: "HTML", fieldname: "members" },
-			],
-			primary_action_label: __("Create group"),
-			primary_action: (values) => this.create(values),
+			fields: group
+				? [
+					{ fieldtype: "Select", fieldname: "device", label: __("Device"), reqd: 1, options: [], description: __("A number that is an admin of the group: only an admin can add members.") },
+					{ fieldtype: "Section Break", fieldname: "sec_members", label: __("Members to add") },
+					{ fieldtype: "HTML", fieldname: "members" },
+				]
+				: [
+					{ fieldtype: "Data", fieldname: "group_name", label: __("Group name"), reqd: 1, length: 100, default: this.opts.name || "" },
+					{ fieldtype: "Select", fieldname: "device", label: __("Device"), reqd: 1, options: [], description: __("The number that creates the group and becomes its admin.") },
+					{ fieldtype: "Column Break", fieldname: "col_1" },
+					{ fieldtype: "Small Text", fieldname: "description", label: __("Description") },
+					{ fieldtype: "Section Break", fieldname: "sec_members", label: __("Members") },
+					{ fieldtype: "HTML", fieldname: "members" },
+				],
+			primary_action_label: group ? __("Add members") : __("Create group"),
+			primary_action: (values) => (group ? this.add_to_group(values) : this.create(values)),
 		});
 		this.dialog.$wrapper.addClass("whatsapp-kit whatsapp-kit-sheet whatsapp-kit-group-create");
 		this.$members = this.dialog.get_field("members").$wrapper;
@@ -64,7 +76,8 @@ whatsapp.ui.GroupCreate = class GroupCreate {
 			const field = this.dialog.get_field("device");
 			field.df.options = rows.map((d) => ({ value: d.name, label: d.device_name || d.name }));
 			field.refresh();
-			const preferred = rows.find((d) => cint(d.is_default)) || rows[0];
+			const own = this.opts.group && rows.find((d) => d.name === this.opts.group.device);
+			const preferred = own || rows.find((d) => cint(d.is_default)) || rows[0];
 			if (preferred) this.dialog.set_value("device", preferred.name);
 			if (!rows.length) field.set_description(__("No device is connected. Connect one first."));
 		});
@@ -132,8 +145,26 @@ whatsapp.ui.GroupCreate = class GroupCreate {
 			.catch((err) => whatsapp.ui.Toast.error(err));
 	}
 
+	add_to_group(values) {
+		if (!this.members.size) {
+			whatsapp.ui.Toast.error(__("Choose at least one number to add"));
+			return;
+		}
+		ui.call("wa_groups.add_members", {
+			group: this.opts.group.jid,
+			device: values.device,
+			members: [...this.members.keys()],
+		}, { freeze: true, freeze_message: __("Adding the members…") })
+			.then((r) => {
+				this.dialog.hide();
+				this.report(r, __("Members added to {0}", [r.name]));
+				if (this.opts.on_created) this.opts.on_created(r);
+			})
+			.catch((err) => whatsapp.ui.Toast.error(err));
+	}
+
 	/** What became of every number, and the invite link for those who need it. */
-	report(r) {
+	report(r, title) {
 		const escape_html = ui.escape;
 		const members = (r && r.members) || [];
 		const names = Object.fromEntries([...this.members.values()].map((m) => [String(m.phone_e164).replace(/^\+/, ""), m.display_name]));
@@ -144,7 +175,7 @@ whatsapp.ui.GroupCreate = class GroupCreate {
 				${whatsapp.ui.StatusBadge.html({ label: s.label(), colour: s.colour })}</li>`;
 		}).join("");
 		const d = new frappe.ui.Dialog({
-			title: __("Group created: {0}", [r.name]),
+			title: title || __("Group created: {0}", [r.name]),
 			size: "large",
 			fields: [{ fieldtype: "HTML", fieldname: "body" }],
 			primary_action_label: __("Done"),
