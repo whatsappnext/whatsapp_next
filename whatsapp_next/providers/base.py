@@ -15,6 +15,7 @@ from whatsapp_next.providers.schemas import (
 	ContactProfile,
 	DeviceState,
 	GroupCreated,
+	GroupMembersAdded,
 	HealthStatus,
 	HistoryPage,
 	MessageStatus,
@@ -316,6 +317,12 @@ class BaseProvider(ABC):
 
 		Not abstract: a provider that cannot create groups keeps this default."""
 		raise pex.NotSupportedError("This provider cannot create groups", code="NOT_SUPPORTED")
+
+	def add_group_members(self, platform_device: str, group_jid: str, participants: list[str]) -> GroupMembersAdded:
+		"""Add `participants` (numbers) to a group the device administers.
+
+		Not abstract: a provider that cannot change groups keeps this default."""
+		raise pex.NotSupportedError("This provider cannot add members to groups", code="NOT_SUPPORTED")
 
 	def list_history(
 		self,

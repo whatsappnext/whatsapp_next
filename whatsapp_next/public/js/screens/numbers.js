@@ -20,6 +20,13 @@ frappe.provide("whatsapp_next.numbers");
 				"quick_send",
 				"confirm",
 				{
+					key: "add_members",
+					label: __("Add members"),
+					icon: "es-line-add-people",
+					condition: () => doc.number_type === "Group" && whatsapp_next.wa_groups.can_create(),
+					handler: () => whatsapp_next.wa_groups.add_members(doc),
+				},
+				{
 					key: "unlink",
 					label: __("Unlink"),
 					icon: whatsapp.ui.icons.cancel,
