@@ -99,6 +99,12 @@ doc_events = {
 	},
 }
 
+# A command function (`wa_fn_*` Server Script) runs only from the function engine, never from an
+# API route (security review 2026-11-16): overrides/server_script.py.
+override_doctype_class = {
+	"Server Script": "whatsapp_next.overrides.server_script.WhatsAppServerScript",
+}
+
 # Log / derived tables must never pin a Device, Contact, Campaign or Outbound row against deletion
 # (backend-plan §13): message history and the materialized Numbers table keep dangling links.
 ignore_links_on_delete = [
