@@ -286,9 +286,41 @@ def finalize_campaigns() -> int:
 		from whatsapp_next.services import campaign_runner
 	except ImportError:  # phase order: campaign_runner lands in B-15
 		return 0
+	restart_unfinished_builds()
 	closed_count = 0
 	for name in frappe.get_all("WhatsApp Campaign", filters={"status": "Running"}, pluck="name"):
 		campaign_runner.refresh_counters(name)
 		if frappe.db.get_value("WhatsApp Campaign", name, "status") != "Running":
 			closed_count += 1
 	return closed_count
+
+
+def restart_unfinished_builds() -> list[str]:
+	"""A campaign whose build job stopped part-way (a restart during a large campaign) kept
+	recipients `Pending` with no message, and a campaign cannot close while any is `Pending`:
+	it stayed Running for ever (security review 2026-11-16). Queued campaigns, and Running ones
+	with such recipients, get their build queued again under the campaign's own job id: while the
+	first build still runs (or waits), Frappe refuses the copy, so a build never runs twice."""
+	started = []
+	for campaign in frappe.get_all("WhatsApp Campaign", filters={"status": ("in", ["Queued", "Running"])}, fields=["name", "status"]):
+		if campaign.status == "Running" and not frappe.db.exists(
+			"WhatsApp Campaign Recipient",
+			{"parenttype": "WhatsApp Campaign", "parent": campaign.name, "status": "Pending", "outbound_message": ("is", "not set")},
+		):
+			continue
+		method = "materialize" if campaign.status == "Queued" else "materialize_pending"
+		try:
+			frappe.enqueue(
+				f"whatsapp_next.services.campaign_runner.{method}",
+				campaign=campaign.name,
+				queue="long",
+				job_id=f"wa-campaign-{campaign.name}",
+				deduplicate=True,
+				timeout=3600,
+			)
+		except frappe.QueueOverloaded:
+			frappe.clear_last_message()
+			continue  # the next run tries again
+		started.append(campaign.name)
+	return started
+
