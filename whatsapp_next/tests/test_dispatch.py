@@ -441,6 +441,43 @@ class TestDispatch(IntegrationTestCase):
 		self.assertEqual(counts["dead"], 1)
 		self.assertEqual(self._get_queue_item(item).status, "Dead Letter")
 
+	def test_a_send_the_platform_already_has_is_not_failed(self):
+		"""Security review 2026-11-16 (high): a batch accepted by the platform whose answer was lost
+		(a timeout, a dead worker) is sent again with the same client_ref; a platform that refuses
+		the repeat answers CLIENT_REF_DUPLICATE with the first send's queue id. That was a final
+		failure: the message, sent, was marked Failed for ever."""
+		from whatsapp_next.providers.schemas import BatchError, BatchResult
+
+		out, item = self._queued(1)[0]
+		with fake_provider() as fp:
+			fp.send_batch = lambda messages, batch_id: BatchResult(
+				batch_id=batch_id,
+				errors=tuple(
+					BatchError(client_ref=m.client_ref, error="client_ref is already queued or sent", code="CLIENT_REF_DUPLICATE", queue_id="WAQ-FIRST-SEND")
+					for m in messages
+				),
+			)
+			counts = dispatch.dispatch_device_batch(self.device)
+		self.assertEqual(counts.get("dead", 0), 0)
+		qi = self._get_queue_item(item)
+		self.assertEqual((qi.status, qi.platform_queue_id), ("Completed", "WAQ-FIRST-SEND"))
+		self.assertNotEqual(self._get_outbound_log(out).status, "Failed")
+
+	def test_a_stale_claim_the_platform_already_sent_is_not_sent_again(self):
+		"""Security review 2026-11-16 (high): the worker died after the platform accepted the batch
+		and before it recorded the answer; the receipts had moved the message to Delivered.
+		Reconcile put it back to Queued (overwriting Delivered) and it was sent again."""
+		from whatsapp_next.services import reconcile
+
+		out, item = dispatch.create_and_enqueue(_build_outbound_spec(phone=P3))
+		dispatch.claim_batch(self.device, 10)
+		frappe.db.set_value("WhatsApp Queue Item", item, "claimed_at", add_to_date(now_datetime(), minutes=-20), update_modified=False)
+		with status_writer():
+			frappe.db.set_value("WhatsApp Log", out, "status", "Delivered")
+		reconcile.requeue_stale_claims()
+		self.assertEqual(self._get_outbound_log(out).status, "Delivered")
+		self.assertEqual(self._get_queue_item(item).status, "Completed")
+
 	def test_batch_auth_failure_marks_settings(self):
 		_out, item = self._queued(1)[0]
 		with fake_provider() as fp:

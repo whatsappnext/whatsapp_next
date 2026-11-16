@@ -55,6 +55,10 @@ OUTBOUND_TERMINAL = frozenset({"Sent", "Delivered", "Read", "Failed", "Cancelled
 _DELIVERY_RANK = {"Unsent": 0, "Queued": 1, "Sending": 2, "Held": 2, "Sent": 3, "Delivered": 4, "Read": 5}
 
 QUEUE_STATUSES = ("Queued", "Sending", "Paused", "Deleted", "Completed", "Dead Letter")
+#: the platform's answer to a client_ref it already has: the message was sent by an earlier try
+CLIENT_REF_ALREADY_SENT = "CLIENT_REF_DUPLICATE"
+#: an outbound the platform took: its receipts moved it on (or it is held there)
+OUTBOUND_HANDED_OVER = ("Sent", "Delivered", "Read", "Held")
 QUEUE_OPEN = frozenset({"Queued", "Sending", "Paused"})
 
 PRIORITY_BY_SOURCE: dict[str, int] = {
@@ -796,6 +800,25 @@ def apply_batch_result(items: list[frappe._dict], result: BatchResult) -> dict[s
 		for err in result.errors:
 			item = by_ref.pop(err.client_ref, None) if err.client_ref else None
 			if not item:
+				continue
+			if err.code == CLIENT_REF_ALREADY_SENT:
+				# the platform has this message from an earlier try whose answer was lost (a
+				# timeout, a dead worker): it is the first send, accepted, not a failure (security
+				# review 2026-11-16). The receipts move the outbound on, as for any accepted send.
+				_set_row_values(
+					"WhatsApp Queue Item",
+					item.name,
+					{
+						"status": "Completed",
+						"platform_queue_id": err.queue_id,
+						"batch_id": result.batch_id,
+						"completed_at": now,
+						"attempts": cint(item.attempts) + 1,
+					},
+				)
+				if err.queue_id:
+					_set_row_values("WhatsApp Log", item.outbound_message, {"platform_queue_id": err.queue_id})
+				counts["accepted"] += 1
 				continue
 			cls = errors.classify(err.error, provider_code=err.code)
 			if cls.retryable:

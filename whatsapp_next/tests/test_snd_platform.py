@@ -271,6 +271,9 @@ class TestSndPlatform(IntegrationTestCase):
 		)
 		sent = req.call_args.kwargs["json"]
 		self.assertEqual(sent["batch_id"], "b1")
+		# a message sent again after a lost answer must not go twice (owner 2026-11-16): the
+		# platform refuses a reference it already has, answering with the first send's queue id
+		self.assertEqual(sent.get("strict_client_ref"), 1)
 		m1, m2, m3 = sent["messages"]
 		self.assertEqual(m1["recipient_no"], "967777667663")  # digits without + (PB-05)
 		self.assertEqual(m1["client_ref"], "ref1")

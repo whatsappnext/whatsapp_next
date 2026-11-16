@@ -348,6 +348,34 @@ class TestCampaignRunner(IntegrationTestCase):
 		runner.resume_campaign(name)
 		self.assertEqual(runner.counters_for(name).open, 4)
 
+	def test_a_campaign_whose_build_stopped_halfway_is_built_by_reconcile(self):
+		"""Security review 2026-11-16 (high): the build job died part-way (a restart mid-way through
+		a large campaign); the campaign stayed Running with Pending recipients for ever, because
+		nothing started the build again and the campaign cannot close while any is Pending."""
+		from whatsapp_next.services import reconcile
+
+		name = _campaign(self.device, recipients=(P1, P2, P3))
+		with patch.object(frappe, "enqueue"):
+			runner.start_campaign(name)
+		runner.set_status(name, "Running")
+		doc = frappe.get_doc("WhatsApp Campaign", name)
+		runner._materialize_recipients(doc, [doc.recipients[0]])  # the job died after the first
+		frappe.db.commit()
+		queued = []
+		with patch.object(frappe, "enqueue", side_effect=lambda method, **kw: queued.append((method, kw))):
+			reconcile.finalize_campaigns()
+		builds = [(m, kw) for m, kw in queued if kw.get("campaign") == name]
+		self.assertEqual(len(builds), 1, queued)
+		method, kw = builds[0]
+		self.assertTrue(method.endswith("campaign_runner.materialize_pending"))
+		self.assertEqual((kw["job_id"], kw["deduplicate"]), (f"wa-campaign-{name}", True))
+		frappe.get_attr(method)(campaign=name)
+		self.assertEqual(runner.counters_for(name).open, 6)  # 3 recipients × 2 messages
+		with patch.object(frappe, "enqueue", side_effect=lambda method, **kw: queued.append((method, kw))):
+			queued.clear()
+			reconcile.finalize_campaigns()
+		self.assertEqual([kw for _m, kw in queued if kw.get("campaign") == name], [], "built: nothing more to start")
+
 	def test_cancel_during_materialization_stops_it(self):
 		name = _campaign(self.device, recipients=(P1, P2, P3))
 		with patch.object(frappe, "enqueue"):

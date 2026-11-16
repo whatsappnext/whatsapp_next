@@ -40,18 +40,25 @@ class PurgeReport:
 
 
 def _delete_files_of(doctype: str, names: list[str]) -> int:
-	"""Private files attached to the rows (rendered PDFs) go with them."""
+	"""The files attached to the rows go with them: rendered PDFs of WhatsApp Log, and the media of
+	a received message (WhatsApp Inbound Message, up to 100 MB each), which stayed on disk for ever
+	after its row (security review 2026-11-16). The file leaves the disk unless another File shares
+	its content (Frappe stores it once), then its File row goes. Not through
+	`frappe.delete_doc("File")`: it adds an «Attachment Removed» comment to the row about to go and
+	keeps a Deleted Document, two orphans per file. The rows' comments go too."""
 	files = frappe.get_all(
-		"File", filters={"attached_to_doctype": doctype, "attached_to_name": ("in", names)}, pluck="name"
+		"File", filters={"attached_to_doctype": doctype, "attached_to_name": ("in", names), "is_folder": 0}, pluck="name"
 	)
 	deleted = 0
 	for f in files:
 		try:
-			frappe.delete_doc("File", f, ignore_permissions=True, force=True, delete_permanently=True)
+			frappe.get_doc("File", f)._delete_file_on_disk()
+			frappe.db.delete("File", {"name": f})
 			deleted += 1
 		except Exception:
 			# counted only when gone; the file stays for the next run and the reason is on record
 			frappe.log_error(title="WhatsApp retention: file not deleted", message=f"File {f} of {doctype}")
+	frappe.db.delete("Comment", {"reference_doctype": doctype, "reference_name": ("in", names)})
 	return deleted
 
 
@@ -80,8 +87,7 @@ def purge_table(
 		)
 		if not names:
 			break
-		if doctype == "WhatsApp Log":
-			_delete_files_of(doctype, names)
+		_delete_files_of(doctype, names)
 		frappe.db.delete(doctype, {"name": ("in", names)})
 		total += len(names)
 		if commit:
