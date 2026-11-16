@@ -660,9 +660,21 @@ def _sync_recipient_statuses(campaign: str) -> None:
 	for r in rows:
 		by_recipient.setdefault(r.campaign_recipient, []).append(r.status)
 	rank = ["Failed", "Cancelled", "Queued", "Sent", "Delivered", "Read"]
+	# written only where it changes: every refresh (each batch, each receipt, every 5 minutes)
+	# wrote every recipient, 10k writes for a 10k campaign (security review 2026-11-16)
+	current = dict(
+		frappe.get_all(
+			"WhatsApp Campaign Recipient",
+			filters={"parent": campaign, "parenttype": "WhatsApp Campaign"},
+			fields=["name", "status"],
+			as_list=True,
+		)
+	)
 	for recipient, statuses in by_recipient.items():
 		mapped = [_RECIPIENT_BY_OUTBOUND.get(s, "Queued") for s in statuses]
 		worst = min(mapped, key=lambda s: rank.index(s) if s in rank else 99)
+		if current.get(recipient) == worst:
+			continue
 		with status_writer():
 			frappe.db.set_value(
 				"WhatsApp Campaign Recipient", recipient, "status", worst, update_modified=False

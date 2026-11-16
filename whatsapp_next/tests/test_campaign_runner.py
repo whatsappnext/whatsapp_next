@@ -348,6 +348,26 @@ class TestCampaignRunner(IntegrationTestCase):
 		runner.resume_campaign(name)
 		self.assertEqual(runner.counters_for(name).open, 4)
 
+	def test_recipient_statuses_are_written_only_when_they_change(self):
+		"""Security review 2026-11-16 (low): every refresh (each batch, each receipt, every 5
+		minutes) wrote every recipient's status, changed or not: 10k writes for a 10k campaign."""
+		name = _campaign(self.device)
+		with patch.object(frappe, "enqueue"):
+			runner.start_campaign(name)
+		runner.materialize(name)
+		runner._sync_recipient_statuses(name)  # the statuses are now in step
+		real = frappe.db.set_value
+		writes = []
+
+		def counting(doctype, *args, **kwargs):
+			if doctype == "WhatsApp Campaign Recipient":
+				writes.append(args[0])
+			return real(doctype, *args, **kwargs)
+
+		with patch.object(frappe.db, "set_value", side_effect=counting):
+			runner._sync_recipient_statuses(name)
+		self.assertEqual(writes, [])
+
 	def test_cancel_during_materialization_stops_it(self):
 		name = _campaign(self.device, recipients=(P1, P2, P3))
 		with patch.object(frappe, "enqueue"):
