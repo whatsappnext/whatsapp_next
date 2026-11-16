@@ -296,6 +296,22 @@ class TestDispatch(IntegrationTestCase):
 		finally:
 			frappe.flags.wa_kick_dispatch_in_test = False
 
+	def test_a_full_job_queue_leaves_the_message_to_the_minute_tick(self):
+		"""Security review 2026-11-16 (medium): asking for the device's batch raised QueueOverloaded
+		when the job queue was full, and the send that queued the message failed with it."""
+		frappe.flags.wa_kick_dispatch_in_test = True
+
+		def full(*args, **kwargs):
+			frappe.throw("Too many queued background jobs", exc=frappe.QueueOverloaded)
+
+		try:
+			with patch.object(frappe, "enqueue", side_effect=full):
+				name = dispatch.create_outbound(_build_outbound_spec(body="dispatch-test queue full"))
+				dispatch.enqueue([name])
+		finally:
+			frappe.flags.wa_kick_dispatch_in_test = False
+		self.assertEqual(frappe.db.get_value("WhatsApp Log", name, "status"), "Queued")
+
 	def test_batch_asks_for_another_when_a_message_arrived_meanwhile(self):
 		"""A row queued while a batch runs cannot start one (the job id is taken): the batch asks for
 		a follow-up when it sent something and a non-campaign row is due — and only then."""

@@ -192,19 +192,26 @@ def on_doc_event(doc, method: str | None = None) -> None:
 			continue
 		if not evaluate(notification, doc, notification.event):
 			continue
-		frappe.enqueue(
-			"whatsapp_next.services.notifications.send_for_document",
-			notification=name,
-			doctype=doc.doctype,
-			name=doc.name,
-			# not `event=`: `frappe.enqueue` keeps that keyword for itself and the job got none
-			doc_event=notification.event,
-			queue="short",
-			job_id=f"wa-notif-{name}-{doc.name}-{notification.event}",
-			deduplicate=True,
-			enqueue_after_commit=True,
-			timeout=120,
-		)
+		try:
+			frappe.enqueue(
+				"whatsapp_next.services.notifications.send_for_document",
+				notification=name,
+				doctype=doc.doctype,
+				name=doc.name,
+				# not `event=`: `frappe.enqueue` keeps that keyword for itself and the job got none
+				doc_event=notification.event,
+				queue="short",
+				job_id=f"wa-notif-{name}-{doc.name}-{notification.event}",
+				deduplicate=True,
+				enqueue_after_commit=True,
+				timeout=120,
+			)
+		except frappe.QueueOverloaded:
+			# this runs inside every DocType's save: a full job queue must never stop a Sales
+			# Invoice being saved (security review 2026-11-16). The notification records what it
+			# did not send, and nothing reaches the user's screen.
+			frappe.clear_last_message()
+			_record_error(name, f"not sent for {doc.doctype} {doc.name}: the background job queue was full")
 
 
 # ---- recipients ---------------------------------------------------------------------------

@@ -203,6 +203,21 @@ class TestWebhooks(IntegrationTestCase):
 		# neither the invalid signature nor the 503 path stored anything for this id
 		self.assertFalse(frappe.db.exists("WhatsApp Webhook Event", {"event_id": body["event_id"]}))
 
+	def test_a_full_job_queue_keeps_the_event_for_the_sweep(self):
+		"""Security review 2026-11-16 (medium): with the job queue full, `frappe.enqueue` raised
+		QueueOverloaded after the event was stored; the request rolled it back and answered 503.
+		The event stays, answered as received; `reprocess_failed` picks it up as a stuck Received."""
+		body = fixture("message.received")
+
+		def full(*args, **kwargs):
+			frappe.throw("Too many queued background jobs", exc=frappe.QueueOverloaded)
+
+		with fake_provider(), patch.object(frappe, "enqueue", side_effect=full):
+			headers, raw = signed(body)
+			out = receiver.handle_webhook_request(headers, raw)
+		self.assertEqual(out.http_status, 200)
+		self.assertEqual(frappe.db.get_value("WhatsApp Webhook Event", {"event_id": body["event_id"]}, "status"), "Received")
+
 	def test_receiver_refuses_malformed_headers_without_a_server_error(self):
 		body = fixture("message.received")
 		with fake_provider():

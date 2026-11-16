@@ -64,6 +64,25 @@ class TestNotifications(IntegrationTestCase):
 		delete_all("ToDo", {"description": ("like", "notif-test%")})
 		svc.clear_cache()
 
+	def test_a_full_job_queue_never_stops_a_document_being_saved(self):
+		"""Security review 2026-11-16 (medium): the notification hook runs on every DocType's save;
+		`frappe.enqueue` raises QueueOverloaded when the queue is full, so saving any document (a
+		Sales Invoice) failed with 503. The document is saved; the notification records why it did
+		not go."""
+		notif = _notification()
+
+		def full(*args, **kwargs):
+			frappe.throw("Too many queued background jobs", exc=frappe.QueueOverloaded)
+
+		with patch.object(frappe, "enqueue", side_effect=full):
+			todo = frappe.get_doc({"doctype": "ToDo", "description": "notif-test queue full"}).insert(
+				ignore_permissions=True
+			)
+		self.assertTrue(frappe.db.exists("ToDo", todo.name))
+		error = frappe.db.get_value("WhatsApp Notification", notif.name, "last_error") or ""
+		self.assertIn(todo.name, error)
+		self.assertEqual(frappe.local.message_log, [], "nothing on the user's screen")
+
 	def test_hook_short_circuit_and_new_event(self):
 		self.assertEqual(svc.active_for("ToDo"), [])
 		self.assertEqual(frappe.cache.get_value(svc.cache_key("ToDo")), [])  # empty list cached

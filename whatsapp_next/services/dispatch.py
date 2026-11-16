@@ -470,15 +470,20 @@ def _kick_dispatch(devices: Iterable[str]) -> None:
 	if frappe.flags.in_test and not frappe.flags.wa_kick_dispatch_in_test:
 		return
 	for device in sorted(set(devices)):
-		frappe.enqueue(
-			"whatsapp_next.services.dispatch.dispatch_device_batch",
-			device=device,
-			queue="short",
-			job_id=f"wa-dispatch-{device}",
-			deduplicate=True,
-			enqueue_after_commit=True,
-			timeout=300,
-		)
+		try:
+			frappe.enqueue(
+				"whatsapp_next.services.dispatch.dispatch_device_batch",
+				device=device,
+				queue="short",
+				job_id=f"wa-dispatch-{device}",
+				deduplicate=True,
+				enqueue_after_commit=True,
+				timeout=300,
+			)
+		except frappe.QueueOverloaded:
+			# the job queue is full: the message stays Queued for the minute tick
+			# (`dispatch_tick`); the send that queued it must not fail (security review 2026-11-16)
+			frappe.clear_last_message()
 
 
 def create_and_enqueue(
