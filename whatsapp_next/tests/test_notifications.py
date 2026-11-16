@@ -72,6 +72,7 @@ class TestNotifications(IntegrationTestCase):
 		Sales Invoice) failed with 503. The document is saved; the notification records why it did
 		not go."""
 		notif = _notification()
+		frappe.local.message_log = []  # what an earlier test left is not this save's
 
 		def full(*args, **kwargs):
 			frappe.throw("Too many queued background jobs", exc=frappe.QueueOverloaded)
@@ -254,7 +255,14 @@ class TestNotifications(IntegrationTestCase):
 			{"doctype": "Contact", "first_name": "NotifTest Group Contact", "phone_nos": [{"phone": group}]}
 		).insert(ignore_permissions=True)
 		customer = frappe.get_doc(
-			{"doctype": "Customer", "customer_name": f"NotifTest Group {frappe.generate_hash(length=4)}", "customer_primary_contact": contact.name}
+			{
+				"doctype": "Customer",
+				"customer_name": f"NotifTest Group {frappe.generate_hash(length=4)}",
+				"customer_primary_contact": contact.name,
+				# ERPNext 15 refuses a group as the customer's group, and a site's default may be one
+				"customer_group": frappe.db.get_value("Customer Group", {"is_group": 0}, "name"),
+				"territory": frappe.db.get_value("Territory", {"is_group": 0}, "name"),
+			}
 		)
 		customer.flags.ignore_mandatory = True
 		customer.insert(ignore_permissions=True)
