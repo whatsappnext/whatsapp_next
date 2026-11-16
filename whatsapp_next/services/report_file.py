@@ -59,8 +59,15 @@ def run_report(report_name: str, filters: dict[str, Any]) -> tuple[list[dict[str
 	return _columns(result.get("columns")), rows
 
 
-def _render_report_pdf(title: str, columns: list[dict[str, Any]], rows: list[Any]) -> bytes:
+def _render_report_pdf(
+	title: str, columns: list[dict[str, Any]], rows: list[Any], letter_head: str | None = None
+) -> bytes:
 	from frappe.utils.pdf import get_pdf
+
+	from whatsapp_next.services.report_render import _letter_head_html
+
+	# the command's letter head on top (owner, 2026-11-17); None: the site's default one
+	letter_head = letter_head or frappe.db.get_value("Letter Head", {"is_default": 1, "disabled": 0}, "name")
 
 	rtl = frappe.local.lang in ("ar", "fa", "he", "ur")
 	head = "".join(f"<th>{escape_html(_(c['label']))}</th>" for c in columns)
@@ -83,7 +90,7 @@ h1{{font-size:14px;margin:0 0 8px}}
 table{{width:100%;border-collapse:collapse}}
 th,td{{border:1px solid #ccc;padding:3px 5px;text-align:{"right" if rtl else "left"}}}
 th{{background:#f2f2f2}}
-</style></head><body><h1>{escape_html(_(title))}</h1>
+</style></head><body>{_letter_head_html(letter_head)}<h1>{escape_html(_(title))}</h1>
 <table><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></body></html>"""
 	return get_pdf(html, {"orientation": "Landscape" if len(columns) > 6 else "Portrait"})
 
@@ -96,7 +103,7 @@ def _render_report_xlsx(title: str, columns: list[dict[str, Any]], rows: list[An
 	return make_xlsx(data, (_(title) or "Report")[:31]).getvalue()
 
 
-def render_report_file(msg: dict[str, Any]) -> tuple[str, bytes, str]:
+def render_report_file(msg: dict[str, Any], letter_head: str | None = None) -> tuple[str, bytes, str]:
 	"""`(file name, bytes, mime)` for a validated `report` message
 	(`report_name`, `filters`, `format`, `file_name`). E: `frappe.ValidationError`."""
 	file_format = msg.get("format") or "PDF"
@@ -105,7 +112,7 @@ def render_report_file(msg: dict[str, Any]) -> tuple[str, bytes, str]:
 	report_name = msg["report_name"]
 	columns, rows = run_report(report_name, msg.get("filters") or {})
 	content = (
-		_render_report_pdf(report_name, columns, rows)
+		_render_report_pdf(report_name, columns, rows, letter_head=letter_head)
 		if file_format == "PDF"
 		else _render_report_xlsx(report_name, columns, rows)
 	)

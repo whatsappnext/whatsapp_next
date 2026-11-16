@@ -203,7 +203,38 @@ def execute(command, params: dict[str, Any], *, disabled: set[str] | None = None
 	return FunctionRun(messages=messages, data=result["data"], params=params)
 
 
-def replies_of(run: FunctionRun, *, dry_run: bool = False) -> list[dict[str, Any]]:
+def print_settings_of(command) -> dict[str, dict[str, str | None]]:
+	"""The command's print format and letter head for each of its file replies, by reply key."""
+	out: dict[str, dict[str, str | None]] = {}
+	for row in (command.get("print_settings") if command else None) or []:
+		if row.get("reply"):
+			out[row.get("reply")] = {"print_format": row.get("print_format") or None, "letter_head": row.get("letter_head") or None}
+	return out
+
+
+def render_printed_document(msg: dict[str, Any], print_format: str | None, letter_head: str | None) -> tuple[str, bytes]:
+	"""`(file name, PDF bytes)` of a print reply's document, with the command's print format and
+	letter head (owner, 2026-11-17). Printed only for whoever may read it: the run's user (the
+	command service user), as a notification prints only what its author may read. A print format
+	of another document type is not used. E: `frappe.PermissionError`, `frappe.ValidationError`."""
+	from whatsapp_next.services import attachments
+
+	doctype, name = msg["doctype"], msg["name"]
+	if not frappe.db.exists(doctype, name):
+		frappe.throw(_("{0} {1} not found").format(_(doctype), name))
+	if not frappe.has_permission(doctype, "read", name):
+		frappe.throw(_("Not permitted to print {0} {1}").format(_(doctype), name), frappe.PermissionError)
+	if print_format and frappe.db.get_value("Print Format", print_format, "doc_type") != doctype:
+		print_format = None
+	rendered = attachments.render_print_pdf(
+		doctype, name, print_format=print_format, letter_head=letter_head, file_name=msg.get("file_name") or name
+	)
+	return rendered.file_name, rendered.content
+
+
+def replies_of(
+	run: FunctionRun, *, dry_run: bool = False, print_settings: dict[str, dict[str, str | None]] | None = None
+) -> list[dict[str, Any]]:
 	"""The router's replies for a run: its error alone, else every message in order — a text as
 	Text, a report printed (`report_file.render_report_file`) and sent as a Document with its
 	caption. A dry run prints nothing; it shows what would be sent."""
@@ -219,6 +250,7 @@ def replies_of(run: FunctionRun, *, dry_run: bool = False) -> list[dict[str, Any
 				{"output_key": msg["reply"], "message_type": "Text", "body": msg["text"], "attachment": None}
 			)
 			continue
+		chosen = (print_settings or {}).get(msg["reply"]) or {}
 		if dry_run:
 			out.append(
 				{
@@ -227,17 +259,25 @@ def replies_of(run: FunctionRun, *, dry_run: bool = False) -> list[dict[str, Any
 					"body": msg.get("caption") or None,
 					"attachment": None,
 					"file_name": msg.get("file_name"),
-					"report_name": msg["report_name"],
+					"report_name": msg.get("report_name"),
+					"doctype": msg.get("doctype"),
+					"name": msg.get("name"),
 					"filters": msg.get("filters"),
 					"format": msg.get("format"),
+					"print_format": chosen.get("print_format"),
+					"letter_head": chosen.get("letter_head"),
 				}
 			)
 			continue
 		try:
-			file_name, content, mime = render_report_file(msg)
+			if msg["type"] == "print":
+				file_name, content = render_printed_document(msg, chosen.get("print_format"), chosen.get("letter_head"))
+				mime = "application/pdf"
+			else:
+				file_name, content, mime = render_report_file(msg, letter_head=chosen.get("letter_head"))
 		except Exception as exc:
 			frappe.log_error(
-				title=f"WhatsApp report reply {msg['report_name']} failed",
+				title=f"WhatsApp {msg['type']} reply {msg.get('report_name') or msg.get('doctype')} failed",
 				message=f"{type(exc).__name__}: {str(exc)[:300]}",
 			)
 			out.append(

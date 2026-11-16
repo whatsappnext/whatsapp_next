@@ -610,7 +610,9 @@ def render_outputs(
 	command, result: FunctionRun, sender: Sender | None = None, *, dry_run: bool = False
 ) -> list[dict[str, Any]]:
 	"""The replies of a run, in its messages' order (`function_runner.replies_of`)."""
-	return function_runner.replies_of(result, dry_run=dry_run)
+	return function_runner.replies_of(
+		result, dry_run=dry_run, print_settings=function_runner.print_settings_of(command)
+	)
 
 
 # ---- route ---------------------------------------------------------------------------------

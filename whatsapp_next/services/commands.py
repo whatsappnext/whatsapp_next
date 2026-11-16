@@ -40,6 +40,8 @@ TABLE_KEYS: tuple[str, ...] = (
 	"templates",
 	"disabled_inputs",
 	"disabled_replies",
+	# for each file reply: {reply, print_format, letter_head} (owner, 2026-11-17)
+	"print_settings",
 	"access",
 )
 ALLOWED_KEYS: frozenset[str] = frozenset({"name", *SCALAR_KEYS, *TABLE_KEYS})
@@ -138,6 +140,21 @@ def _apply_editor_payload_to_command(doc, payload: dict) -> list[str]:
 				frappe.throw(_("{0} must be a list of names").format(key), WAValidationError)
 			doc.set(key, "\n".join(v.strip() for v in value if v.strip()) or None)
 			written.append(key)
+	if "print_settings" in payload:
+		rows = payload.get("print_settings") or []
+		if not isinstance(rows, list):
+			frappe.throw(_("print_settings must be a list"), WAValidationError)
+		doc.set("print_settings", [])
+		for i, row in enumerate(rows, start=1):
+			if not isinstance(row, dict) or not str(row.get("reply") or "").strip():
+				frappe.throw(_("print_settings[{0}] needs a reply").format(i), WAValidationError)
+			if not (row.get("print_format") or row.get("letter_head")):
+				continue  # nothing chosen: the defaults
+			doc.append(
+				"print_settings",
+				{"reply": str(row["reply"]).strip(), "print_format": row.get("print_format") or None, "letter_head": row.get("letter_head") or None},
+			)
+		written.append("print_settings")
 	if "access" in payload:
 		_apply_access(doc, payload.get("access"))
 		written.append("access")
@@ -299,6 +316,28 @@ def function_spec(function: str) -> dict[str, Any]:
 			if p["fieldtype"] == "Template"
 		],
 		"replies": spec.get("replies") or [],
+		# what the command may choose for its file replies (owner, 2026-11-17): each print reply's
+		# document type's print formats, and the site's letter heads
+		"print_choices": print_choices(spec.get("replies") or []),
+	}
+
+
+def print_choices(replies: list[dict[str, Any]]) -> dict[str, Any]:
+	"""`{print_formats: {doctype: [names]}, letter_heads: [names], default_letter_head}`."""
+	doctypes = sorted({r["doctype"] for r in replies if r.get("type") == "print" and r.get("doctype")})
+	formats: dict[str, list[str]] = {d: [] for d in doctypes}
+	if doctypes:
+		for row in frappe.get_all(
+			"Print Format",
+			filters={"doc_type": ("in", doctypes), "disabled": 0},
+			fields=["name", "doc_type"],
+			order_by="name asc",
+		):
+			formats[row.doc_type].append(row.name)
+	return {
+		"print_formats": formats,
+		"letter_heads": frappe.get_all("Letter Head", filters={"disabled": 0}, pluck="name", order_by="name asc"),
+		"default_letter_head": frappe.db.get_value("Letter Head", {"is_default": 1, "disabled": 0}, "name"),
 	}
 
 
@@ -377,6 +416,7 @@ def get_command_editor_data(name: str | None = None) -> dict[str, Any]:
 		"settings_overrides": {},
 		"templates": [],
 		"disabled_replies": [],
+		"print_settings": [],
 		"access": {},
 		"runs_30d": 0,
 		"has_history": False,
@@ -400,6 +440,10 @@ def get_command_editor_data(name: str | None = None) -> dict[str, Any]:
 				"settings_overrides": _overrides(doc),
 				"templates": [{f: row.get(f) for f in TEMPLATE_FIELDS} for row in doc.get("templates") or []],
 				"disabled_replies": [k for k in (doc.disabled_replies or "").splitlines() if k.strip()],
+				"print_settings": [
+					{"reply": r.reply, "print_format": r.print_format, "letter_head": r.letter_head}
+					for r in doc.get("print_settings") or []
+				],
 				"access": _describe_command_access(doc),
 				"runs_30d": recent_run_counts([doc.name], days=30).get(doc.name, 0),
 				"has_history": bool(frappe.db.exists("WhatsApp Inbound Message", {"command": doc.name})),

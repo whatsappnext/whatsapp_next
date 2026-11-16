@@ -470,7 +470,9 @@ frappe.provide("whatsapp.ui");
 						</span>
 						${o.notes && !compact ? `<span class="whatsapp-kit-command-editor__note">${escape_html(__(o.notes))}</span>` : ""}
 						${
-							is_doc
+							is_doc && o.letter_head_choices
+								? this.render_print_choices(o, i, compact)
+								: is_doc
 								? `${compact ? "" : `<label class="whatsapp-kit-command-editor__subtitle" for="${this.id}-pf-${i}">${escape_html(__("Print format"))}</label><input id="${this.id}-pf-${i}" type="text" dir="ltr" class="whatsapp-kit-command-editor__input whatsapp-kit-command-editor__mono whatsapp-kit-command-editor__input--sm" data-f="out-pf-${i}-${k}" data-in="out-pf" data-key="${i}" value="${escape_html(o.print_format || "")}" placeholder="${escape_html(__("Standard"))}" />`}
 								   ${compact ? "" : `<label class="whatsapp-kit-command-editor__subtitle" for="${this.id}-fn-${i}">${escape_html(__("Attached file name"))}</label>`}<input ${compact ? "" : `id="${this.id}-fn-${i}"`} type="text" class="whatsapp-kit-command-editor__input whatsapp-kit-command-editor__input--sm" data-f="out-file-${i}-${k}" data-in="out-file" data-key="${i}" value="${escape_html(o.file_name_template || "")}" aria-label="${escape_html(__("Attached file name"))}" />`
 								: `<textarea class="whatsapp-kit-command-editor__textarea" rows="${rows}" data-f="out-${i}-${k}" data-in="out-text" data-key="${i}" aria-label="${escape_html(o.label || o.output_key)}">${escape_html(text)}</textarea>`
@@ -485,6 +487,26 @@ frappe.provide("whatsapp.ui");
 					</div>`;
 				})
 				.join("");
+		}
+
+		/**
+		 * A file output's print format and letter head, chosen from lists the host gives
+		 * (`print_format_choices[]` for a printed document, `letter_head_choices[]`): an empty choice
+		 * keeps the default (the document type's format, the site's letter head).
+		 */
+		render_print_choices(o, i, compact) {
+			const select = (kind, label, choices, value, default_label) => `<label class="whatsapp-kit-command-editor__subtitle" for="${this.id}-${kind}-${i}">${escape_html(label)}</label>
+				<select id="${this.id}-${kind}-${i}" class="whatsapp-kit-command-editor__input whatsapp-kit-command-editor__select whatsapp-kit-command-editor__input--sm" data-ch="out-${kind}" data-key="${i}" ${this.read_only ? "disabled" : ""}>
+					<option value="" ${value ? "" : "selected"}>${escape_html(default_label)}</option>
+					${(choices || []).map((c) => `<option value="${escape_html(c)}" ${value === c ? "selected" : ""}>${escape_html(c)}</option>`).join("")}
+				</select>`;
+			if (compact) return "";
+			return `${
+				o.print_format_choices
+					? select("pf", __("Print format"), o.print_format_choices, o.print_format || "", __("Default of {0}", [__(o.doctype || "")]))
+					: ""
+			}
+			${select("lh", __("Letter head"), o.letter_head_choices, o.letter_head || "", o.default_letter_head ? __("Default ({0})", [o.default_letter_head]) : __("Default"))}`;
 		}
 
 		// ---- permissions --------------------------------------------------------------------------
@@ -1041,6 +1063,8 @@ frappe.provide("whatsapp.ui");
 			else if (kind === "ask") this.set_ask(key, target_element.checked);
 			else if (kind === "ask-choices") this.set_ask(key, true, target_element.value.trim());
 			else if (kind === "setting") this.set_setting(key, target_element.type === "checkbox" ? (target_element.checked ? 1 : 0) : target_element.value);
+			else if (kind === "out-pf") draft.outputs[cint(key)].print_format = target_element.value || null;
+			else if (kind === "out-lh") draft.outputs[cint(key)].letter_head = target_element.value || null;
 			this.render();
 			this.touch();
 		}
