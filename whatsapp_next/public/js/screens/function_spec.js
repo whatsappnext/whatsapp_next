@@ -46,9 +46,11 @@ frappe.provide("whatsapp_next.functions");
 			output_type: "Document",
 			file_kind: reply.type,
 			doctype: reply.doctype || null,
+			report_name: reply.report_name || null,
 			print_format: (chosen && chosen.print_format) || null,
 			letter_head: (chosen && chosen.letter_head) || null,
-			print_format_choices: reply.type === "print" ? (choices.print_formats || {})[reply.doctype] || [] : null,
+			print_format_choices:
+				reply.type === "print" ? (choices.print_formats || {})[reply.doctype] || [] : (choices.report_print_formats || {})[reply.report_name] || [],
 			letter_head_choices: choices.letter_heads || [],
 			default_letter_head: choices.default_letter_head || null,
 			notes: reply.type === "print" ? __("Printed: {0}", [__(reply.doctype || "")]) : __("Report: {0}", [__(reply.report_name || "")]),

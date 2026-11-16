@@ -274,7 +274,9 @@ def replies_of(
 				file_name, content = render_printed_document(msg, chosen.get("print_format"), chosen.get("letter_head"))
 				mime = "application/pdf"
 			else:
-				file_name, content, mime = render_report_file(msg, letter_head=chosen.get("letter_head"))
+				file_name, content, mime = render_report_file(
+					msg, letter_head=chosen.get("letter_head"), print_format=chosen.get("print_format")
+				)
 		except Exception as exc:
 			frappe.log_error(
 				title=f"WhatsApp {msg['type']} reply {msg.get('report_name') or msg.get('doctype')} failed",

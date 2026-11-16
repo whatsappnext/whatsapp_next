@@ -216,12 +216,17 @@ class WhatsAppCommand(Document):
 					_("Print settings: {0} is not a file reply of function {1}").format(row.reply, self.function),
 					WAValidationError,
 				)
-			if row.print_format:
-				if reply["type"] != "print":
+			if row.print_format and reply["type"] == "report":
+				from whatsapp_next.services.report_file import report_print_formats
+
+				if row.print_format not in report_print_formats(reply["report_name"]):
 					frappe.throw(
-						_("Print settings: {0} prints a report; only its letter head can be chosen").format(row.reply),
+						_("Print settings: {0} is not a Jinja print format of report {1}").format(
+							row.print_format, _(reply["report_name"])
+						),
 						WAValidationError,
 					)
+			elif row.print_format:
 				if frappe.db.get_value("Print Format", row.print_format, "doc_type") != reply["doctype"]:
 					frappe.throw(
 						_("Print settings: {0} is not a print format of {1}").format(row.print_format, _(reply["doctype"])),

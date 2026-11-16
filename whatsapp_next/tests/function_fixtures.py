@@ -174,6 +174,7 @@ OK_BODY = """frappe.flags.wa_result = {"error": None, "messages": [{"reply": "re
 PRINT_LINES = [
 	"@param  doc_name | Data | optional | source=command | The document",
 	"@reply  doc       | print | doctype=ToDo | The document printed",
+	"@reply  sheet     | report | report=General Ledger | The ledger",
 	"@reply  result_text | text |  | Result",
 ]
 PRINT_BODY = """frappe.flags.wa_result = {"error": None, "messages": [{"reply": "doc", "type": "print", "name": frappe.form_dict.get("doc_name"), "caption": "your document"}], "data": {}}

@@ -503,7 +503,7 @@ frappe.provide("whatsapp.ui");
 			if (compact) return "";
 			return `${
 				o.print_format_choices
-					? select("pf", __("Print format"), o.print_format_choices, o.print_format || "", __("Default of {0}", [__(o.doctype || "")]))
+					? select("pf", __("Print format"), o.print_format_choices, o.print_format || "", __("Default of {0}", [__(o.doctype || o.report_name || "")]))
 					: ""
 			}
 			${select("lh", __("Letter head"), o.letter_head_choices, o.letter_head || "", o.default_letter_head ? __("Default ({0})", [o.default_letter_head]) : __("Default"))}`;

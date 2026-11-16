@@ -95,8 +95,17 @@ class TestCommandPrintSettingsSaved(IntegrationTestCase):
 			{"doctype": "Letter Head", "letter_head_name": f"PrintChoice LH {frappe.generate_hash(length=4)}", "source": "HTML", "content": "<div>LH</div>"}
 		).insert(ignore_permissions=True).name
 
+	def setUp(self):
+		self._drop_test_command()
+
 	def tearDown(self):
 		frappe.set_user("Administrator")
+		self._drop_test_command()
+
+	@staticmethod
+	def _drop_test_command():
+		for name in frappe.get_all("WhatsApp Command", filters={"code": "prtestdoc"}, pluck="name"):
+			frappe.db.delete("WhatsApp Command Print Setting", {"parent": name})
 		frappe.db.delete("WhatsApp Command", {"code": "prtestdoc"})
 
 	def _save(self, print_settings):
@@ -132,9 +141,37 @@ class TestCommandPrintSettingsSaved(IntegrationTestCase):
 			cr.render_outputs(frappe.get_doc("WhatsApp Command", name), run)
 		self.assertEqual(calls, [(self.print_format, self.letter_head)])
 
+	def _report_format(self, name, kind="Jinja", html="<p>ROWS={{ data|length }} {{ report_name }}</p>{{ letter_head }}"):
+		if not frappe.db.exists("Print Format", name):
+			frappe.get_doc(
+				{"doctype": "Print Format", "name": name, "print_format_for": "Report", "report": "General Ledger", "module": "Accounts", "custom_format": 1, "print_format_type": kind, "html": html, "standard": "No"}
+			).insert(ignore_permissions=True)
+		return name
+
+	def test_a_report_prints_with_its_own_jinja_print_format(self):
+		"""Owner, 2026-11-17 («التقارير معها قوالب طباعة»): a report reply takes one of the report's
+		own print formats; the server renders the Jinja ones, with the letter head."""
+		jinja = self._report_format("PrintChoice GL")
+		js = self._report_format("PrintChoice GL JS", kind="JS")
+		self.assertIn(jinja, report_file.report_print_formats("General Ledger"))
+		self.assertNotIn(js, report_file.report_print_formats("General Ledger"), "a JS format is drawn by the browser")
+		name = self._save([{"reply": "sheet", "print_format": jinja, "letter_head": self.letter_head}])
+		self.assertTrue(name)
+		with self.assertRaises(frappe.ValidationError):
+			self._save([{"reply": "sheet", "print_format": js}])
+		pages = []
+		with patch.object(report_file, "run_report", return_value=([{"label": "A", "fieldname": "a", "fieldtype": "Data", "options": None, "index": 0}], [{"a": "x"}, {"a": "y"}])), patch(
+			"frappe.utils.pdf.get_pdf", side_effect=lambda html, options=None: pages.append(html) or b"%PDF"
+		):
+			report_file.render_report_file({"report_name": "General Ledger", "filters": {}, "format": "PDF", "file_name": "r"}, letter_head=self.letter_head, print_format=jinja)
+		self.assertIn("ROWS=2 General Ledger", pages[0])
+		self.assertIn("<div>LH</div>", pages[0])
+
 	def test_a_print_format_of_another_document_type_is_refused(self):
 		other = frappe.db.get_value("Print Format", {"doc_type": ("!=", "ToDo"), "disabled": 0}, "name")
 		with self.assertRaises(frappe.ValidationError):
 			self._save([{"reply": "doc", "print_format": other}])
 		with self.assertRaises(frappe.ValidationError):
 			self._save([{"reply": "result_text", "letter_head": self.letter_head}])  # a text has no file
+		with self.assertRaises(frappe.ValidationError):
+			self._save([{"reply": "sheet", "print_format": other}])  # not one of the report's

@@ -334,8 +334,13 @@ def print_choices(replies: list[dict[str, Any]]) -> dict[str, Any]:
 			order_by="name asc",
 		):
 			formats[row.doc_type].append(row.name)
+	from whatsapp_next.services.report_file import report_print_formats
+
+	reports = sorted({r["report_name"] for r in replies if r.get("type") == "report" and r.get("report_name")})
 	return {
 		"print_formats": formats,
+		# each report reply's own Jinja print formats (owner, 2026-11-17)
+		"report_print_formats": {report: report_print_formats(report) for report in reports},
 		"letter_heads": frappe.get_all("Letter Head", filters={"disabled": 0}, pluck="name", order_by="name asc"),
 		"default_letter_head": frappe.db.get_value("Letter Head", {"is_default": 1, "disabled": 0}, "name"),
 	}
