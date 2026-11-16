@@ -219,6 +219,31 @@ class TestNotifications(IntegrationTestCase):
 			[("Group", "120363000000000077@g.us", "120363000000000077@g.us"), ("Group", f"{group}@g.us", f"{group}@g.us")],
 		)
 
+	def test_a_customer_field_follows_the_customers_primary_contact(self):
+		"""Owner, 2026-11-16 (a Sales Invoice notification, «row 2: no valid number»): a recipient
+		row on the `customer` field read the Customer's own number, then a `contact` field Customer
+		does not have. A customer with no number of its own, whose primary contact holds it (here a
+		WhatsApp group's id), got nobody."""
+		group = "120363000000000088"
+		# no real worker may run a notification this test's records set off (the site has its own)
+		enqueue = patch.object(frappe, "enqueue")
+		enqueue.start()
+		self.addCleanup(enqueue.stop)
+		contact = frappe.get_doc(
+			{"doctype": "Contact", "first_name": "NotifTest Group Contact", "phone_nos": [{"phone": group}]}
+		).insert(ignore_permissions=True)
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": f"NotifTest Group {frappe.generate_hash(length=4)}", "customer_primary_contact": contact.name}
+		)
+		customer.flags.ignore_mandatory = True
+		customer.insert(ignore_permissions=True)
+		todo = frappe.get_doc(
+			{"doctype": "ToDo", "description": "notif-test customer", "reference_type": "Customer", "reference_name": customer.name}
+		).insert(ignore_permissions=True)
+		notif = _notification(recipients=[{"recipient_type": "Document Field", "receiver_by_document_field": "reference_name"}])
+		recips = svc.resolve_recipients(frappe.get_doc("WhatsApp Notification", notif.name), todo)
+		self.assertEqual([(r.phone_e164, r.contact) for r in recips], [(f"{group}@g.us", contact.name)])
+
 	def test_send_for_document(self):
 		contact = ensure_contact("Notif Contact", PHONE)
 		notif = _notification(
