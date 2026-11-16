@@ -73,3 +73,68 @@ class TestCommandPrintChoices(IntegrationTestCase):
 		):
 			report_file.render_report_file({"report_name": "ToDo", "filters": {}, "format": "PDF", "file_name": "r"}, letter_head=lh.name)
 		self.assertIn("LETTERHEAD-MARK", pages[0])
+
+
+class TestCommandPrintSettingsSaved(IntegrationTestCase):
+	"""The choices kept on the command, checked on save, and used by the run."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		from whatsapp_next.tests import function_fixtures as ff
+		from whatsapp_next.tests.conftest_frappe import ensure_settings
+
+		ensure_settings(enable_commands=1, command_service_user=ff.ensure_service_user())
+		ff.ensure_function("_test_print")
+		cls.print_format = "PrintChoice ToDo"
+		if not frappe.db.exists("Print Format", cls.print_format):
+			frappe.get_doc(
+				{"doctype": "Print Format", "name": cls.print_format, "doc_type": "ToDo", "module": "Desk", "custom_format": 1, "print_format_type": "Jinja", "html": "<p>{{ doc.name }}</p>", "standard": "No"}
+			).insert(ignore_permissions=True)
+		cls.letter_head = frappe.db.get_value("Letter Head", {"letter_head_name": ("like", "PrintChoice LH%")}, "name") or frappe.get_doc(
+			{"doctype": "Letter Head", "letter_head_name": f"PrintChoice LH {frappe.generate_hash(length=4)}", "source": "HTML", "content": "<div>LH</div>"}
+		).insert(ignore_permissions=True).name
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.delete("WhatsApp Command", {"code": "prtestdoc"})
+
+	def _save(self, print_settings):
+		from whatsapp_next.api.v1 import commands as api
+		from whatsapp_next.tests.conftest_frappe import as_user
+
+		with as_user("WhatsApp Manager"):
+			return api.save_editor(
+				payload={"code": "prtestdoc", "function": "_test_print", "allowed_party_types": ["Customer"], "requires_linked_contact": 0, "print_settings": print_settings}
+			)["name"]
+
+	def test_the_choices_are_kept_and_used(self):
+		from whatsapp_next.services import command_router as cr
+
+		name = self._save([{"reply": "doc", "print_format": self.print_format, "letter_head": self.letter_head}])
+		rows = frappe.get_all("WhatsApp Command Print Setting", filters={"parent": name}, fields=["reply", "print_format", "letter_head"])
+		self.assertEqual([(r.reply, r.print_format, r.letter_head) for r in rows], [("doc", self.print_format, self.letter_head)])
+		from whatsapp_next.services import commands
+
+		self.assertEqual(commands.get_command_editor_data(name)["command"]["print_settings"][0]["print_format"], self.print_format)
+		todo = frappe.get_doc({"doctype": "ToDo", "description": "print-choice saved"}).insert(ignore_permissions=True)
+		run = FunctionRun(messages=[{"reply": "doc", "type": "print", "doctype": "ToDo", "name": todo.name, "caption": ""}])
+		calls = []
+		from frappe.utils.pdf import get_pdf
+
+		pdf = get_pdf("<p>x</p>")
+
+		def fake_render(doctype, docname, **kwargs):
+			calls.append((kwargs.get("print_format"), kwargs.get("letter_head")))
+			return attachments.RenderedPdf(content=pdf, file_name="doc.pdf")
+
+		with patch.object(attachments, "render_print_pdf", side_effect=fake_render):
+			cr.render_outputs(frappe.get_doc("WhatsApp Command", name), run)
+		self.assertEqual(calls, [(self.print_format, self.letter_head)])
+
+	def test_a_print_format_of_another_document_type_is_refused(self):
+		other = frappe.db.get_value("Print Format", {"doc_type": ("!=", "ToDo"), "disabled": 0}, "name")
+		with self.assertRaises(frappe.ValidationError):
+			self._save([{"reply": "doc", "print_format": other}])
+		with self.assertRaises(frappe.ValidationError):
+			self._save([{"reply": "result_text", "letter_head": self.letter_head}])  # a text has no file

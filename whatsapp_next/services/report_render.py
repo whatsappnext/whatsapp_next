@@ -45,15 +45,34 @@ def _inline_images(html_text: str) -> str:
 	return _IMG_TAG.sub(lambda m: m.group(0) if 'src="data:' in m.group(0) else "", html_text)
 
 
-def _letter_head_html(letter_head: str | None) -> str:
+def letter_head_document(company: str | None, title: str | None = None) -> frappe._dict:
+	"""The `doc` a letter head is rendered with when the file is no document (a report): the
+	company and its default address, which a company letter head reads (`doc.company`,
+	`doc.company_address`); without them it printed «None» (owner, 2026-11-17)."""
+	# a letter head names the document in its corner (`doc.doctype`, `doc.name`): the report's
+	# title, and no number
+	shown = {"doctype": _(title) if title else "", "name": ""}
+	if not company:
+		return frappe._dict(shown)
+	address = None
+	try:
+		from erpnext.setup.doctype.company.company import get_default_company_address
+
+		address = get_default_company_address(company)
+	except Exception:
+		address = None
+	return frappe._dict(shown, company=company, company_address=address)
+
+
+def _letter_head_html(letter_head: str | None, doc: frappe._dict | None = None) -> str:
 	"""Rendered Letter Head content (they are Jinja: `{{ frappe.utils.get_url(company_logo) }}`),
-	with images inlined or removed."""
+	with images inlined or removed. `doc` is what the letter head reads (`letter_head_document`)."""
 	if not letter_head or not frappe.db.exists("Letter Head", letter_head):
 		return ""
 	row = frappe.db.get_value("Letter Head", letter_head, ["content", "image"], as_dict=True)
 	content = row.content or ""
 	try:
-		content = frappe.render_template(content, {"company_logo": row.image, "doc": frappe._dict()})
+		content = frappe.render_template(content, {"company_logo": row.image, "doc": doc or frappe._dict()})
 	except Exception:
 		# the PDF goes out without its letterhead; the template error is kept for whoever fixes it
 		frappe.log_error(title=f"WhatsApp report: letter head {letter_head}")
