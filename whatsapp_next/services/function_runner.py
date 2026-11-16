@@ -145,13 +145,19 @@ def run_function(server_script: str, params: dict[str, Any], spec: dict[str, Any
 	kwargs.update(params)
 	# never run as the function's own URL: the script's guard reads `cmd`
 	kwargs["cmd"] = None
+	from whatsapp_next.overrides.server_script import ENGINE_RUN_FLAG
+
 	saved = frappe.flags.get("wa_result")
+	saved_run = frappe.flags.get(ENGINE_RUN_FLAG)
 	frappe.flags.wa_result = None
+	# the only run a function script accepts (overrides/server_script.py): this one, this script
+	frappe.flags[ENGINE_RUN_FLAG] = server_script
 	try:
 		flags = run_script(server_script, **kwargs) or {}
 		result = flags.get("wa_result") if hasattr(flags, "get") else None
 	finally:
 		frappe.flags.wa_result = saved
+		frappe.flags[ENGINE_RUN_FLAG] = saved_run
 	if not isinstance(result, dict):
 		frappe.throw(_("{0} did not set frappe.flags.wa_result").format(server_script))
 	return {
