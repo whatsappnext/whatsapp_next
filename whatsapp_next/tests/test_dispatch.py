@@ -81,6 +81,7 @@ class TestDispatch(IntegrationTestCase):
 	def _delete_test_messages_and_queue():
 		delete_test_rows("WhatsApp Queue Item")
 		delete_all("WhatsApp Log", {"body": ("like", "dispatch-test%")})
+		delete_all("WhatsApp Log", {"caption": ("like", "dispatch-test%")})  # file messages carry no body
 		delete_all("WhatsApp Inbound Message", {"body": ("like", "dispatch-test%")})
 		delete_all(
 			"WhatsApp Audit Log",
@@ -472,6 +473,34 @@ class TestDispatch(IntegrationTestCase):
 		self.assertFalse(result.ok)
 		self.assertEqual(self._get_outbound_log(out).status, "Queued")
 		self.assertTrue(frappe.db.exists("WhatsApp Queue Item", {"outbound_message": out}))
+
+	def test_a_batch_carries_no_more_file_than_its_budget(self):
+		"""Security review 2026-11-16 (medium): every message of a batch carries its own copy of its
+		file, so a 20 MB video to 20 recipients built a ~530 MB request in the worker. A batch takes
+		the messages whose files fit the budget (one at least); the others wait for the next run."""
+		file_doc = frappe.get_doc(
+			{"doctype": "File", "file_name": "dispatch-test-budget.txt", "content": "x" * 60, "is_private": 1}
+		).insert(ignore_permissions=True)
+		outs = [
+			dispatch.create_and_enqueue(
+				_build_outbound_spec(phone=p, body=None, message_type="Document", caption="dispatch-test file", attachment=file_doc.file_url)
+			)
+			for p in (P1, P2, P3)
+		]
+		sent = []
+		with fake_provider() as fp, patch.object(dispatch, "BATCH_FILE_BUDGET_BYTES", 100):
+			real = fp.send_batch
+
+			def record(messages, batch_id):
+				sent.append(len(messages))
+				return real(messages, batch_id)
+
+			fp.send_batch = record
+			dispatch.dispatch_device_batch(self.device)
+		self.assertEqual(sent, [1], "one 60-byte file fits a 100-byte budget, two do not")
+		waiting = [self._get_queue_item(item).status for _out, item in outs]
+		self.assertEqual(sorted(waiting), ["Completed", "Queued", "Queued"])
+		self.assertTrue(all(self._get_queue_item(item).attempts == 0 for _o, item in outs if self._get_queue_item(item).status == "Queued"))
 
 	def test_batch_auth_failure_marks_settings(self):
 		_out, item = self._queued(1)[0]

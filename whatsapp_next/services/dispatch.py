@@ -675,6 +675,48 @@ def _interactive_payload(message_type: str, value: Any) -> dict | None:
 	return interactive.to_provider(message_type, value)
 
 
+#: the files one batch may carry, in bytes before encoding. Every message carries its own copy
+#: of its file (base64, a third larger), so a 20 MB video to 20 recipients built a ~530 MB
+#: request in the worker (security review 2026-11-16).
+BATCH_FILE_BUDGET_BYTES = 25 * 1024 * 1024
+
+
+def _fit_file_budget(items: list[frappe._dict]) -> list[frappe._dict]:
+	"""The claimed rows whose files fit BATCH_FILE_BUDGET_BYTES, in claim order and one at least;
+	the others go back to Queued for the next run, no attempt counted."""
+	urls = dict(
+		frappe.get_all(
+			"WhatsApp Log",
+			filters={"name": ("in", [i.outbound_message for i in items]), "attachment": ("is", "set")},
+			fields=["name", "attachment"],
+			as_list=True,
+		)
+	)
+	if not urls:
+		return items
+	sizes = dict(
+		frappe.get_all("File", filters={"file_url": ("in", list(set(urls.values())))}, fields=["file_url", "file_size"], as_list=True)
+	)
+	kept, released, total = [], [], 0
+	for item in items:
+		size = cint(sizes.get(urls.get(item.outbound_message))) if item.outbound_message in urls else 0
+		if kept and total + size > BATCH_FILE_BUDGET_BYTES:
+			released.append(item)
+			continue
+		kept.append(item)
+		total += size
+	if released:
+		with status_writer():
+			for item in released:
+				_set_row_values(
+					"WhatsApp Queue Item",
+					item.name,
+					{"status": "Queued", "claimed_at": None, "job_id": None, "next_attempt_at": now_datetime()},
+				)
+				_set_row_values("WhatsApp Log", item.outbound_message, {"status": "Queued"})
+	return kept
+
+
 def build_messages(
 	items: list[frappe._dict], platform_device: str
 ) -> tuple[list[NormalizedMessage], list[tuple[frappe._dict, Exception]]]:
@@ -855,6 +897,7 @@ def dispatch_device_batch(device: str) -> dict[str, int]:
 	items = claim_batch(device, limit)
 	if not items:
 		return {"claimed": 0}
+	items = _fit_file_budget(items)
 	frappe.db.commit()  # the claim is visible to other workers before the HTTP call
 	messages, build_failures = build_messages(items, dev.platform_device)
 	now = now_datetime()
