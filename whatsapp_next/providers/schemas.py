@@ -282,6 +282,34 @@ class GroupMembersAdded:
 
 
 @dataclass(frozen=True)
+class GroupParticipantInfo:
+	"""One member of a group: `phone` (E.164 digits) is empty when WhatsApp shows them by a hidden
+	id (`jid` ends in `@lid`) only."""
+
+	phone: str
+	jid: str = ""
+	is_admin: bool = False
+	is_super_admin: bool = False
+
+
+@dataclass(frozen=True)
+class GroupJoinRequest:
+	phone: str
+	jid: str = ""
+	requested_at: str | None = None
+
+
+@dataclass(frozen=True)
+class GroupDetails:
+	"""A group's members and the requests to join it (shown to admins only)."""
+
+	name: str = ""
+	owner: str = ""
+	members: list[GroupParticipantInfo] = field(default_factory=list)
+	requests: list[GroupJoinRequest] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class HistoryMessage:
 	"""One message of a device's past conversations (`BaseProvider.list_history`).
 

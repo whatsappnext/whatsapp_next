@@ -1,5 +1,6 @@
 # Module role: creating WhatsApp groups from the product's screens (Contacts, WhatsApp Numbers,
-# Contact Groups), and adding members to one (WhatsApp Numbers, a group's row). The device creates the group through the provider and becomes its admin; the
+# Contact Groups), and managing one from its row in WhatsApp Numbers: its members and join
+# requests, adding and removing members, making or unmaking admins. The device creates the group through the provider and becomes its admin; the
 # group then exists here as a WhatsApp Number of type Group, and — when it was created for a
 # Contact — as one of that contact's numbers too. Plan feature `allow_groups`.
 
@@ -158,12 +159,7 @@ def add_group_members(
 	from whatsapp_next.services.settings import chat_in
 
 	plan_features.require_groups()
-	kind, jid = classify(group)
-	row = frappe.db.get_value(
-		"WhatsApp Number", jid, ["number_type", "display_name", "synced_device", "last_device"], as_dict=True
-	) if kind == "Group" else None
-	if not row or row.number_type != "Group":
-		frappe.throw(_("{0} is not a WhatsApp group").format(group), WANotFoundError)
+	jid, row = _group_row(group)
 	keys = []
 	for m in members or []:
 		m_kind, key = classify(m)
@@ -173,16 +169,7 @@ def add_group_members(
 		frappe.throw(_("Choose at least one number to add"), WAValidationError)
 	if len(keys) > MAX_MEMBERS:
 		frappe.throw(_("A group holds at most {0} members").format(MAX_MEMBERS), WAValidationError)
-	device = device or row.synced_device or row.last_device
-	device_row = frappe.db.get_value(
-		"WhatsApp Device", device, ["platform_device", "status", "disabled"], as_dict=True
-	) if device else None
-	if not device_row:
-		frappe.throw(_("Choose the device that administers the group"), WAValidationError)
-	if cint(device_row.disabled):
-		frappe.throw(_("{0} is disabled").format(device), WAStateConflictError)
-	if device_row.status != "Connected":
-		frappe.throw(_("{0} is not connected").format(device), WAStateConflictError)
+	device, device_row = _group_device(row, device)
 
 	allowed = [k for k in keys if chat_in("send_only_to", k)]
 	result = (
@@ -209,6 +196,140 @@ def add_group_members(
 		"members": rows,
 		"invite_link": result.invite_link if result else None,
 	}
+
+
+def _group_row(group: str):
+	"""`(jid, row)` of a WhatsApp Number of type Group, or `WANotFoundError`."""
+	kind, jid = classify(group)
+	row = (
+		frappe.db.get_value(
+			"WhatsApp Number", jid, ["number_type", "display_name", "synced_device", "last_device"], as_dict=True
+		)
+		if kind == "Group"
+		else None
+	)
+	if not row or row.number_type != "Group":
+		frappe.throw(_("{0} is not a WhatsApp group").format(group), WANotFoundError)
+	return jid, row
+
+
+def _group_device(row, device: str | None):
+	"""`(device, its row)`: the one asked for, else the device the group was seen on; connected."""
+	device = device or row.synced_device or row.last_device
+	device_row = (
+		frappe.db.get_value(
+			"WhatsApp Device", device, ["platform_device", "status", "disabled", "phone_e164"], as_dict=True
+		)
+		if device
+		else None
+	)
+	if not device_row:
+		frappe.throw(_("Choose the device that administers the group"), WAValidationError)
+	if cint(device_row.disabled):
+		frappe.throw(_("{0} is disabled").format(device), WAStateConflictError)
+	if device_row.status != "Connected":
+		frappe.throw(_("{0} is not connected").format(device), WAStateConflictError)
+	return device, device_row
+
+
+#: what the group window may do to a member, as the provider names it
+MEMBER_ACTIONS = ("remove", "make_admin", "remove_admin", "approve", "reject")
+
+
+def group_members(group: str, device: str | None = None) -> dict[str, Any]:
+	"""A WhatsApp group's members and join requests, read through `device` (by default the one the
+	group was seen on): `{jid, name, device, device_is_admin, members[...], requests[...]}`, each
+	person `{phone_e164, jid, display_name, contact, is_admin, is_super_admin}`. A member WhatsApp
+	shows by a hidden id only takes the number this site learnt for that id, when it has one
+	(owner, 2026-11-17)."""
+	from whatsapp_next.providers import registry
+
+	plan_features.require_groups()
+	jid, row = _group_row(group)
+	device, device_row = _group_device(row, device)
+	details = registry.get_provider().get_group_details(device_row.platform_device, jid)
+	own = (device_row.phone_e164 or "").lstrip("+")
+
+	def person(p) -> dict[str, Any]:
+		phone = f"+{p.phone}" if p.phone else _number_of_hidden_id(p.jid)
+		known = frappe.db.get_value("WhatsApp Number", phone or p.jid, ["display_name", "contact"], as_dict=True) if (phone or p.jid) else None
+		return {
+			"phone_e164": phone,
+			"jid": p.jid,
+			"display_name": (known or {}).get("display_name"),
+			"contact": (known or {}).get("contact"),
+			"is_admin": bool(getattr(p, "is_admin", False)),
+			"is_super_admin": bool(getattr(p, "is_super_admin", False)),
+			"is_this_device": bool(phone and own and phone.lstrip("+") == own),
+			"requested_at": getattr(p, "requested_at", None),
+		}
+
+	members = [person(p) for p in details.members]
+	return {
+		"jid": jid,
+		"name": details.name or row.display_name or jid,
+		"device": device,
+		"device_is_admin": any(m["is_admin"] and m["is_this_device"] for m in members),
+		"members": sorted(members, key=lambda m: (not m["is_super_admin"], not m["is_admin"], m["display_name"] or "~")),
+		"requests": [person(r) for r in details.requests],
+	}
+
+
+def _number_of_hidden_id(jid: str | None) -> str | None:
+	"""The real number this site learnt for a hidden id (`…@lid`), see `numbers_materializer`."""
+	if not (jid or "").endswith("@lid"):
+		return None
+	from whatsapp_next.services.numbers_materializer import known_number_of_hidden_id
+
+	user = jid.split("@")[0].split(":")[0]
+	phone = frappe.db.get_value("WhatsApp Number", f"{user}@lid", "phone") or known_number_of_hidden_id(jid)
+	return phone if (phone or "").startswith("+") else None
+
+
+def change_group_members(
+	group: str, action: str, members: list[str], device: str | None = None, user: str | None = None
+) -> dict[str, Any]:
+	"""`action` on `members` (numbers) of a WhatsApp group through `device`, which must administer
+	it: `remove`, `make_admin`, `remove_admin`, or `approve` / `reject` join requests. Returns
+	`{jid, action, device, members[{phone, status}]}` with `done`, `failed` or `not_allowed` (off
+	Settings → "Send only to", never asked for). Audited `WhatsApp Group Members Changed`."""
+	from whatsapp_next.providers import registry
+	from whatsapp_next.services.settings import chat_in
+
+	plan_features.require_groups()
+	if action not in MEMBER_ACTIONS:
+		frappe.throw(_("Unknown change: {0}").format(action), WAValidationError)
+	jid, row = _group_row(group)
+	keys = []
+	for m in members or []:
+		m_kind, key = classify(m)
+		if m_kind == "Individual" and key not in keys:
+			keys.append(key)
+	if not keys:
+		frappe.throw(_("Choose at least one member"), WAValidationError)
+	device, device_row = _group_device(row, device)
+	allowed = [k for k in keys if chat_in("send_only_to", k)]
+	done = (
+		registry.get_provider().change_group_members(device_row.platform_device, jid, action, allowed)
+		if allowed
+		else []
+	)
+	by_phone = {m.phone.lstrip("+"): m.status for m in done}
+	rows = [
+		{
+			"phone": k.lstrip("+"),
+			"status": by_phone.get(k.lstrip("+")) or ("not_allowed" if k not in allowed else "failed"),
+		}
+		for k in keys
+	]
+	audit.record_audit_entry(
+		"WhatsApp Group Members Changed",
+		reference=("WhatsApp Number", jid),
+		count=len(keys),
+		details={"device": device, "action": action, "statuses": _count_members_by_status([frappe._dict(r) for r in rows])},
+		user=user,
+	)
+	return {"jid": jid, "action": action, "device": device, "members": rows}
 
 
 def _save_number(jid: str, name: str, device: str) -> None:

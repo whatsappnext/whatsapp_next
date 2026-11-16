@@ -20,6 +20,13 @@ frappe.provide("whatsapp_next.numbers");
 				"quick_send",
 				"confirm",
 				{
+					key: "members",
+					label: __("Members"),
+					icon: "es-line-people",
+					condition: () => doc.number_type === "Group" && whatsapp_next.wa_groups.can_read_members(),
+					handler: () => whatsapp_next.wa_groups.manage_members(doc),
+				},
+				{
 					key: "add_members",
 					label: __("Add members"),
 					icon: "es-line-add-people",

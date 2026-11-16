@@ -15,7 +15,7 @@ const areas = {
 	quick_send: ["get_context", "preview", "send"],
 	number_check: ["check_selection", "refresh_profiles"],
 	status_posts: ["post_now", "schedule", "unschedule", "delete_post", "refresh_views"],
-	wa_groups: ["members_from", "create_group"],
+	wa_groups: ["members_from", "create_group", "add_members", "get_members", "change_members"],
 	messages: ["fetch_media", "get_outbound", "get_inbound", "get_inbound_summary", "get_conversation", "resend", "resend_many", "cancel", "get_poll_results", "get_poll_summary"],
 	simulator: ["get_context", "simulate_inbound", "send_test", "dry_run_command", "list_conversations", "get_identity"],
 	bulk_send: ["get_context", "estimate", "search_contacts", "send"],
@@ -144,6 +144,19 @@ whatsapp_next.wa_groups = {
 		frappe.user.has_role(["WhatsApp Manager", "System Manager"]) &&
 		typeof whatsapp.ui.GroupCreate === "function",
 	open: (opts) => new whatsapp.ui.GroupCreate(opts || {}),
+	// a group's row (WhatsApp Numbers): its members and requests; a Manager changes them
+	can_read_members: () =>
+		!!(((frappe.boot.whatsapp_next || {}).features || {}).groups) &&
+		frappe.user.has_role(["WhatsApp Agent", "WhatsApp Manager", "System Manager"]) &&
+		typeof whatsapp.ui.GroupMembers === "function",
+	manage_members: (doc, on_change) =>
+		new whatsapp.ui.GroupMembers({
+			group: doc.phone_e164 || doc.jid || doc.name,
+			name: doc.display_name,
+			device: doc.synced_device || doc.last_device,
+			can_change: whatsapp_next.wa_groups.can_create(),
+			on_change,
+		}),
 	// a group's row (WhatsApp Numbers): add members through a device that administers it
 	add_members: (doc, on_done) =>
 		new whatsapp.ui.GroupCreate({

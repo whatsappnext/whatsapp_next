@@ -9,7 +9,14 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from whatsapp_next.exceptions import WANotFoundError, WANotSupportedError, WAValidationError
-from whatsapp_next.providers.schemas import GroupCreated, GroupMember, GroupMembersAdded
+from whatsapp_next.providers.schemas import (
+	GroupCreated,
+	GroupDetails,
+	GroupJoinRequest,
+	GroupMember,
+	GroupMembersAdded,
+	GroupParticipantInfo,
+)
 from whatsapp_next.services import wa_groups
 from whatsapp_next.tests.conftest_frappe import ensure_device
 
@@ -43,6 +50,24 @@ class Provider:
 			members=[GroupMember(phone=p.lstrip("+"), status=statuses[i % 3]) for i, p in enumerate(participants)],
 			invite_link="https://chat.whatsapp.com/y",
 		)
+
+
+	def get_group_details(self, platform_device, group_jid):
+		self.calls.append(("read", platform_device, group_jid))
+		own = (frappe.db.get_value("WhatsApp Device", {"platform_device": platform_device}, "phone_e164") or "").lstrip("+")
+		return GroupDetails(
+			name="Project team",
+			members=[
+				GroupParticipantInfo(phone="967777667663", jid="967777667663@s.whatsapp.net"),
+				GroupParticipantInfo(phone=own, jid=f"{own}@s.whatsapp.net", is_admin=True, is_super_admin=True),
+				GroupParticipantInfo(phone="", jid="888000000000777@lid"),
+			],
+			requests=[GroupJoinRequest(phone="967777999579", jid="967777999579@s.whatsapp.net")],
+		)
+
+	def change_group_members(self, platform_device, group_jid, action, members):
+		self.calls.append(("change", platform_device, group_jid, action, members))
+		return [GroupMember(phone=m.lstrip("+"), status="done") for m in members]
 
 
 class TestWaGroups(IntegrationTestCase):
@@ -165,3 +190,32 @@ class TestWaGroups(IntegrationTestCase):
 			set_plan_allows_groups(False)
 			with self.assertRaises(WANotSupportedError):
 				wa_groups.add_group_members(group, ["+967777667663"])
+
+
+	def test_a_groups_members_and_requests_are_read(self):
+		"""Owner 2026-11-17: managing a group's members from its row."""
+		group = self._create()["jid"]
+		with patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider):
+			result = wa_groups.group_members(group)
+		self.assertEqual(result["device"], self.device)
+		self.assertTrue(result["device_is_admin"], "the device is the group's owner here")
+		first = result["members"][0]
+		self.assertEqual((first["is_super_admin"], first["is_this_device"]), (True, True), "the owner comes first")
+		self.assertEqual([m["phone_e164"] for m in result["members"][1:]], ["+967777667663", None])
+		self.assertEqual(result["members"][2]["jid"], "888000000000777@lid")
+		self.assertEqual([r["phone_e164"] for r in result["requests"]], ["+967777999579"])
+
+	def test_a_member_is_changed_and_the_change_audited(self):
+		group = self._create()["jid"]
+		with patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider):
+			result = wa_groups.change_group_members(group, "make_admin", ["967777667663"])
+			with self.assertRaises(WAValidationError):
+				wa_groups.change_group_members(group, "ban", ["967777667663"])
+			with patch("whatsapp_next.services.settings.chat_in", return_value=False):
+				refused = wa_groups.change_group_members(group, "remove", ["+967777667663"])
+		self.assertEqual(self.provider.calls[-1][3:], ("make_admin", ["+967777667663"]))
+		self.assertEqual(result["members"], [{"phone": "967777667663", "status": "done"}])
+		self.assertEqual(refused["members"], [{"phone": "967777667663", "status": "not_allowed"}])
+		self.assertTrue(
+			frappe.db.exists("WhatsApp Audit Log", {"action": "WhatsApp Group Members Changed", "reference_name": group})
+		)

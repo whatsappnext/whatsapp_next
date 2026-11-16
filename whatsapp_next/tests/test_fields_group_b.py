@@ -60,6 +60,7 @@ EXPECTED: dict[str, list[tuple[str, str, list[str] | None]]] = {
 				"Alert Test Sent",
 				"WhatsApp Group Created",
 				"WhatsApp Group Members Added",
+				"WhatsApp Group Members Changed",
 				"Status Posted",
 				"Status Deleted",
 				"Backup Exported",
