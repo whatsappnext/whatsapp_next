@@ -127,12 +127,7 @@ def handle_webhook_request(
 	)
 	if claimed_event.duplicate:
 		return Outcome(200, {"ok": True, "duplicate": True}, event=claimed_event.name)
-	frappe.db.set_single_value(
-		"WhatsApp Settings",
-		"webhook_last_event_at",
-		now_datetime(),
-		update_modified=False,
-	)
+	_note_last_event_time()
 	if status == "Ignored":
 		return Outcome(200, {"ok": True, "ignored": True}, event=claimed_event.name)
 	# 9. process in a job
@@ -145,6 +140,24 @@ def handle_webhook_request(
 		frappe.clear_last_message()
 		return Outcome(200, {"ok": True, "queued": False}, event=claimed_event.name)
 	return Outcome(200, {"ok": True}, event=claimed_event.name)
+
+
+#: set while the last event time was written less than a minute ago
+LAST_EVENT_WRITTEN_KEY = "wa:webhook:last_event_written"
+
+
+def _note_last_event_time() -> None:
+	"""`webhook_last_event_at` (the Settings' «last event» line), at most once a minute: written on
+	every delivery it locked the Settings row and cleared their cache per webhook (security review
+	2026-11-16). The minute is enough for what it shows."""
+	if not frappe.cache.set(frappe.cache.make_key(LAST_EVENT_WRITTEN_KEY), 1, nx=True, ex=60):
+		return
+	frappe.db.set_single_value(
+		"WhatsApp Settings",
+		"webhook_last_event_at",
+		now_datetime(),
+		update_modified=False,
+	)
 
 
 def _queue_event_processing(webhook_event: str) -> None:

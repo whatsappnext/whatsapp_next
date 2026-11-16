@@ -218,6 +218,25 @@ class TestWebhooks(IntegrationTestCase):
 		self.assertEqual(out.http_status, 200)
 		self.assertEqual(frappe.db.get_value("WhatsApp Webhook Event", {"event_id": body["event_id"]}, "status"), "Received")
 
+	def test_the_last_event_time_is_written_once_a_minute(self):
+		"""Security review 2026-11-16 (low): every delivery wrote `webhook_last_event_at` on the
+		Settings single: a lock on its row and a cleared Settings cache per webhook."""
+		frappe.cache.delete(frappe.cache.make_key(receiver.LAST_EVENT_WRITTEN_KEY))
+		real = frappe.db.set_single_value
+		writes = []
+
+		def counting(doctype, field, *args, **kwargs):
+			if field == "webhook_last_event_at":
+				writes.append(field)
+			return real(doctype, field, *args, **kwargs)
+
+		with fake_provider(), patch.object(frappe.db, "set_single_value", side_effect=counting):
+			for event_id in ("last-at-1", "last-at-2", "last-at-3"):
+				headers, raw = signed(fixture("message.received", event_id=event_id), event_id=event_id)
+				self.assertEqual(receiver.handle_webhook_request(headers, raw).http_status, 200)
+		self.assertEqual(len(writes), 1)
+		frappe.db.delete("WhatsApp Webhook Event", {"event_id": ("like", "last-at-%")})
+
 	def test_receiver_refuses_malformed_headers_without_a_server_error(self):
 		body = fixture("message.received")
 		with fake_provider():
