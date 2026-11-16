@@ -203,6 +203,22 @@ class TestSndPlatform(IntegrationTestCase):
 		except pex.RateLimitError as exc:
 			self.assertEqual(exc.retry_after, 7)
 
+	def test_a_busy_platform_is_retried_when_it_says(self):
+		"""Security review 2026-11-16 (low): a 503 with Retry-After (the platform's queue full) was
+		a plain transient error, retried after the fixed 5-minute backoff."""
+		provider = _provider()
+		with self.assertRaises(pex.RateLimitError) as caught:
+			self._call_provider_with_fake_request(
+				provider,
+				"get_queue_status",
+				response=_Resp(503, {"message": {"ok": False, "error": "busy"}}, headers={"Retry-After": "30"}),
+			)
+		self.assertEqual(caught.exception.retry_after, 30)
+		with self.assertRaises(pex.TransientError):  # a 503 that names no time stays transient
+			self._call_provider_with_fake_request(
+				provider, "get_queue_status", response=_Resp(503, {"message": {"ok": False, "error": "down"}})
+			)
+
 	def test_error_keeps_the_envelope_beside_the_message(self):
 		provider = _provider()
 		# a dict `message` next to Frappe's own `exc_type`: the type still decides the class
