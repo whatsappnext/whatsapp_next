@@ -221,12 +221,19 @@ def requeue_stale_claims(older_than_minutes: int = STALE_MINUTES) -> int:
 	return len(rows)
 
 
-def assert_coherence(fix: bool = False) -> list[Drift]:
-	"""Pairs whose `(Queue Item.status, outbound.status)` is not allowed. With `fix`, the outbound
-	is corrected from the Queue Item (the dispatcher's own state) and the count is logged."""
+def _drifting_pairs() -> list[frappe._dict]:
+	"""The (Queue Item, message) pairs whose statuses do not go together, found by the query: the
+	check read every pair of the last 7 days (Completed included) into Python every 5 minutes to
+	find the few that drift (security review 2026-11-16)."""
 	queue_table = frappe.qb.DocType("WhatsApp Queue Item")
 	log_table = frappe.qb.DocType("WhatsApp Log")
-	rows = (
+	drifting = None
+	for queue_status, allowed in ALLOWED.items():
+		pair = (queue_table.status == queue_status) & (
+			log_table.status.notin(list(allowed)) | log_table.status.isnull()
+		)
+		drifting = pair if drifting is None else (drifting | pair)
+	return (
 		frappe.qb.from_(queue_table)
 		.join(log_table)
 		.on(log_table.name == queue_table.outbound_message)
@@ -236,9 +243,15 @@ def assert_coherence(fix: bool = False) -> list[Drift]:
 			log_table.name.as_("outbound"),
 			log_table.status.as_("os"),
 		)
-		.where(queue_table.status.isin(list(ALLOWED)))
+		.where(drifting)
 		.run(as_dict=True)
 	)
+
+
+def assert_coherence(fix: bool = False) -> list[Drift]:
+	"""Pairs whose `(Queue Item.status, outbound.status)` is not allowed. With `fix`, the outbound
+	is corrected from the Queue Item (the dispatcher's own state) and the count is logged."""
+	rows = _drifting_pairs()
 	drifts: list[Drift] = []
 	fix_to = {
 		"Queued": "Queued",

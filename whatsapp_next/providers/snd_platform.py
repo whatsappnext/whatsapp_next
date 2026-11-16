@@ -383,8 +383,12 @@ class SndPlatformProvider(BaseProvider):
 		lower = text.lower()
 		exc_type = str(data.get("exc_type") or "")
 		kwargs = {"code": code, "http_status": status}
+		retry_after = response.headers.get("Retry-After")
+		if status == 503 and retry_after and retry_after.isdigit():
+			# busy, and saying when to come back (the platform's queue full): retried then, not after
+			# the fixed backoff (security review 2026-11-16)
+			raise pex.RateLimitError(text, retry_after=int(retry_after), **kwargs)
 		if status == 429 or code == "RATE_LIMITED" or "RateLimit" in exc_type:
-			retry_after = response.headers.get("Retry-After")
 			raise pex.RateLimitError(
 				text,
 				retry_after=int(retry_after) if retry_after and retry_after.isdigit() else None,

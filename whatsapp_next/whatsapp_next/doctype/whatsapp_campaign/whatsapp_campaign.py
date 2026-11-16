@@ -37,6 +37,7 @@ class WhatsAppCampaign(Document):
 		"""Messages ≥ 1, recipients normalized, rate ≤ Settings, edit lock outside Draft/Scheduled, status guard."""
 		assert_status_writer(self)
 		self.check_messages()
+		self.check_message_files()
 		self.normalize_recipients()
 		self.check_rate_limit()
 		self.check_edit_lock()
@@ -46,6 +47,17 @@ class WhatsAppCampaign(Document):
 		"""At least one message row."""
 		if not self.get("messages"):
 			frappe.throw(_("A campaign needs at least one message"), WAValidationError)
+
+	def check_message_files(self) -> None:
+		"""A message's file goes to every recipient: whoever sets it must be able to open it
+		(security review 2026-11-16: any File was read by its URL). Rows whose file changed only."""
+		from whatsapp_next.services.attachments import require_readable
+
+		before = self.get_doc_before_save() if not self.is_new() else None
+		known = {(row.name, row.attachment) for row in (before.get("messages") if before else [])}
+		for row in self.get("messages") or []:
+			if row.attachment and (row.name, row.attachment) not in known:
+				require_readable(row.attachment)
 
 	def normalize_recipients(self) -> None:
 		"""Fill `phone_e164` (required for Individual rows); Group rows need a `jid`."""
