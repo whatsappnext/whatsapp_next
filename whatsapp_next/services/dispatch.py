@@ -1183,6 +1183,14 @@ def send_test_message(outbound: str) -> SendResult:
 	return send_now(outbound, source="test")
 
 
+def _platform_not_reached(exc: Exception) -> bool:
+	"""A failure that means the platform did not take the message: no connection, a busy answer
+	(429 / 503), not a timeout, after which it may have."""
+	if isinstance(exc, pex.RateLimitError):
+		return True
+	return isinstance(exc, pex.TransientError) and getattr(exc, "code", None) != "TIMEOUT"
+
+
 def send_now(outbound: str, *, source: str = "direct") -> SendResult:
 	"""One synchronous `send_message`, bypassing the queue, its rate and its batching: test sends
 	(D-024) and the router's automatic replies (receipt, unknown command), which the sender must
@@ -1199,6 +1207,14 @@ def send_now(outbound: str, *, source: str = "direct") -> SendResult:
 		result = registry.get_provider().send_message(build_message(doc, platform_device, priority=1))
 	except pex.ProviderError as exc:
 		cls = errors.classify(exc)
+		if _platform_not_reached(exc):
+			# the platform did not take it (no connection, busy, rate-limited): the reply waits in
+			# the queue and goes when the platform is back, instead of Failed for good (security
+			# review 2026-11-16). A timeout is left Failed: the platform may have sent it.
+			with status_writer():
+				_set_row_values("WhatsApp Log", outbound, {"status": "Unsent"})
+			enqueue([outbound], priority=1)
+			return SendResult(ok=False, rejected=False, reason=cls.message, code="QUEUED")
 		apply_status(outbound, "Failed", error_code=cls.code, reason=cls.message, source=source)
 		if isinstance(exc, pex.DeviceOfflineError):
 			from whatsapp_next.services import devices

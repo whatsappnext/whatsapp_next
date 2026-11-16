@@ -18,6 +18,7 @@ from whatsapp_next.exceptions import (
 	WAUnknownNumberPolicyError,
 	WAValidationError,
 )
+from whatsapp_next.providers import exceptions as pex
 from whatsapp_next.providers.schemas import MessageStatus
 from whatsapp_next.services import dispatch, quick_send, reconcile
 from whatsapp_next.services.dispatch import OutboundSpec
@@ -456,6 +457,21 @@ class TestDispatch(IntegrationTestCase):
 			counts = dispatch.dispatch_device_batch(self.device)
 		self.assertEqual(counts["dead"], 1)
 		self.assertEqual(self._get_queue_item(item).status, "Dead Letter")
+
+	def test_an_automatic_reply_waits_in_the_queue_while_the_platform_is_unreachable(self):
+		"""Security review 2026-11-16 (medium): a reply sent at once (a command's receipt or help)
+		was Failed for good when the platform could not be reached; it now waits in the queue and
+		goes when the platform is back."""
+		out = dispatch.create_outbound(_build_outbound_spec(body="dispatch-test reply"))
+		with fake_provider() as fp:
+			def unreachable(message):
+				raise pex.TransientError("Platform connection failed", code="CONNECTION")
+
+			fp.send_message = unreachable
+			result = dispatch.send_now(out)
+		self.assertFalse(result.ok)
+		self.assertEqual(self._get_outbound_log(out).status, "Queued")
+		self.assertTrue(frappe.db.exists("WhatsApp Queue Item", {"outbound_message": out}))
 
 	def test_batch_auth_failure_marks_settings(self):
 		_out, item = self._queued(1)[0]
