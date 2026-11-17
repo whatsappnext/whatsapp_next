@@ -285,3 +285,75 @@ class TestAlerts(IntegrationTestCase):
 			# the site may have alerts of its own that are due as well
 			self.assertIn(alert.name, alerts.run_due_alerts())
 		self.assertIn(alert.name, [call.kwargs["name"] for call in enq.call_args_list])
+
+
+class TestAlertRowsByRecipient(IntegrationTestCase):
+	"""Owner 2026-11-18: a user sent a report gets the rows they may see in the system, as if they had
+	run it themselves; a number or a report column, with no account, gets the alert owner's."""
+
+	USERS = (("alerttest-one@example.com", "+967777999579"), ("alerttest-two@example.com", "+967777667663"))
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.device = ensure_device("Alert Device", "WAD-TEST-AL01", phone="+967775040850")
+		ensure_settings(default_device=cls.device, send_only_to_known_numbers=0)
+
+	def setUp(self):
+		self._clean()
+		self.addCleanup(self._clean)
+		for email, mobile in self.USERS:
+			frappe.get_doc(
+				{"doctype": "User", "email": email, "first_name": email.split("@")[0], "mobile_no": mobile, "user_type": "System User", "send_welcome_email": 0}
+			).insert(ignore_permissions=True)
+		# each user is given their own ToDos: two for the first, one for the second
+		for email, count in ((self.USERS[0][0], 2), (self.USERS[1][0], 1)):
+			for n in range(count):
+				frappe.get_doc({"doctype": "ToDo", "description": f"alerttest todo {n}", "allocated_to": email, "owner": email}).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Report",
+				"report_name": "AlertTest ToDos",
+				"ref_doctype": "ToDo",
+				"report_type": "Report Builder",
+				"is_standard": "No",
+				"json": json.dumps({"columns": [["name", "ToDo"], ["description", "ToDo"]], "filters": [["ToDo", "description", "like", "alerttest todo%"]]}),
+			}
+		).insert(ignore_permissions=True)
+
+	@staticmethod
+	def _clean():
+		delete_all("WhatsApp Notification Alert", {"alert_name": ("like", "AlertTest%")})
+		delete_all("ToDo", {"description": ("like", "alerttest todo%")})
+		delete_all("Report", {"report_name": "AlertTest ToDos"})
+		for email, _mobile in TestAlertRowsByRecipient.USERS:
+			if frappe.db.exists("User", email):
+				frappe.delete_doc("User", email, ignore_permissions=True, force=True)
+
+	def test_each_user_gets_the_rows_they_may_see(self):
+		alert = _alert(
+			report="AlertTest ToDos",
+			attachment_format="None",
+			recipients=[{"recipient_type": "User", "user": email} for email, _m in self.USERS],
+		)
+		run = alerts.run_alert(alert.name, preview=True)
+		self.assertIsNone(run.error)
+		got = {r["phone_e164"]: r["rows"] for r in run.recipients}
+		self.assertEqual(got, {"+967777999579": 2, "+967777667663": 1})
+		self.assertEqual(frappe.session.user, "Administrator", "the run's own user comes back")
+
+	def test_a_user_who_may_not_run_the_report_gets_nothing_and_the_run_says_why(self):
+		alert = _alert(recipients=[{"recipient_type": "User", "user": self.USERS[0][0]}, {"recipient_type": "Phone", "phone": PHONE}])
+
+		def report_as_the_session_user(_alert, _filters):
+			if frappe.session.user == self.USERS[0][0]:
+				raise frappe.PermissionError("not permitted")
+			return REPORT_COLUMNS, REPORT_ROWS
+
+		with patch.object(alerts, "_run_report", side_effect=report_as_the_session_user):
+			run = alerts.run_alert(alert.name, preview=True)
+		self.assertIsNone(run.error)
+		by_phone = {r["phone_e164"]: r for r in run.recipients}
+		self.assertIn("may not see this report", by_phone["+967777999579"]["skipped"])
+		self.assertEqual(by_phone[PHONE]["rows"], 3, "a number gets the alert owner's report")
+		self.assertEqual(frappe.session.user, "Administrator")

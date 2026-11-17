@@ -962,6 +962,7 @@ frappe.provide("whatsapp.ui");
 						${phones ? `<button type="button" class="whatsapp-kit-alert-editor__link" data-act="r_clear">${escape_html(__("Remove all numbers"))}</button>` : ""}
 					</div>
 					${draft.recipients.length ? `<ul class="whatsapp-kit-alert-editor__recipient-chips">${chips}</ul>` : `<p class="whatsapp-kit-alert-editor__empty">${escape_html(__("Nobody yet."))}</p>`}
+					${is_report ? `<p class="whatsapp-kit-alert-editor__hint">${escape_html(__("Each user gets the rows they may see in the system; a number gets the rows the alert's creator may see."))}</p>` : ""}
 					${columns}
 				</div>`);
 			this.draw_sentence();
