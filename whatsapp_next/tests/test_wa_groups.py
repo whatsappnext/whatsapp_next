@@ -175,6 +175,14 @@ class TestWaGroups(IntegrationTestCase):
 				wa_groups.add_group_members(group, many)
 		self.assertFalse([c for c in self.provider.calls if c[0] == "add"], "nothing was asked")
 
+	def test_a_new_group_takes_at_most_fifty_members(self):
+		"""Platform review 2026-11-18: a new group's members are added at once too."""
+		many = [f"+9677{n:08d}" for n in range(51)]
+		with self.assertRaises(WAValidationError) as caught:
+			self._create(members=many)
+		self.assertIn("50", str(caught.exception))
+		self.assertEqual(self.provider.calls, [], "nothing was asked of WhatsApp")
+
 
 class TestScreenCallsAreConfigured(IntegrationTestCase):
 	"""2026-11-18: «Add members» called `wa_groups.add_members`, which the screens' API map did not
