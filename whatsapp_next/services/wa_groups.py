@@ -19,6 +19,9 @@ from whatsapp_next.services.phone import classify
 
 MAX_MEMBERS = 256
 MAX_NAME = 100
+#: Numbers added to a group at a time, a new one's members included: WhatsApp bans numbers that
+#: add many people at once (platform review, 2026-11-18). The platform refuses more.
+MAX_ADDS_AT_ONCE = 50
 
 
 def members_from(
@@ -97,8 +100,14 @@ def create_whatsapp_group(
 			keys.append(key)
 	if not keys:
 		frappe.throw(_("Choose at least one number to add"), WAValidationError)
-	if len(keys) > MAX_MEMBERS:
-		frappe.throw(_("A group holds at most {0} members").format(MAX_MEMBERS), WAValidationError)
+	if len(keys) > MAX_ADDS_AT_ONCE:
+		# a new group's members are added at once too (platform review, 2026-11-18)
+		frappe.throw(
+			_("Add at most {0} numbers at a time: WhatsApp bans numbers that add many people at once.").format(
+				MAX_ADDS_AT_ONCE
+			),
+			WAValidationError,
+		)
 	row = frappe.db.get_value(
 		"WhatsApp Device", device, ["platform_device", "status", "disabled"], as_dict=True
 	)
@@ -171,8 +180,13 @@ def add_group_members(
 			keys.append(key)
 	if not keys:
 		frappe.throw(_("Choose at least one number to add"), WAValidationError)
-	if len(keys) > MAX_MEMBERS:
-		frappe.throw(_("A group holds at most {0} members").format(MAX_MEMBERS), WAValidationError)
+	if len(keys) > MAX_ADDS_AT_ONCE:
+		frappe.throw(
+			_("Add at most {0} numbers at a time: WhatsApp bans numbers that add many people at once.").format(
+				MAX_ADDS_AT_ONCE
+			),
+			WAValidationError,
+		)
 	device = device or row.synced_device or row.last_device
 	device_row = frappe.db.get_value(
 		"WhatsApp Device", device, ["platform_device", "status", "disabled"], as_dict=True

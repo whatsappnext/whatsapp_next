@@ -15,7 +15,7 @@ const areas = {
 	quick_send: ["get_context", "preview", "send"],
 	number_check: ["check_selection", "refresh_profiles"],
 	status_posts: ["post_now", "schedule", "unschedule", "delete_post", "refresh_views"],
-	wa_groups: ["members_from", "create_group"],
+	wa_groups: ["members_from", "create_group", "add_members"],
 	messages: ["fetch_media", "get_outbound", "get_inbound", "get_inbound_summary", "get_conversation", "resend", "resend_many", "cancel", "get_poll_results", "get_poll_summary"],
 	simulator: ["get_context", "simulate_inbound", "send_test", "dry_run_command", "list_conversations", "get_identity"],
 	bulk_send: ["get_context", "estimate", "search_contacts", "send"],
