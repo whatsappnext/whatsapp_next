@@ -258,7 +258,8 @@ class ContactProfile:
 class GroupMember:
 	"""A number asked for when a group was created or members were added, and what became of it:
 	`added`, `invite_required` (their privacy settings refuse being added), `not_on_whatsapp`,
-	`already_member`, `not_allowed` (off "Send only to") or `failed`."""
+	`already_member`, `not_allowed` (off "Send only to"), `unconfirmed` (WhatsApp answered by a hidden
+	id that could not be matched to the number) or `failed`."""
 
 	phone: str
 	status: str
