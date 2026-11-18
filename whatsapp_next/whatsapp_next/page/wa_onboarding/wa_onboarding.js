@@ -347,6 +347,8 @@ frappe.provide("whatsapp_next.onboarding");
 						</div>
 						<p class="whatsapp-onboarding__support">${with_support(__("Need help? Write to support at {0}", [SUPPORT_SLOT]))}</p>
 						<p class="whatsapp-onboarding__rights">${escape_html(__("WhatsappNext · all rights reserved"))}</p>
+						<!-- the mobile field's country comes from DB-IP's free database, whose licence asks for this -->
+						<p class="whatsapp-onboarding__rights" dir="ltr"><a href="https://db-ip.com" target="_blank" rel="noopener" style="color: inherit">IP Geolocation by DB-IP</a></p>
 					</div>
 				</aside>
 
