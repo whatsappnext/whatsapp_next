@@ -34,7 +34,10 @@ from whatsapp_next.providers.schemas import (
 	ContactProfile,
 	DeviceState,
 	GroupCreated,
+	GroupDetails,
+	GroupJoinRequest,
 	GroupMembersAdded,
+	GroupParticipantInfo,
 	GroupMember,
 	HealthStatus,
 	HistoryMessage,
@@ -1196,6 +1199,47 @@ class SndPlatformProvider(BaseProvider):
 			],
 			invite_link=data.get("invite_link"),
 		)
+
+	def get_group_details(self, platform_device: str, group_jid: str) -> GroupDetails:
+		data = self._request("POST", "get_group_members_api", body={"device": platform_device, "group_jid": group_jid})
+		return GroupDetails(
+			name=str(data.get("name") or ""),
+			owner=str(data.get("owner") or ""),
+			members=[
+				GroupParticipantInfo(
+					phone=str(m.get("phone") or ""),
+					jid=str(m.get("jid") or ""),
+					is_admin=bool(m.get("is_admin")),
+					is_super_admin=bool(m.get("is_super_admin")),
+				)
+				for m in data.get("members") or []
+				if isinstance(m, dict)
+			],
+			requests=[
+				GroupJoinRequest(phone=str(r.get("phone") or ""), jid=str(r.get("jid") or ""), requested_at=r.get("requested_at"))
+				for r in data.get("requests") or []
+				if isinstance(r, dict)
+			],
+		)
+
+	def change_group_members(
+		self, platform_device: str, group_jid: str, action: str, members: list[str]
+	) -> list[GroupMember]:
+		data = self._request(
+			"POST",
+			"change_group_members_api",
+			body={
+				"device": platform_device,
+				"group_jid": group_jid,
+				"action": action,
+				"members": [str(m).lstrip("+") for m in members],
+			},
+		)
+		return [
+			GroupMember(phone=str(m.get("phone") or ""), status=str(m.get("status") or "failed"))
+			for m in data.get("members") or []
+			if isinstance(m, dict)
+		]
 
 	def list_history(
 		self,

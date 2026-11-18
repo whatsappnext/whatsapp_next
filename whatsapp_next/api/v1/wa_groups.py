@@ -39,3 +39,17 @@ def add_members(group: str, members: list, device: str | None = None) -> dict[st
 	"""Add `members` (numbers) to the WhatsApp group `group` through `device` (by default the one the
 	group was last seen on). → `{jid, name, device, members[{phone, status, jid}], invite_link}`."""
 	return wa_groups.add_group_members(group, [str(m) for m in members or []], device, user=frappe.session.user)
+
+
+@api_endpoint(roles=AGENT_UP, methods=("GET", "POST"))
+def get_members(group: str, device: str | None = None) -> dict[str, Any]:
+	"""The group's members and join requests, read through `device`. → `{jid, name, device,
+	device_is_admin, members[...], requests[...]}`."""
+	return wa_groups.group_members(group, device)
+
+
+@api_endpoint(roles=MANAGER, schema={"action": {"enum": list(wa_groups.MEMBER_ACTIONS)}})
+def change_members(group: str, action: str, members: list, device: str | None = None) -> dict[str, Any]:
+	"""`remove`, `make_admin`, `remove_admin`, `approve` or `reject` the `members` (numbers) through
+	`device`. → `{jid, action, device, members[{phone, status}]}`."""
+	return wa_groups.change_group_members(group, action, [str(m) for m in members or []], device, user=frappe.session.user)
