@@ -482,7 +482,12 @@ whatsapp.ui.PhoneField = class PhoneField {
 	/** Search by country name, by ISO prefix or by dial code — the prototype's three ways in. */
 	matches() {
 		const q = cstr(this.state.q).trim().replace(/^\+/, "");
-		if (!q) return CATALOG;
+		if (!q) {
+			// the chosen country first, so it is seen without scrolling down to it (owner, 2026-11-19)
+			const iso = this.country && this.country.iso;
+			const chosen = iso && CATALOG.find((c) => c.iso === iso);
+			return chosen ? [chosen, ...CATALOG.filter((c) => c !== chosen)] : CATALOG;
+		}
 		// `name` is the localised one, so a reader searching in Arabic finds it in Arabic
 		const lower = q.toLowerCase();
 		return CATALOG.filter(

@@ -10,7 +10,8 @@ import frappe
 
 def boot_session(bootinfo) -> None:
 	"""`bootinfo.whatsapp_next = {"setup_redirect": bool, "can_setup": bool, "features": {...},
-	"region": "YE"}` — `region` is the country every phone field opens on (`phone.default_region`)."""
+	"region": "YE"}` — `region` is the country every phone field opens on: the user's own, from
+	their network, else the site's (`phone.default_region`)."""
 	redirect, can, features, region = False, False, {}, None
 	try:
 		from whatsapp_next.services import onboarding, plan_features
@@ -18,9 +19,12 @@ def boot_session(bootinfo) -> None:
 		redirect = onboarding.should_redirect_to_wizard()
 		can = onboarding.can_setup()
 		features = plan_features.for_boot()
+		from whatsapp_next.services import visitor_country
 		from whatsapp_next.services.phone import default_region
 
-		region = default_region()
+		# the country the user is in, from their network (owner, 2026-11-19): the field starts on it
+		# instead of showing the site's country and switching when phone.get_countries answers
+		region = visitor_country.visitor_country() or default_region()
 	except Exception:
 		frappe.log_error(title="whatsapp_next boot_session")
 	bootinfo.whatsapp_next = frappe._dict(
