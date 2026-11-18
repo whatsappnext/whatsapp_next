@@ -1,0 +1,19 @@
+.whatsapp-kit-group-members {
+	&__danger { color: var(--whatsapp-danger-ink, var(--ink-red-8)); }
+	&__acts { display: inline-flex; flex: 0 0 auto; gap: var(--whatsapp-kit-gap-xs); margin-inline-start: auto; }
+	&__title { margin: var(--whatsapp-kit-gap-md) 0 var(--whatsapp-kit-gap-xs); font-size: var(--text-sm, 13px); color: var(--ink-gray-7); }
+	&__note {
+		margin: 0 0 var(--whatsapp-kit-gap-sm);
+		padding: var(--whatsapp-kit-gap-sm) var(--whatsapp-kit-gap-md);
+		border-radius: var(--whatsapp-kit-radius);
+		background: var(--whatsapp-warning-soft, var(--surface-amber-2));
+		color: var(--whatsapp-warning-ink, var(--ink-amber-8));
+		font-size: var(--text-sm, 13px);
+	}
+	&__state { margin: 0; padding: var(--whatsapp-kit-gap-md) 0; color: var(--ink-gray-6); &--error { color: var(--ink-red-8, var(--ink-gray-9)); } }
+	.whatsapp-kit-group-create__list { max-height: 420px; }
+	@media (max-width: 600px) {
+		.whatsapp-kit-group-create__list li { flex-wrap: wrap; padding-block: var(--whatsapp-kit-gap-xs); }
+		&__acts { width: 100%; justify-content: flex-end; }
+	}
+}

@@ -15,7 +15,11 @@ from whatsapp_next.providers.schemas import (
 	ContactProfile,
 	DeviceState,
 	GroupCreated,
+	GroupDetails,
+	GroupJoinRequest,
+	GroupMember,
 	GroupMembersAdded,
+	GroupParticipantInfo,
 	HealthStatus,
 	HistoryPage,
 	MessageStatus,
@@ -323,6 +327,22 @@ class BaseProvider(ABC):
 
 		Not abstract: a provider that cannot change groups keeps this default."""
 		raise pex.NotSupportedError("This provider cannot add members to groups", code="NOT_SUPPORTED")
+
+	def get_group_details(self, platform_device: str, group_jid: str) -> GroupDetails:
+		"""A group's members and its join requests, read through a device that is in it.
+
+		Not abstract: a provider that cannot read groups keeps this default."""
+		raise pex.NotSupportedError("This provider cannot read a group's members", code="NOT_SUPPORTED")
+
+	def change_group_members(
+		self, platform_device: str, group_jid: str, action: str, members: list[str]
+	) -> list[GroupMember]:
+		"""`action` — `remove`, `make_admin`, `remove_admin`, `approve`, `reject` — on `members`
+		(numbers), through a device that administers the group; each member's `done`, `failed` or
+		`not_allowed`.
+
+		Not abstract: a provider that cannot change groups keeps this default."""
+		raise pex.NotSupportedError("This provider cannot change a group's members", code="NOT_SUPPORTED")
 
 	def list_history(
 		self,

@@ -34,6 +34,12 @@ const ROW_ACTIONS = (listview) => [
 		handler: (doc) => link_convert_dialog(doc, () => listview.refresh()),
 	},
 	{
+		label: __("Members"),
+		icon: "es-line-people",
+		condition: (doc) => doc.number_type === "Group" && whatsapp_next.wa_groups.can_read_members(),
+		handler: (doc) => whatsapp_next.wa_groups.manage_members(doc, () => listview.refresh()),
+	},
+	{
 		label: __("Add members"),
 		icon: "es-line-add-people",
 		condition: (doc) => doc.number_type === "Group" && whatsapp_next.wa_groups.can_create(),

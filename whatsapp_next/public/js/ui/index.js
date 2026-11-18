@@ -30,6 +30,7 @@ import "./ChatThread/index.js";
 import "./ConversationDrawer/index.js";
 import "./QuickSend/index.js";
 import "./GroupCreate/index.js";
+import "./GroupMembers/index.js";
 import "./TemplateEditor/index.js";
 import "./TemplateWindow/index.js";
 import "./CommandEditor/index.js";
