@@ -321,6 +321,14 @@ def change_group_members(
 			keys.append(key)
 	if not keys:
 		frappe.throw(_("Choose at least one member"), WAValidationError)
+	if action == "approve" and len(keys) > MAX_ADDS_AT_ONCE:
+		# approving requests adds people to the group (platform review, 2026-11-18)
+		frappe.throw(
+			_("Add at most {0} numbers at a time: WhatsApp bans numbers that add many people at once.").format(
+				MAX_ADDS_AT_ONCE
+			),
+			WAValidationError,
+		)
 	device, device_row = _group_device(row, device)
 	allowed = [k for k in keys if chat_in("send_only_to", k)]
 	done = (
