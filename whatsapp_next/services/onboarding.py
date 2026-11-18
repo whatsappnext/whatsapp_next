@@ -312,6 +312,11 @@ def signup_prefill(user: str | None = None) -> dict[str, str]:
 			(frappe.db.get_value("Country", company.country, "code") or "").upper() if company.country else ""
 		)
 		out["phone"] = company_contact_mobile(company.name, out["country"] or None) or ""
+	# the field opens on the country the user is in, read from their network (owner, 2026-11-18);
+	# the company's country only when the network cannot tell
+	from whatsapp_next.services import visitor_country
+
+	out["country"] = visitor_country.visitor_country() or out.get("country") or ""
 	if user not in ("Administrator", "Guest"):
 		person = frappe.db.get_value("User", user, ["full_name", "email"], as_dict=True) or {}
 		out["person"] = (person.get("full_name") or "").strip()

@@ -355,6 +355,24 @@ class TestApiOnboardingPlatformFlow(IntegrationTestCase):
 		finally:
 			contact.delete(ignore_permissions=True)
 
+	def test_the_mobile_field_starts_on_the_country_the_user_is_in(self):
+		"""Owner 2026-11-18: the country comes from the user's network first, the company's after."""
+		from unittest.mock import patch
+
+		from whatsapp_next.services import visitor_country
+
+		with patch.object(visitor_country, "visitor_country", return_value="SA"):
+			self.assertEqual(svc.signup_prefill("Administrator").get("country"), "SA")
+		with patch.object(visitor_country, "visitor_country", return_value=None):
+			out = svc.signup_prefill("Administrator")
+		company = frappe.defaults.get_global_default("company")
+		code = (
+			frappe.db.get_value("Country", frappe.db.get_value("Company", company, "country"), "code")
+			if frappe.db.exists("DocType", "Company") and company and frappe.db.exists("Company", company)
+			else None
+		)
+		self.assertEqual(out.get("country"), (code or "").upper() or None)
+
 	def test_signup_without_an_email(self):
 		"""The email is optional: the platform gives the account a placeholder, and it signs in by
 		mobile number or username."""
