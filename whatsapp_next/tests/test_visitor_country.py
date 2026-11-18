@@ -59,3 +59,17 @@ class TestVisitorCountry(IntegrationTestCase):
 		):
 			self.assertFalse(visitor_country.refresh_country_database())
 		fetched.assert_not_called()
+
+	def test_the_page_starts_on_the_users_country(self):
+		"""Owner 2026-11-19: the field showed the site's country first and switched a moment later,
+		when the server's answer came: the page's own start data carries the network's country."""
+		from whatsapp_next.boot import boot_session
+
+		bootinfo = frappe._dict()
+		with patch.object(visitor_country, "visitor_country", return_value="SA"):
+			boot_session(bootinfo)
+		self.assertEqual(bootinfo.whatsapp_next.region, "SA")
+		bootinfo = frappe._dict()
+		with patch.object(visitor_country, "visitor_country", return_value=None):
+			boot_session(bootinfo)
+		self.assertEqual(bootinfo.whatsapp_next.region, phone.default_region())
