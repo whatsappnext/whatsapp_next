@@ -103,6 +103,16 @@ class TestApiCommon(IntegrationTestCase):
 		self.assertIsInstance(exists, wex.WAAccountExistsError)
 		self.assertIsInstance(exists, wex.WAValidationError)
 
+	def test_a_platform_fault_with_no_words_is_said_plainly(self):
+		"""Owner 2026-11-18: sign-up showed «HTTP 500» when the platform failed without a message."""
+		mapped = map_provider_error(pex.TransientError("HTTP 500", http_status=500))
+		self.assertIsInstance(mapped, wex.WAProviderUnavailableError)
+		self.assertNotIn("HTTP", str(mapped))
+		self.assertIn("try again", str(mapped).lower())
+		# the platform's own words, when it gives some, are kept
+		said = map_provider_error(pex.TransientError("The gateway is restarting", http_status=502))
+		self.assertEqual(str(said), "The gateway is restarting")
+
 	def test_error_text_reaches_the_browser(self):
 		"""A provider error, or an app exception raised without `frappe.throw`, must put its text
 		in `_server_messages`: the browser gets nothing else, and showed "Something went wrong"."""

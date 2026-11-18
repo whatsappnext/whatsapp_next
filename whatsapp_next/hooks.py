@@ -146,6 +146,8 @@ scheduler_events = {
 		"whatsapp_next.services.contact_profiles.refresh_due",
 		"whatsapp_next.services.notifications.trigger_daily",
 		"whatsapp_next.services.functions_catalog.check_updates",
+		# the country database the phone fields read the user's country from, when missing or old
+		"whatsapp_next.services.visitor_country.refresh_country_database",
 	],
 }
 
