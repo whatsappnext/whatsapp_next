@@ -4,19 +4,16 @@
 # Two sources, and the visitor's address never leaves this server:
 #   1. Cloudflare's `CF-IPCountry` header, when the site is served through Cloudflare
 # 	  (the platform's whatsappnext.app is).
-#   2. DB-IP's free country database ("IP to Country Lite", CC BY 4.0), kept in the site's private
-# 	  files and read here. A daily job fetches it when it is missing or older than a month; the
-# 	  download sends nothing about anyone.
+#   2. The "user-country" database of sapics/ip-location-db, kept in the site's private files and read
+# 	  here. It is public domain (PDDL: free use, no credit line to show) and rebuilt daily; a daily
+# 	  job fetches it when it is missing or a week old. The download sends nothing about anyone.
 # Neither knows: no country, and the field keeps the site's own default.
 
 from __future__ import annotations
 
-import gzip
 import ipaddress
 import os
-import shutil
 import time
-from datetime import date, timedelta
 
 import frappe
 import requests
@@ -24,9 +21,9 @@ import requests
 #: Cloudflare names the visitor's country here ("XX" unknown, "T1" Tor).
 COUNTRY_HEADER = "CF-IPCountry"
 UNKNOWN_HEADER_VALUES = {"XX", "T1"}
-#: DB-IP publishes a new free database each month, named by its month.
-COUNTRY_DATABASE_URL = "https://download.db-ip.com/free/dbip-country-lite-{month}.mmdb.gz"
-COUNTRY_DATABASE_MAX_AGE_DAYS = 35
+#: Rebuilt daily from the regional registries' and networks' own data; PDDL, no attribution asked.
+COUNTRY_DATABASE_URL = "https://github.com/sapics/ip-location-db/releases/download/latest/user-country.mmdb"
+COUNTRY_DATABASE_MAX_AGE_DAYS = 7
 COUNTRY_DATABASE_DOWNLOAD_SECONDS = 120
 
 # one open database per worker process, reopened when the file changes
@@ -65,7 +62,7 @@ def country_of_address(address: str | None) -> str | None:
 
 def country_database_path() -> str:
 	"""Where this site keeps the country database."""
-	return frappe.get_site_path("private", "geo", "dbip-country-lite.mmdb")
+	return frappe.get_site_path("private", "geo", "user-country.mmdb")
 
 
 def _open_country_database():
@@ -95,20 +92,14 @@ def _country_database_age_days() -> float | None:
 
 
 def refresh_country_database() -> bool:
-	"""Daily job: fetch this month's database (or last month's, early in a month) when the site
-	has none or its copy is older than a month. True when a new copy was saved."""
+	"""Daily job: fetch the database when the site has none or its copy is a week old. True when a
+	new copy was saved."""
 	age = _country_database_age_days()
 	if age is not None and age < COUNTRY_DATABASE_MAX_AGE_DAYS:
 		return False
-	first_of_month = date.today().replace(day=1)
-	months = [first_of_month, first_of_month - timedelta(days=1)]
-	for month in months:
-		if _download_country_database(COUNTRY_DATABASE_URL.format(month=month.strftime("%Y-%m"))):
-			return True
-	frappe.log_error(
-		title="Country database not downloaded",
-		message="DB-IP answered no database for this month or the last.",
-	)
+	if _download_country_database(COUNTRY_DATABASE_URL):
+		return True
+	frappe.log_error(title="Country database not downloaded", message=COUNTRY_DATABASE_URL)
 	return False
 
 
@@ -120,8 +111,9 @@ def _download_country_database(url: str) -> bool:
 		if response.status_code != 200:
 			return False
 		os.makedirs(os.path.dirname(path), exist_ok=True)
-		with gzip.GzipFile(fileobj=response.raw) as packed, open(partial, "wb") as target:
-			shutil.copyfileobj(packed, target)
+		with open(partial, "wb") as target:
+			for chunk in response.iter_content(chunk_size=1 << 20):
+				target.write(chunk)
 		import maxminddb
 
 		maxminddb.open_database(partial).close()  # a broken file never replaces a good one
