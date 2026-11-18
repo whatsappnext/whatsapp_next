@@ -11,6 +11,8 @@ const RESULT = {
 	done: () => __("Done"),
 	not_allowed: () => __("Not in «Send only to»"),
 	failed: () => __("WhatsApp refused it"),
+	// WhatsApp answered by a hidden id the group's list could not match (platform review, 2026-11-18)
+	unconfirmed: () => __("Not confirmed: check the group"),
 };
 
 whatsapp.ui.GroupMembers = class GroupMembers {
@@ -148,6 +150,7 @@ whatsapp.ui.GroupMembers = class GroupMembers {
 					const status = ((r && r.members) || [])[0];
 					const said = (RESULT[status && status.status] || RESULT.failed)();
 					if (status && status.status === "done") whatsapp.ui.Toast.success(said);
+					else if (status && status.status === "unconfirmed") whatsapp.ui.Toast.warning(said);
 					else whatsapp.ui.Toast.error(said);
 					this.after_change();
 				})

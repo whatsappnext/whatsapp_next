@@ -25,7 +25,7 @@ Options: `group`, `name?`, `device?`, `can_change?`, `on_change?()`.
 API keys: `wa_groups.get_members` → `{jid, name, device, device_is_admin, members[], requests[]}`
 (each `{phone_e164, jid, display_name, contact, is_admin, is_super_admin, is_this_device}`),
 `wa_groups.change_members` (`action`: `remove`, `make_admin`, `remove_admin`, `approve`, `reject`)
-→ `{members[{phone, status: done|failed|not_allowed}]}`, `devices.list_devices`.
+→ `{members[{phone, status: done|failed|unconfirmed|not_allowed}]}`, `devices.list_devices`.
 
 ## Live use
 
