@@ -229,6 +229,19 @@ class TestWaGroups(IntegrationTestCase):
 				wa_groups.add_group_members(group, many)
 		self.assertFalse([c for c in self.provider.calls if c[0] == "add"], "nothing was asked")
 
+	def test_approving_join_requests_takes_at_most_fifty(self):
+		"""Platform review 2026-11-18: approving requests adds people to the group, so it is capped like
+		adding; removing keeps the group's own limit."""
+		group = self._create()["jid"]
+		many = [f"+9677{n:08d}" for n in range(51)]
+		with patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider):
+			with self.assertRaises(WAValidationError) as caught:
+				wa_groups.change_group_members(group, "approve", many)
+			self.assertIn("50", str(caught.exception))
+			self.assertFalse([c for c in self.provider.calls if c[0] == "change"], "nothing was asked")
+			removed = wa_groups.change_group_members(group, "remove", many)
+		self.assertEqual(len(removed["members"]), 51, "removing is not capped at 50")
+
 	def test_a_new_group_takes_at_most_fifty_members(self):
 		"""Platform review 2026-11-18: a new group's members are added at once too."""
 		many = [f"+9677{n:08d}" for n in range(51)]
