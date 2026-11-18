@@ -13,7 +13,7 @@
 
 | الطبقة | ما هي | أين |
 |---|---|---|
-| **سكربت الدالة** | `Server Script` من نوع API، اسم الـ API Method فيه يبدأ بـ `wa_fn_`، مفعّل، وفي أعلاه ترويسة `WA-FUNCTION` تصف المدخلات والرسائل | سجلات `Server Script` على الموقع (نسخها في المستودع: `scripts/functions/wa_fn_*.py`) |
+| **سكربت الدالة** | `Server Script` من نوع API، اسم الـ API Method فيه يبدأ بـ `wa_fn_`، مفعّل، وفي أعلاه ترويسة `WA-FUNCTION` تصف المدخلات والرسائل | سجلات `Server Script` على الموقع، تأتي من مركز المنصة |
 | **الدالة المثبّتة** `WhatsApp Function` | ربط بالسكربت، ونسخة من الترويسة كما ثُبّتت، وقيم الموقع لمدخلاتها | DocType |
 | **الأمر** `WhatsApp Command` | الكلمة التي يكتبها المرسل، وتربطه بدالة مع قواعد الوصول وتخصيص المدخلات والنصوص | DocType |
 
@@ -224,26 +224,10 @@ frappe.flags.wa_result = {
 - تجنّب `import`، واستخدم ما يتيحه `frappe` و `frappe.utils` داخل البيئة.
 - السكربت يعمل باسم مستخدم الخدمة، فما يقرأه محدود بصلاحياته.
 
-### 2.8 نسخ السكربتات في المستودع
+### 2.8 من أين تأتي الدوال والأوامر
 
-`scripts/functions/wa_fn_*.py` هي نسخة المستودع من سكربتات الدوال. على الموقع، سجلات `Server Script` هي المرجع.
-
-- `scripts/setup_functions.py` ينشئ أو يحدّث سجل `Server Script` لكل ملف (الاسم = اسم الملف، API، مفعّل،
-  Allow Guest مطفأ). تشغيله مرة ثانية لا يغيّر شيئاً:
-  ```bash
-  cd /home/snd/frappe-bench
-  echo 'ns = {}; exec(open("/home/snd/frappe-bench/apps/whatsapp_next/scripts/setup_functions.py").read(), ns); ns["run"]()' \
-      | bench --site whatsapp.dev.sanad.digital console
-  ```
-  `ns["run"](["wa_fn_ping"])` يحدّه بالأسماء المذكورة.
-- `scripts/setup_commands.py` يثبّت الدوال من سكربتاتها أو يحدّثها، ثم يبني الأوامر الثمانية (القسم 3.2)
-  عبر `services.commands.save` ويشغّلها. لمواقع التطوير فقط:
-  ```bash
-  cd /home/snd/frappe-bench
-  cp apps/whatsapp_next/scripts/setup_commands.py apps/whatsapp_next/whatsapp_next/_setup_cmds.py
-  bench --site whatsapp.dev.sanad.digital execute whatsapp_next._setup_cmds.run --kwargs '{"company": "SANAD Digital (Demo)"}'
-  rm apps/whatsapp_next/whatsapp_next/_setup_cmds.py
-  ```
+الدوال والأوامر الجاهزة تأتي من مركز المنصة (WhatsApp Hub)، ويثبّتها الموقع من «مركز الدوال». المستودع لا يحمل
+نسخاً منها ولا سكربتات لإنشائها (المالك، 2026-11-18). على الموقع، سجلات `Server Script` هي المرجع.
 
 ---
 
@@ -287,7 +271,7 @@ frappe.flags.wa_result = {
 | صندوق | الصندوق, cash | cash_bank_balances | `account_type = cash` | «فريق المحاسبة» |
 | بنك | البنوك, bank | cash_bank_balances | `account_type = bank` | «فريق المحاسبة» |
 
-يعيد `scripts/setup_commands.py` بناء هذه المجموعة (القسم 2.8)، ويمكن تشغيله أكثر من مرة دون آثار جانبية.
+هذه المجموعة تأتي من مركز المنصة (القسم 2.8).
 
 ### 3.3 الإعدادات العامة (`WhatsApp Settings` → تبويب Commands)
 
@@ -441,6 +425,4 @@ whatsapp_next/services/command_menu.py        ← القائمة الرئيسي�
 whatsapp_next/services/commands.py            ← حفظ الأوامر والمحرر والمعاينة
 whatsapp_next/services/inbound.py             ← should_route + enqueue
 whatsapp_next/api/v1/{commands,functions}.py
-scripts/functions/wa_fn_*.py                  ← نسخ سكربتات الدوال
-scripts/setup_functions.py, scripts/setup_commands.py
 ```

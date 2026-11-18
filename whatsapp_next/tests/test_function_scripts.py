@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import json
-import os
 from unittest.mock import patch
 
 import frappe
@@ -603,25 +602,3 @@ class TestFunctionScripts(IntegrationTestCase):
 		# a switched-off reply is still checked: an undeclared one fails whatever is switched off
 		with self.assertRaises(ValueError):
 			fh.validate_messages(spec, [*messages, {"reply": "nope", "text": "x"}], disabled=["statement"])
-
-	# the repo's own function scripts -----------------------------------------------------------------
-
-	def test_the_shipped_scripts_are_valid_functions(self):
-		folder = os.path.realpath(frappe.get_app_path("whatsapp_next", "..", "scripts", "functions"))
-		files = sorted(f for f in os.listdir(folder) if f.startswith(fh.API_PREFIX) and f.endswith(".py"))
-		self.assertTrue(files)
-		keys = []
-		for file in files:
-			with self.subTest(script=file):
-				with open(os.path.join(folder, file), encoding="utf-8") as fp:
-					script = fp.read()
-				spec = fh.parse_function_header(script)
-				self.assertTrue(fh.guard_present(script), file)
-				self.assertTrue(spec["replies"], file)
-				# the party is the sender's, never a value the command or the text sets (a staff
-				# summary may let the command pick the party *type*, never a party)
-				for p in spec["params"]:
-					if p["name"] == "party":
-						self.assertEqual(p["source"], "sender", f"{file}: {p['name']}")
-				keys.append(spec["function"])
-		self.assertEqual(len(keys), len(set(keys)), keys)

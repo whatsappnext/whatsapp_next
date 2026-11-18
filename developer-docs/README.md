@@ -54,7 +54,6 @@ What it does:
 | [architecture.md](architecture.md) | The layers, component and sequence diagrams, DocTypes, read layer, E.164, Numbers materialisation, queue states, realtime, scheduler, API versioning |
 | [install-and-configure.md](install-and-configure.md) | Installing, what the install seeds, the onboarding wizard, every WhatsApp Settings field, site config keys, workers and scheduler |
 | [ready-made-content.md](ready-made-content.md) | Templates, notifications, alerts, commands and functions come from the platform's hub, not with the app |
-| [test-lab.md](test-lab.md) | The Test Lab page: testing every part of the app with real messages |
 | [add-a-provider.md](add-a-provider.md) | Writing and registering a new `BaseProvider` |
 | [api/README.md](api/README.md) | API conventions: `api_endpoint`, roles, errors, paging, versioning |
 | [api/settings.md](api/settings.md) | Settings, connection test, webhook registration, usage, audit log |
@@ -65,7 +64,6 @@ What it does:
 | [api/messages.md](api/messages.md) | Outbound and inbound messages, conversation, resend and cancel |
 | [api/bulk-send.md](api/bulk-send.md) | The bulk-send window |
 | [api/simulator.md](api/simulator.md) | The WhatsApp Simulator |
-| [api/testlab.md](api/testlab.md) | The Test Lab: health checks and real test runs |
 | [api/queue.md](api/queue.md) | Queue summary, pause, resume, delete, retry, rate |
 | [api/phone.md](api/phone.md) | Phone normalisation and the country catalogue |
 | [api/numbers.md](api/numbers.md) | Materialised WhatsApp Numbers |
@@ -101,7 +99,7 @@ whatsapp_next/                      # the app repo (apps/whatsapp_next)
 │   ├── api/_common.py, api/v1/     # whitelisted endpoints, one module per area
 │   ├── webhooks/v1/receiver.py     # the only guest endpoint; verify.py, idempotency.py, handlers.py
 │   ├── whatsapp_next/doctype/      # 26 DocTypes (module "WhatsApp Next")
-│   ├── whatsapp_next/page/         # wa_home, wa_onboarding, wa_devices, wa_contacts, wa_functions_center, wa_simulator, wa_test_lab, wa_settings
+│   ├── whatsapp_next/page/         # wa_home, wa_onboarding, wa_devices, wa_contacts, wa_functions_center, wa_simulator, wa_settings
 │   ├── public/js/ui/               # portable kit (whatsapp.ui), never imports whatsapp_next
 │   ├── public/js/{screens,form,listview}/  # app-specific screens, form and list scripts
 │   ├── public/scss/_tokens.scss    # the product palette (--whatsapp-*)
@@ -112,7 +110,7 @@ whatsapp_next/                      # the app repo (apps/whatsapp_next)
 │   └── tests/                      # the app test suite
 ├── plan/                           # design plan; decisions.md has the "why" (D-###)
 ├── docs/                           # read-only HTML design prototype
-├── scripts/                        # demo seeds, browser smoke checks; functions/wa_fn_*.py (repo copies of
-│                                   # the function Server Scripts), setup_functions.py, setup_commands.py
+├── scripts/                        # demo seeds, browser smoke checks (functions and commands come
+│                                   # from the platform's hub, not from this repo)
 └── developer-docs/                 # this documentation
 ```
