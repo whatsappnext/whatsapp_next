@@ -1,8 +1,10 @@
 # Module role: WhatsApp Notification Alert runs (D-016, backend-plan §11): due-alert selection
 # (cron `*/15`), report execution through `frappe.desk.query_report.run` with static + dynamic
 # filters, HTML → PDF/PNG attachment, body from Template or inline message, recipients expanded
-# from User / Role / Phone / Report Column, one outbound per recipient at priority 3. Never
-# blocks: every failure lands in `last_error` and an Error Log without report rows.
+# from User / Role / Phone / Report Column, one outbound per recipient at priority 3. A User or
+# Role recipient's report is run with that user's permissions (owner, 2026-11-18), a number's or a
+# report column's with the alert owner's. Never blocks: every failure lands in `last_error` and an
+# Error Log without report rows.
 
 from __future__ import annotations
 
@@ -40,6 +42,7 @@ class Recipient:
 	contact: str | None = None
 	source: str = "Phone"
 	column_value: Any = None  # for Report Column recipients: rows are filtered to this value
+	user: str | None = None  # a User / Role recipient: the report is run with this user's permissions
 
 
 @dataclass
@@ -190,18 +193,26 @@ def expand_recipients(
 	seen: set[tuple[str, Any]] = set()
 
 	def add_recipient(
-		phone: str | None, source: str, display_name: str | None = None, column_value: Any = None
+		phone: str | None,
+		source: str,
+		display_name: str | None = None,
+		column_value: Any = None,
+		user: str | None = None,
 	) -> None:
 		if not phone or (phone, column_value) in seen:
 			return
 		seen.add((phone, column_value))
 		out.append(
-			Recipient(phone_e164=phone, display_name=display_name, source=source, column_value=column_value)
+			Recipient(
+				phone_e164=phone, display_name=display_name, source=source, column_value=column_value, user=user
+			)
 		)
 
 	for row in alert.get("recipients") or []:
 		if row.recipient_type == "User" and row.user:
-			add_recipient(_user_phone(row.user), "User", frappe.db.get_value("User", row.user, "full_name"))
+			add_recipient(
+				_user_phone(row.user), "User", frappe.db.get_value("User", row.user, "full_name"), user=row.user
+			)
 		elif row.recipient_type == "Role" and row.role:
 			# one query for the role's enabled users (two lookups per user before)
 			members = frappe.get_all(
@@ -217,6 +228,7 @@ def expand_recipients(
 					normalize_phone_to_e164(user.mobile_no) or normalize_phone_to_e164(user.phone),
 					"Role",
 					user.full_name,
+					user=user.name,
 				)
 		elif row.recipient_type == "Phone":
 			add_recipient(row.phone_e164 or normalize_phone_to_e164(row.phone), "Phone")
@@ -332,6 +344,28 @@ def _run_report(alert, filters: dict[str, Any]) -> tuple[list[Any], list[Any]]:
 	return list(result.get("columns") or []), list(result.get("result") or [])
 
 
+def report_viewer(alert, recipient: Recipient | None = None) -> str:
+	"""Whose permissions a recipient's report is run with (owner, 2026-11-18: a user sees only the
+	rows they may see in the system): a User or Role recipient's own; a number or a report column,
+	who has no account, the alert's owner's — not the scheduler's, which sees everything."""
+	if recipient is not None and recipient.user:
+		return recipient.user
+	return alert.get("owner") or frappe.session.user
+
+
+def _run_report_as(user: str, alert, filters: dict[str, Any]) -> tuple[list[Any], list[Any]]:
+	"""`_run_report` with `user`'s permissions: `frappe.get_list` and the report's own checks read
+	the session user. The caller's session comes back whatever happens."""
+	caller = frappe.session.user
+	if user == caller:
+		return _run_report(alert, filters)
+	frappe.set_user(user)
+	try:
+		return _run_report(alert, filters)
+	finally:
+		frappe.set_user(caller)
+
+
 def run_alert(name: str, *, preview: bool = False) -> AlertRun:
 	"""Job (`long`, `wa-alert-{name}`): execute, render, attach, send. `preview=True` renders
 	everything and returns it without creating outbound rows or touching counters."""
@@ -372,13 +406,29 @@ def _render_and_send_alert(alert, *, preview: bool = False, test_phone: str | No
 		filters = resolve_filters(alert)
 		columns: list[Any] = []
 		rows: list[Any] = []
+		# each viewer's report, run once: the alert owner's (numbers, report columns), then each user's
+		reports: dict[str, tuple[list[Any], list[Any]] | Exception] = {}
+
+		def report_for(viewer: str):
+			if viewer not in reports:
+				try:
+					reports[viewer] = _run_report_as(viewer, alert, filters)
+				except frappe.PermissionError as exc:
+					reports[viewer] = exc
+			return reports[viewer]
+
+		owner = report_viewer(alert)
 		if alert.content_type == "Report":
-			columns, rows = _run_report(alert, filters)
+			owned = report_for(owner)
+			if isinstance(owned, Exception):
+				raise owned
+			columns, rows = owned
 		run.rows, run.columns = len(rows), len(columns)
 		recipients = expand_recipients(alert, rows, columns)
 		if test_phone:
 			first = recipients[0] if recipients else Recipient(phone_e164=test_phone)
-			recipients = [Recipient(phone_e164=test_phone, source="Test", column_value=first.column_value)]
+			# what the first recipient would receive: their rows, with their permissions
+			recipients = [Recipient(phone_e164=test_phone, source="Test", column_value=first.column_value, user=first.user)]
 			if first.source == "Report Column":
 				recipients[0].source = "Report Column"
 		column = next(
@@ -388,13 +438,28 @@ def _render_and_send_alert(alert, *, preview: bool = False, test_phone: str | No
 		source = frappe.db.get_value("WhatsApp Template", alert.template, "body") if alert.template else None
 		source = source or alert.message
 		for recipient in recipients:
-			r_rows = _rows_for(recipient, rows, columns, column)
+			r_columns, r_rows = columns, rows
+			if alert.content_type == "Report" and recipient.user:
+				theirs = report_for(report_viewer(alert, recipient))
+				if isinstance(theirs, Exception):
+					# no permission on the report: they get nothing, and the run says why
+					run.recipients.append(
+						{
+							"phone_e164": recipient.phone_e164,
+							"source": recipient.source,
+							"rows": 0,
+							"skipped": _("{0} may not see this report").format(recipient.display_name or recipient.user),
+						}
+					)
+					continue
+				r_columns, r_rows = theirs
+			r_rows = _rows_for(recipient, r_rows, r_columns, column)
 			template_context = templates.context_for(
 				None,
 				None,
 				{
 					"rows": r_rows,
-					"columns": report_render.normalize_columns(columns),
+					"columns": report_render.normalize_columns(r_columns),
 					"report": alert.report,
 					"alert": alert.as_dict(),
 					"filters": filters,
@@ -415,7 +480,7 @@ def _render_and_send_alert(alert, *, preview: bool = False, test_phone: str | No
 					"mime_type": "image/png" if png else "application/pdf",
 				}
 			elif alert.content_type == "Report" and alert.attachment_format in ("PDF", "PNG"):
-				content, file_name, mime, mtype = report_file(alert, columns, r_rows, filters)
+				content, file_name, mime, mtype = report_file(alert, r_columns, r_rows, filters)
 				if preview:
 					attach = {
 						"message_type": mtype,

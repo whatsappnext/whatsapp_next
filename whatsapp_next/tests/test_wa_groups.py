@@ -219,3 +219,46 @@ class TestWaGroups(IntegrationTestCase):
 		self.assertTrue(
 			frappe.db.exists("WhatsApp Audit Log", {"action": "WhatsApp Group Members Changed", "reference_name": group})
 		)
+
+	def test_at_most_fifty_numbers_are_added_at_a_time(self):
+		"""Platform review 2026-11-18: adding many people at once gets the sending number banned."""
+		group = self._create()["jid"]
+		many = [f"+9677{n:08d}" for n in range(51)]
+		with patch("whatsapp_next.providers.registry.get_provider", return_value=self.provider):
+			with self.assertRaises(WAValidationError):
+				wa_groups.add_group_members(group, many)
+		self.assertFalse([c for c in self.provider.calls if c[0] == "add"], "nothing was asked")
+
+	def test_a_new_group_takes_at_most_fifty_members(self):
+		"""Platform review 2026-11-18: a new group's members are added at once too."""
+		many = [f"+9677{n:08d}" for n in range(51)]
+		with self.assertRaises(WAValidationError) as caught:
+			self._create(members=many)
+		self.assertIn("50", str(caught.exception))
+		self.assertEqual(self.provider.calls, [], "nothing was asked of WhatsApp")
+
+
+class TestScreenCallsAreConfigured(IntegrationTestCase):
+	"""2026-11-18: «Add members» called `wa_groups.add_members`, which the screens' API map did not
+	list, so its button failed. Every two-part key a screen passes to `ui.call` is in that map."""
+
+	def test_every_short_api_key_a_screen_calls_is_configured(self):
+		import os
+		import re
+
+		root = frappe.get_app_path("whatsapp_next", "public", "js")
+		setup = open(os.path.join(root, "whatsapp_next_setup.js"), encoding="utf-8").read()
+		areas = dict(re.findall(r'^\t(\w+): \[([^\]]*)\]', setup, flags=re.M))
+		configured = {f"{area}.{fn}" for area, fns in areas.items() for fn in re.findall(r'"(\w+)"', fns)}
+		missing = set()
+		for folder, _dirs, files in os.walk(root):
+			if "dist" in folder:
+				continue
+			for name in files:
+				if not name.endswith(".js"):
+					continue
+				text = open(os.path.join(folder, name), encoding="utf-8").read()
+				for key in re.findall(r'\.call\(\s*"(\w+\.\w+)"', text):
+					if key not in configured:
+						missing.add(f"{key} ({name})")
+		self.assertEqual(sorted(missing), [])

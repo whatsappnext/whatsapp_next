@@ -117,9 +117,9 @@ vCard, and per-contact permissions.
 </td>
 <td valign="top">
 <img src=".github/readme/icons/flask-conical.svg" width="40" alt=""><br>
-<b>Simulator and Test Lab</b><br>
-Try a conversation without a phone, then check every part of the setup with real messages to
-numbers you choose.
+<b>Simulator</b><br>
+Try a conversation without a phone: an incoming message, a command and its reply, before a
+customer sends one.
 </td>
 </tr>
 <tr>
@@ -253,7 +253,6 @@ refreshes the font cache. It needs `curl` and `fontconfig` and is safe to run ag
 | [API](developer-docs/api/README.md) | Every whitelisted endpoint, by area |
 | [Add a provider](developer-docs/add-a-provider.md) | Writing and registering a new provider |
 | [Permissions](developer-docs/permissions.md) | Roles and what each one can do |
-| [Test Lab](developer-docs/test-lab.md) | Testing the whole setup with real messages |
 | [Troubleshooting](developer-docs/troubleshooting.md) | Symptom, cause, fix |
 
 ## Development

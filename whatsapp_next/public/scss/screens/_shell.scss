@@ -16,7 +16,7 @@
 // Desk lists this product owns ask for the same gutter by the route Desk names their page after.
 
 // Every screen of this product, by the id Desk gives its page container (`#page-<route>`).
-$wa-pages: "#page-wa-home, #page-wa-devices, #page-wa-settings, #page-wa-onboarding, #page-wa-simulator, #page-wa-test-lab";
+$wa-pages: "#page-wa-home, #page-wa-devices, #page-wa-settings, #page-wa-onboarding, #page-wa-simulator";
 // The Pages that are a list of rows (owner, 2026-10-26: "the header exactly Frappe's, the table exactly
 // a Desk list's — no difference in size, format or colour"): they wear Desk's strip, the lists' gutter
 // and Desk's palette, exactly like the product's Desk lists below, and none of the screens' own shell.
@@ -98,7 +98,7 @@ $wa-list-pages: "#page-wa-contacts, #page-wa-functions-center";
 // it `<body>` and `<html>` — Desk paints both white, and they showed as white strips beside and
 // under a screen whose container stopped short (owner, 2026-10-07). The route Desk writes on
 // `<body>` is the page's name, so these reach this product's screens and nothing else.
-$whatsapp-page-routes: wa-home, wa-devices, wa-onboarding, wa-settings, wa-simulator, wa-test-lab;
+$whatsapp-page-routes: wa-home, wa-devices, wa-onboarding, wa-settings, wa-simulator;
 
 @each $route in $whatsapp-page-routes {
 	html:has(body[data-route="#{$route}"]),

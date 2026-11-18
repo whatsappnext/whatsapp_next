@@ -16,6 +16,7 @@ const STATUS = {
 	not_on_whatsapp: { label: () => __("Not on WhatsApp"), colour: "gray" },
 	already_member: { label: () => __("Already a member"), colour: "blue" },
 	not_allowed: { label: () => __("Not in «Send only to»"), colour: "gray" },
+	unconfirmed: { label: () => __("Not confirmed: check the group"), colour: "orange" },
 	failed: { label: () => __("Not added"), colour: "red" },
 };
 

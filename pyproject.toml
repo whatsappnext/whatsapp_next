@@ -84,7 +84,6 @@ typing-modules = ["frappe.types.DF"]
 
 [tool.ruff.lint.per-file-ignores]
 # Server Script bodies: Frappe runs them with `frappe` and `_` already in scope
-"scripts/functions/*.py" = ["F821", "RUF005"]
 
 [tool.ruff.format]
 quote-style = "double"

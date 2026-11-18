@@ -47,12 +47,15 @@ class TestContactProfiles(IntegrationTestCase):
 	def setUp(self):
 		if not frappe.db.get_value("WhatsApp Device", {"status": "Connected", "disabled": 0}, "name"):
 			ensure_device()
-		tag = frappe.generate_hash(length=4).translate(str.maketrans("abcdef", "123456"))
-		self.key = f"+96773300{tag}"
+		# one of the owner's numbers, never a made-up one (owner, 2026-11-12); the contact and the
+		# number are removed after each test (2026-11-18: 107 «Profile ####» contacts were left)
+		self.key = "+967775675566"
+		self._remove_test_rows()
+		self.addCleanup(self._remove_test_rows)
 		self.contact = frappe.get_doc(
 			{
 				"doctype": "Contact",
-				"first_name": f"Profile {tag}",
+				"first_name": "ProfileTest Contact",
 				"phone_nos": [{"phone": self.key, "is_primary_mobile_no": 1}],
 			}
 		).insert(ignore_permissions=True)
@@ -65,6 +68,12 @@ class TestContactProfiles(IntegrationTestCase):
 				"contact": self.contact.name,
 			}
 		).insert(ignore_permissions=True)
+
+	def _remove_test_rows(self):
+		frappe.db.delete("WhatsApp Number", {"name": self.key})
+		for name in frappe.get_all("Contact", filters={"first_name": "ProfileTest Contact"}, pluck="name"):
+			frappe.delete_doc("Contact", name, ignore_permissions=True, force=True)
+		frappe.db.commit()  # nosemgrep - the refresh commits what it writes; so must its removal
 
 	def _refresh(self, profile, **kw):
 		provider = Provider(profile)
