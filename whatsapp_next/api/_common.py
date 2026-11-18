@@ -14,6 +14,8 @@ import typing
 from collections.abc import Callable, Iterable
 from datetime import date, datetime
 
+import re
+
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, get_datetime, getdate
@@ -290,6 +292,12 @@ def map_provider_error(exc: pex.ProviderError) -> Exception:
 			)
 		return WAProviderAuthError(message)
 	if isinstance(exc, pex.TransientError | pex.DeviceOfflineError):
+		if re.fullmatch(r"HTTP \d+", message.strip()):
+			# the platform failed without a word ("HTTP 500"): a code tells the user nothing
+			# (owner, 2026-11-18)
+			message = _(
+				"The WhatsApp platform could not complete this request because of a fault on its side. Please try again in a few minutes; if it keeps happening, contact support."
+			)
 		return WAProviderUnavailableError(message)
 	if isinstance(exc, pex.NotSupportedError):
 		return WANotSupportedError(message)
