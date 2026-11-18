@@ -111,17 +111,19 @@ whatsapp.ui.GroupMembers = class GroupMembers {
 			${m.is_super_admin ? whatsapp.ui.StatusBadge.html({ label: __("Owner"), colour: "blue" }) : m.is_admin ? whatsapp.ui.StatusBadge.html({ label: __("Admin"), colour: "green" }) : ""}
 			<span class="whatsapp-kit-group-members__acts">${actions}</span>
 		</li>`;
-		const button = (act, label, danger) =>
-			`<button type="button" class="btn btn-xs btn-default${danger ? " whatsapp-kit-group-members__danger" : ""}" data-act="${act}">${escape_html(label)}</button>`;
+		// each button names its member for a screen reader: «Remove» alone says nothing of whom
+		const button = (act, label, who, danger) =>
+			`<button type="button" class="btn btn-xs btn-default${danger ? " whatsapp-kit-group-members__danger" : ""}" data-act="${act}" aria-label="${escape_html(`${label}: ${who}`)}">${escape_html(label)}</button>`;
+		const who = (m) => m.display_name || (whatsapp.ui.phone ? whatsapp.ui.phone(m.phone_e164) : m.phone_e164) || "";
 		const member_actions = (m) => {
 			if (!change || !m.phone_e164 || m.is_super_admin || m.is_this_device) return "";
-			return (m.is_admin ? button("remove_admin", __("Remove admin")) : button("make_admin", __("Make admin"))) + button("remove", __("Remove"), true);
+			return (m.is_admin ? button("remove_admin", __("Remove admin"), who(m)) : button("make_admin", __("Make admin"), who(m))) + button("remove", __("Remove"), who(m), true);
 		};
 		const members = `<ul class="whatsapp-kit-group-create__list">${d.members.map((m) => row(m, member_actions(m))).join("")}</ul>`;
 		const requests = d.requests.length
 			? `<h5 class="whatsapp-kit-group-members__title">${escape_html(__("Requests to join"))}</h5>
 				<ul class="whatsapp-kit-group-create__list">${d.requests
-					.map((m) => row(m, change && m.phone_e164 ? button("approve", __("Approve")) + button("reject", __("Reject"), true) : ""))
+					.map((m) => row(m, change && m.phone_e164 ? button("approve", __("Approve"), who(m)) + button("reject", __("Reject"), who(m), true) : ""))
 					.join("")}</ul>`
 			: "";
 		this.$body.html(`${note}<div class="whatsapp-kit-group-create__members">${head}${members}${requests}</div>`);

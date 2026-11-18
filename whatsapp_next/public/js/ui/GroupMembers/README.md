@@ -29,5 +29,16 @@ API keys: `wa_groups.get_members` → `{jid, name, device, device_is_admin, memb
 
 ## Live use
 
-WhatsApp Numbers: «Members» on a group's row and in its conversation panel
-(`whatsapp_next.wa_groups.manage_members`).
+WhatsApp Numbers: «Members» on a group's row and in its conversation panel.
+
+## Design gate
+- A Frappe dialog (`frappe.ui.Dialog`): focus trap, Escape and the device field's label come from
+  Frappe.
+- Every action button in a row carries an `aria-label` naming its member («Remove: Ali»); the
+  visible word alone («Remove») said nothing of whom to a screen reader (fixed in this review).
+- The owner and the admins are written badges (StatusBadge with its label), never colour alone.
+- Removing a member and rejecting a request ask first; every change ends in a toast saying what
+  WhatsApp did (done, refused, or not in «Send only to»).
+- Loading and error are states of their own; a device that is no admin of the group says so and
+  shows no buttons, rather than buttons that fail.
+- On a phone a row wraps: the buttons go under the name and number, at full width.
