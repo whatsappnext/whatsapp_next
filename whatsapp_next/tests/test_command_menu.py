@@ -148,8 +148,11 @@ class TestCommandMenu(IntegrationTestCase):
 		self.assertTrue(inbound.should_route("Text", "القائمة", True, enabled=True))
 		self.assertTrue(inbound.should_route("Interactive Reply", "any title", True, enabled=True))
 		self.assertFalse(inbound.should_route("Text", "القائمة وين", True, enabled=True))
+		# the site's commands decide who may use what; this test is about the group, not access
+		allow_all = patch.object(command_router, "allowed_for", return_value=lambda _name: True)
 		for body, selected in (("القائمة", None), ("القائمة الرئيسية", command_menu.MENU_ID)):
-			res, sent = self._route_inbound_and_capture_replies(body, selected, group=group)
+			with allow_all:
+				res, sent = self._route_inbound_and_capture_replies(body, selected, group=group)
 			self.assertEqual(res.status, "Executed")
 			self.assertEqual([r["message_type"] for r in sent], ["List"])
 

@@ -112,7 +112,7 @@ whatsapp_next/                      # the app repo (apps/whatsapp_next)
 │   └── tests/                      # the app test suite
 ├── plan/                           # design plan; decisions.md has the "why" (D-###)
 ├── docs/                           # read-only HTML design prototype
-├── scripts/                        # demo seeds, browser smoke checks; functions/wa_fn_*.py (repo copies of
-│                                   # the function Server Scripts), setup_functions.py, setup_commands.py
+├── scripts/                        # demo seeds, browser smoke checks (functions and commands come
+│                                   # from the platform's hub, not from this repo)
 └── developer-docs/                 # this documentation
 ```
