@@ -20,6 +20,14 @@ COLUMNS = [{"label": "A", "fieldname": "a", "fieldtype": "Data", "options": None
 ROWS = [{"a": "x"}, {"a": "y"}]
 
 
+def _chrome_available() -> bool:
+	"""Frappe 16 draws PDFs with Chrome too; Frappe 15's only engine is wkhtmltopdf."""
+	from frappe.utils import pdf
+
+	field = frappe.get_meta("Print Format").get_field("pdf_generator")
+	return bool(field and "chrome" in (field.options or "").split("\n") and hasattr(pdf, "get_chrome_pdf"))
+
+
 class TestReportPdfEngine(IntegrationTestCase):
 	def _format(self, name, engine, **values):
 		if frappe.db.exists("Print Format", name):
@@ -51,8 +59,8 @@ class TestReportPdfEngine(IntegrationTestCase):
 		return report_file.render_report_with_print_format(print_format, REPORT, COLUMNS, ROWS, {}, None)
 
 	def test_a_chrome_format_is_drawn_by_chrome(self):
-		if not frappe.get_meta("Print Format").has_field("pdf_generator"):
-			self.skipTest("Frappe 15 has no PDF engine choice")
+		if not _chrome_available():
+			self.skipTest("this Frappe has no Chrome PDF engine (Frappe 15)")
 		name = self._format("PdfEngine Chrome", "chrome")
 		with (
 			patch("frappe.utils.pdf.get_chrome_pdf", return_value=b"%PDF-chrome") as chrome,
@@ -65,8 +73,8 @@ class TestReportPdfEngine(IntegrationTestCase):
 		wkhtmltopdf.assert_not_called()
 
 	def test_chrome_failing_falls_back_to_wkhtmltopdf_and_is_logged(self):
-		if not frappe.get_meta("Print Format").has_field("pdf_generator"):
-			self.skipTest("Frappe 15 has no PDF engine choice")
+		if not _chrome_available():
+			self.skipTest("this Frappe has no Chrome PDF engine (Frappe 15)")
 		name = self._format("PdfEngine Chrome Fails", "chrome", margin_top=20, margin_left=8)
 		before = frappe.db.count("Error Log", {"method": ("like", "WhatsApp PDF%")})
 		with (
@@ -84,7 +92,7 @@ class TestReportPdfEngine(IntegrationTestCase):
 	def test_a_wkhtmltopdf_format_takes_its_page_size_and_margins(self):
 		name = self._format("PdfEngine Wk", "wkhtmltopdf", margin_bottom=12)
 		with (
-			patch("frappe.utils.pdf.get_chrome_pdf") as chrome,
+			patch("frappe.utils.pdf.get_chrome_pdf", create=True) as chrome,
 			patch("frappe.utils.pdf.get_pdf", return_value=b"%PDF") as wkhtmltopdf,
 		):
 			self._render(name)
@@ -94,7 +102,7 @@ class TestReportPdfEngine(IntegrationTestCase):
 
 	def test_replies_and_alerts_without_a_print_format_are_unchanged(self):
 		with (
-			patch("frappe.utils.pdf.get_chrome_pdf") as chrome,
+			patch("frappe.utils.pdf.get_chrome_pdf", create=True) as chrome,
 			patch("frappe.utils.pdf.get_pdf", return_value=b"%PDF") as wkhtmltopdf,
 		):
 			with patch.object(report_file, "run_report", return_value=(COLUMNS, ROWS)):
@@ -108,8 +116,8 @@ class TestReportPdfEngine(IntegrationTestCase):
 
 	def test_chrome_really_draws_the_page(self):
 		"""The bench's own Chrome, when it has one: the page comes out of Chrome (Skia), not Qt."""
-		if not frappe.get_meta("Print Format").has_field("pdf_generator"):
-			self.skipTest("Frappe 15 has no PDF engine choice")
+		if not _chrome_available():
+			self.skipTest("this Frappe has no Chrome PDF engine (Frappe 15)")
 		if not os.path.isdir(os.path.join(frappe.utils.get_bench_path(), "chromium")):
 			self.skipTest("no Chrome on this bench")
 		from pypdf import PdfReader
