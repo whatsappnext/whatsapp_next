@@ -126,3 +126,21 @@ class TestReportPdfEngine(IntegrationTestCase):
 		pdf = self._render(name)
 		producer = str(PdfReader(io.BytesIO(pdf)).metadata.get("/Producer") or "")
 		self.assertIn("Skia", producer, producer)
+
+	def test_the_format_is_drawn_on_desks_print_page(self):
+		"""topland «كشف», 2026-11-19: drawn without Frappe's print styles and container, a format made
+		for Desk's report Print lost its box sizing and the date ran into the next column."""
+		name = self._format("PdfEngine Page", "wkhtmltopdf")
+		with (
+			patch("frappe.utils.pdf.get_chrome_pdf", create=True),
+			patch("frappe.utils.pdf.get_pdf", return_value=b"%PDF") as wkhtmltopdf,
+		):
+			self._render(name)
+		page = wkhtmltopdf.call_args.args[0]
+		self.assertIn("print.bundle", page)
+		self.assertIn('<div class="print-format-gutter"><div class="print-format">', page)
+		self.assertLess(
+			page.index("print.bundle"),
+			page.index("@page { size: A5; }"),
+			"the format's own CSS comes after Frappe's",
+		)

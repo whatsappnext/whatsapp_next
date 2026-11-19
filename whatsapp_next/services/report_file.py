@@ -148,8 +148,28 @@ def render_report_with_print_format(
 		},
 	)
 	rtl = frappe.local.lang in ("ar", "fa", "he", "ur")
-	html = f"""<!doctype html><html dir="{"rtl" if rtl else "ltr"}"><head><meta charset="utf-8"><style>{pf.css or ""}</style></head><body>{body}</body></html>"""
+	html = report_print_page(body, pf.css, rtl)
 	return render_html_to_pdf(keep_latin_text_upright(html) if rtl else html, print_format, {"orientation": "Portrait"})
+
+
+def report_print_page(body: str, css: str | None, rtl: bool) -> str:
+	"""The page a report's print format is drawn on — the one Desk's report Print wraps it in
+	(`print_template.html`): Frappe's print styles (`print.bundle.css`, and the Print Settings
+	style), the format's own CSS after them, and the `print-format` container. Without them a
+	format made for that page lost its box sizing, and a column's text ran into the next one
+	(topland «كشف», 2026-11-19)."""
+	from frappe.utils.jinja_globals import bundled_asset
+	from frappe.www.printview import get_print_style
+
+	print_settings = frappe.get_cached_doc("Print Settings")
+	print_style = get_print_style(print_settings.print_style or "Redesign", for_legacy=True)
+	direction = "rtl" if rtl else "ltr"
+	return (
+		f'<!doctype html><html lang="{frappe.local.lang}" dir="{direction}"><head><meta charset="utf-8">'
+		f'<link type="text/css" rel="stylesheet" href="{bundled_asset("print.bundle.css")}">'
+		f"<style>{print_style}</style><style>{css or ''}</style></head>"
+		f'<body><div class="print-format-gutter"><div class="print-format">{body}</div></div></body></html>'
+	)
 
 
 def render_report_file(
