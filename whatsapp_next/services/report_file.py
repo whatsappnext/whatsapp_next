@@ -66,7 +66,7 @@ def _render_report_pdf(
 	letter_head: str | None = None,
 	company: str | None = None,
 ) -> bytes:
-	from frappe.utils.pdf import get_pdf
+	from whatsapp_next.services.html_to_pdf import render_html_to_pdf
 
 	from whatsapp_next.services.report_render import _letter_head_html, keep_latin_text_upright, letter_head_document
 
@@ -96,7 +96,7 @@ th,td{{border:1px solid #ccc;padding:3px 5px;text-align:{"right" if rtl else "le
 th{{background:#f2f2f2}}
 </style></head><body>{_letter_head_html(letter_head, letter_head_document(company, title))}<h1>{escape_html(_(title))}</h1>
 <table><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></body></html>"""
-	return get_pdf(html, {"orientation": "Landscape" if len(columns) > 6 else "Portrait"})
+	return render_html_to_pdf(html, None, {"orientation": "Landscape" if len(columns) > 6 else "Portrait"})
 
 
 def _render_report_xlsx(title: str, columns: list[dict[str, Any]], rows: list[Any]) -> bytes:
@@ -124,9 +124,9 @@ def render_report_with_print_format(
 ) -> bytes:
 	"""The report printed with one of its Jinja print formats. The template gets `data` (a list of
 	rows, each a dict by fieldname), `columns`, `filters`, `report_name`, `title`, `company`, and
-	`letter_head` (the chosen letter head, rendered); its CSS (`css`) goes into the page."""
-	from frappe.utils.pdf import get_pdf
-
+	`letter_head` (the chosen letter head, rendered); its CSS (`css`) goes into the page. The page is
+	drawn by the format's own PDF engine (`services/html_to_pdf`), as Desk prints it."""
+	from whatsapp_next.services.html_to_pdf import render_html_to_pdf
 	from whatsapp_next.services.report_render import _letter_head_html, keep_latin_text_upright, letter_head_document
 
 	pf = frappe.db.get_value("Print Format", print_format, ["html", "css", "report", "print_format_type"], as_dict=True)
@@ -148,8 +148,28 @@ def render_report_with_print_format(
 		},
 	)
 	rtl = frappe.local.lang in ("ar", "fa", "he", "ur")
-	html = f"""<!doctype html><html dir="{"rtl" if rtl else "ltr"}"><head><meta charset="utf-8"><style>{pf.css or ""}</style></head><body>{body}</body></html>"""
-	return get_pdf(keep_latin_text_upright(html) if rtl else html, {"orientation": "Portrait"})
+	html = report_print_page(body, pf.css, rtl)
+	return render_html_to_pdf(keep_latin_text_upright(html) if rtl else html, print_format, {"orientation": "Portrait"})
+
+
+def report_print_page(body: str, css: str | None, rtl: bool) -> str:
+	"""The page a report's print format is drawn on — the one Desk's report Print wraps it in
+	(`print_template.html`): Frappe's print styles (`print.bundle.css`, and the Print Settings
+	style), the format's own CSS after them, and the `print-format` container. Without them a
+	format made for that page lost its box sizing, and a column's text ran into the next one
+	(topland «كشف», 2026-11-19)."""
+	from frappe.utils.jinja_globals import bundled_asset
+	from frappe.www.printview import get_print_style
+
+	print_settings = frappe.get_cached_doc("Print Settings")
+	print_style = get_print_style(print_settings.print_style or "Redesign", for_legacy=True)
+	direction = "rtl" if rtl else "ltr"
+	return (
+		f'<!doctype html><html lang="{frappe.local.lang}" dir="{direction}"><head><meta charset="utf-8">'
+		f'<link type="text/css" rel="stylesheet" href="{bundled_asset("print.bundle.css")}">'
+		f"<style>{print_style}</style><style>{css or ''}</style></head>"
+		f'<body><div class="print-format-gutter"><div class="print-format">{body}</div></div></body></html>'
+	)
 
 
 def render_report_file(
