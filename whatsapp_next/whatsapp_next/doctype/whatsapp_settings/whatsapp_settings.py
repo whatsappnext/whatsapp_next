@@ -42,6 +42,9 @@ class WhatsAppSettings(Document):
 		self._validate_command_help_token()
 		self._validate_global_blacklist_group()
 		self._validate_picker_sources()
+		from whatsapp_next.services.number_behaviour import keep_mark_read_mode_on_the_list
+
+		keep_mark_read_mode_on_the_list(self)
 
 	def on_update(self) -> None:
 		"""Forget cached derivations of these settings (default region, settings snapshot)."""

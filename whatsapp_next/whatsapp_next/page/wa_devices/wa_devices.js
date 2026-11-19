@@ -620,6 +620,7 @@ frappe.provide("whatsapp_next.devices");
 				icon: row.disabled ? "es-line-success" : "es-line-slash",
 				handler: () => screen.set_disabled(row, !row.disabled),
 			});
+			items.push({ label: __("Number behaviour"), icon: "es-line-chat-alt", handler: () => screen.edit_number_behaviour(row) });
 			if (screen.history_allowed) {
 				items.push({ label: __("Import past conversations"), icon: "es-line-download", handler: () => screen.import_history(row) });
 			}
@@ -1089,6 +1090,33 @@ frappe.provide("whatsapp_next.devices");
 						ui.Toast.success(__("Importing the past conversations of {0}", [title]));
 						this.refresh();
 					})
+			);
+		}
+
+		/** Read receipts, «typing…» and the wait before a reply for this number: the device's own
+		 * fields, drawn from its meta, or «Same as Settings». */
+		edit_number_behaviour(row) {
+			const title = row.device_name || row.name;
+			const names = ["number_behaviour", "mark_read_mode", "typing_indicator", "typing_lasts_by_reply_length", "reply_delay_min_seconds", "reply_delay_max_seconds"];
+			return frappe.model.with_doctype("WhatsApp Device").then(() =>
+				ui.call("devices.get_number_behaviour", { device: row.name }).then((values) => {
+					const meta = frappe.get_meta("WhatsApp Device");
+					const fields = names
+						.map((n) => meta.fields.find((df) => df.fieldname === n))
+						.filter(Boolean)
+						.map((df) => Object.assign({}, df, { default: values[df.fieldname] ?? df.default }));
+					const dialog = new frappe.ui.Dialog({
+						title: __("Number behaviour of {0}", [title]),
+						fields,
+						primary_action_label: __("Save"),
+						primary_action: (data) =>
+							ui.call("devices.set_number_behaviour", Object.assign({ device: row.name }, data), { freeze: true }).then(() => {
+								dialog.hide();
+								ui.Toast.success(__("Saved for {0}", [title]));
+							}),
+					});
+					dialog.show();
+				})
 			);
 		}
 

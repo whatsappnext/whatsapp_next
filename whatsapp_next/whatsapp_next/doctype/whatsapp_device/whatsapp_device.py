@@ -29,6 +29,9 @@ class WhatsAppDevice(Document):
 		"""Normalize the phone pair and guard `status` against non-service writers."""
 		set_phone_pair(self, "phone", "phone_e164", required=False)
 		assert_status_writer(self, ("status",))
+		from whatsapp_next.services.number_behaviour import keep_mark_read_mode_on_the_list
+
+		keep_mark_read_mode_on_the_list(self)
 
 	def on_update(self) -> None:
 		"""Keep exactly one default device: this one wins when flagged, and Settings → Default

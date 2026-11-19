@@ -20,7 +20,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint, cstr, getdate, now_datetime, nowdate
+from frappe.utils import cint, cstr, get_datetime, getdate, now_datetime, nowdate
 
 from whatsapp_next.exceptions import WAStateConflictError, WAValidationError
 from whatsapp_next.services import command_menu, dispatch, function_runner
@@ -1107,6 +1107,26 @@ def _continue_session(session, inbound, inbound_name, result, settings, started)
 	)
 
 
+def _wait_before_reply(get: Callable, replies: list) -> None:
+	"""Wait before a reply the way the number is set to (`services/number_behaviour`): a reply in
+	the same second as the question is how a machine answers. The time the command already took
+	counts; «typing…» is shown again for the wait. Never in tests unless one asks."""
+	from whatsapp_next.services import number_behaviour, receipts
+
+	if frappe.flags.in_test and not frappe.flags.wa_wait_before_reply_in_test:
+		return
+	text = "\n".join(cstr((r or {}).get("body")) for r in replies or [] if isinstance(r, dict))
+	wait = number_behaviour.seconds_to_wait_before_reply(get("device"), text)
+	received_at = get("received_at") or get("creation")
+	if received_at:
+		wait -= max(0.0, (now_datetime() - get_datetime(received_at)).total_seconds())
+	if wait <= 0:
+		return
+	if get("name"):
+		receipts.send_typing_indicator(get("name"))
+	time.sleep(wait)
+
+
 def _deliver_route_replies(
 	result: RouteResult, inbound, dry_run: bool, create_simulated_rows: bool, *, command
 ) -> RouteResult:
@@ -1121,6 +1141,8 @@ def _deliver_route_replies(
 		# help / unknown-command replies use the inbound device only
 		command = frappe._dict(name=None)
 	get = inbound.get if hasattr(inbound, "get") else lambda k: getattr(inbound, k, None)
+	if not dry_run:
+		_wait_before_reply(get, result.replies)
 	try:
 		result.outbound = _send_replies(command, inbound, result.replies, is_simulated=dry_run)
 	except Exception as exc:

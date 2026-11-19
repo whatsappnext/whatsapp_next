@@ -35,7 +35,14 @@
   "history_started_at",
   "history_finished_at",
   "history_cursor",
-  "history_error"
+  "history_error",
+  "number_behaviour_tab",
+  "number_behaviour",
+  "mark_read_mode",
+  "typing_indicator",
+  "typing_lasts_by_reply_length",
+  "reply_delay_min_seconds",
+  "reply_delay_max_seconds"
  ],
  "fields": [
   {
@@ -242,6 +249,58 @@
    "fieldtype": "Small Text",
    "label": "Import error",
    "read_only": 1
+  },
+  {
+   "fieldname": "number_behaviour_tab",
+   "fieldtype": "Tab Break",
+   "label": "Number behaviour"
+  },
+  {
+   "default": "Same as Settings",
+   "description": "Read receipts, «typing…» and the wait before replying for this number.",
+   "fieldname": "number_behaviour",
+   "fieldtype": "Select",
+   "label": "Number behaviour",
+   "options": "Same as Settings\nOwn settings"
+  },
+  {
+   "default": "Do not mark as read",
+   "depends_on": "eval:doc.number_behaviour=='Own settings'",
+   "description": "Marked read, the sender sees the blue ticks and the message's notification leaves the company's phone. «When a command replies» reads the way a person does before answering.",
+   "fieldname": "mark_read_mode",
+   "fieldtype": "Select",
+   "label": "Mark received messages as read",
+   "options": "Do not mark as read\nWhen the chat is opened\nWhen a command replies\nEvery received message"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.number_behaviour=='Own settings'",
+   "fieldname": "typing_indicator",
+   "fieldtype": "Check",
+   "label": "Show «typing…» while a command runs"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.number_behaviour=='Own settings'",
+   "fieldname": "typing_lasts_by_reply_length",
+   "fieldtype": "Check",
+   "label": "Make «typing…» last as long as the reply takes to type"
+  },
+  {
+   "default": "2",
+   "depends_on": "eval:doc.number_behaviour=='Own settings'",
+   "fieldname": "reply_delay_min_seconds",
+   "fieldtype": "Int",
+   "label": "Wait before replying from (seconds)",
+   "non_negative": 1
+  },
+  {
+   "default": "5",
+   "depends_on": "eval:doc.number_behaviour=='Own settings'",
+   "fieldname": "reply_delay_max_seconds",
+   "fieldtype": "Int",
+   "label": "Wait before replying to (seconds)",
+   "non_negative": 1
   }
  ],
  "links": [
@@ -276,7 +335,7 @@
    "link_fieldname": "device"
   }
  ],
- "modified": "2026-10-27 21:14:16.181352",
+ "modified": "2026-11-19 05:31:59.402446",
  "modified_by": "Administrator",
  "module": "WhatsApp Next",
  "name": "WhatsApp Device",

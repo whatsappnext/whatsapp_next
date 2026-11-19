@@ -260,6 +260,30 @@ def get_conversation(
 	return {"rows": rows, "has_more": page.has_more, "next_cursor": page.next_cursor}
 
 
+@api_endpoint(roles=None, methods=("POST",))
+def mark_conversation_read(key: str, device: str | None = None) -> dict[str, Any]:
+	"""The chat with `key` was opened and its messages shown (the simulator, the conversation
+	drawer): its unread received messages are marked read when the number marks «When the chat is
+	opened» → `{marked}`. A failed receipt never fails the call. Same permission as reading the
+	conversation; a user limited to some devices marks only theirs."""
+	from whatsapp_next.services import receipts
+
+	if not (
+		frappe.has_permission("WhatsApp Log", "read")
+		and frappe.has_permission("WhatsApp Inbound Message", "read")
+	):
+		frappe.throw(_("Not permitted to read conversations"), WAPermissionError)
+	key = classify(key)[1] or key
+	allowed = permissions.allowed_devices()
+	if allowed is not None:
+		if device and device not in allowed:
+			frappe.throw(
+				_("Not permitted to read conversations of device {0}").format(device), WAPermissionError
+			)
+		device = device or allowed
+	return receipts.mark_conversation_read(key, device=device)
+
+
 @api_endpoint(roles=AGENT_UP)
 def resend(name: str) -> dict[str, Any]:
 	"""New outbound row from a terminal one (`source_type` copied, `attempts` 0), queued →

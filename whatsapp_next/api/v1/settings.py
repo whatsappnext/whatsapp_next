@@ -73,8 +73,14 @@ SECTIONS: dict[str, tuple[str, ...]] = {
 		"main_menu_text",
 		"main_menu_button",
 		"main_menu_words",
+	),
+	# what the people who write see from the number (owner, 2026-11-19)
+	"number_behaviour": (
 		"mark_read_mode",
 		"typing_indicator",
+		"typing_lasts_by_reply_length",
+		"reply_delay_min_seconds",
+		"reply_delay_max_seconds",
 	),
 	"policy": (
 		"default_device",
@@ -107,6 +113,7 @@ WRITABLE: dict[str, tuple[str, ...]] = {
 	"webhook": ("webhook_max_retries",),
 	"queue": ("max_attempts", "retry_backoff_seconds"),
 	"commands": SECTIONS["commands"],
+	"number_behaviour": SECTIONS["number_behaviour"],
 	"policy": SECTIONS["policy"],
 	"picker": ("picker_sources",),
 	"retention": SECTIONS["retention"][:5],
