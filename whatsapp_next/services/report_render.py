@@ -231,11 +231,12 @@ def _filter_value(value: Any) -> str:
 
 
 def report_pdf(html_text: str, alert=None) -> bytes:
-	"""PDF bytes via wkhtmltopdf (landscape when the alert asks or the table is wide)."""
-	from frappe.utils.pdf import get_pdf
+	"""PDF bytes via wkhtmltopdf (landscape when the table is wide), through the one HTML-to-PDF
+	path the report replies take (`services/html_to_pdf`): an alert has no print format."""
+	from whatsapp_next.services.html_to_pdf import render_html_to_pdf
 
 	options = {"orientation": "Landscape"} if html_text.count("<th") > 6 else None
-	return get_pdf(html_text, options=options)
+	return render_html_to_pdf(html_text, None, options)
 
 
 def _compact_png(data: bytes) -> bytes:
