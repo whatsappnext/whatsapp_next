@@ -65,10 +65,16 @@
   "main_menu_column",
   "main_menu_text",
   "main_menu_button",
+  "number_behaviour_tab",
   "receipts_section",
   "mark_read_mode",
   "receipts_column",
   "typing_indicator",
+  "typing_lasts_by_reply_length",
+  "reply_wait_section",
+  "reply_delay_min_seconds",
+  "reply_wait_column",
+  "reply_delay_max_seconds",
   "policy_tab",
   "default_device",
   "policy_column",
@@ -526,18 +532,23 @@
    "length": 20
   },
   {
+   "fieldname": "number_behaviour_tab",
+   "fieldtype": "Tab Break",
+   "label": "Number behaviour"
+  },
+  {
    "description": "What the sender sees while their message is handled.",
    "fieldname": "receipts_section",
    "fieldtype": "Section Break",
    "label": "Read receipts and typing"
   },
   {
-   "default": "When a command replies",
-   "description": "The blue ticks on the sender's side. «When a command replies»: only messages a command answered.",
+   "default": "Do not mark as read",
+   "description": "Marked read, the sender sees the blue ticks and the message's notification leaves the company's phone. «When a command replies» reads the way a person does before answering.",
    "fieldname": "mark_read_mode",
    "fieldtype": "Select",
    "label": "Mark received messages as read",
-   "options": "Never\nWhen a command replies\nEvery received message"
+   "options": "Do not mark as read\nWhen the chat is opened\nWhen a command replies\nEvery received message"
   },
   {
    "fieldname": "receipts_column",
@@ -549,6 +560,37 @@
    "fieldname": "typing_indicator",
    "fieldtype": "Check",
    "label": "Show «typing…» while a command runs"
+  },
+  {
+   "default": "1",
+   "depends_on": "typing_indicator",
+   "fieldname": "typing_lasts_by_reply_length",
+   "fieldtype": "Check",
+   "label": "Make «typing…» last as long as the reply takes to type"
+  },
+  {
+   "description": "A reply in the same second as the question is how a machine answers. The wait is a random number of seconds between the two.",
+   "fieldname": "reply_wait_section",
+   "fieldtype": "Section Break",
+   "label": "Wait before replying"
+  },
+  {
+   "default": "2",
+   "fieldname": "reply_delay_min_seconds",
+   "fieldtype": "Int",
+   "label": "Wait before replying from (seconds)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "reply_wait_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "5",
+   "fieldname": "reply_delay_max_seconds",
+   "fieldtype": "Int",
+   "label": "Wait before replying to (seconds)",
+   "non_negative": 1
   },
   {
    "fieldname": "policy_tab",
@@ -807,7 +849,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-11-10 22:00:00.000000",
+ "modified": "2026-11-19 05:33:36.158662",
  "modified_by": "Administrator",
  "module": "WhatsApp Next",
  "name": "WhatsApp Settings",
