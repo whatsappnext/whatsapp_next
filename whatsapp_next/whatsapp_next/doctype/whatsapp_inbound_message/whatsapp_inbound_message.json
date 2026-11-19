@@ -55,7 +55,8 @@
   "replied_at",
   "flags_section",
   "is_simulated",
-  "is_history"
+  "is_history",
+  "read_receipt_sent"
  ],
  "fields": [
   {
@@ -426,6 +427,15 @@
    "fieldtype": "Check",
    "label": "Imported from history",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Marked read on WhatsApp once; never sent twice.",
+   "fieldname": "read_receipt_sent",
+   "fieldtype": "Check",
+   "label": "Read receipt sent",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "in_create": 1,
@@ -436,7 +446,7 @@
    "link_fieldname": "trigger_inbound"
   }
  ],
- "modified": "2026-11-16 20:00:00.000000",
+ "modified": "2026-11-19 05:26:07.348938",
  "modified_by": "Administrator",
  "module": "WhatsApp Next",
  "name": "WhatsApp Inbound Message",

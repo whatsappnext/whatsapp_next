@@ -14,6 +14,8 @@ const DEFAULT_API = {
 	number: "numbers.get_number",
 	number_search: "numbers.search_numbers",
 	confirm: "numbers.confirm_conversation",
+	// the messages were shown: the number may mark them read («When the chat is opened»)
+	mark_read: "messages.mark_conversation_read",
 };
 
 const DEFAULT_ROLES = {
@@ -303,6 +305,15 @@ whatsapp.ui.ConversationDrawer = class ConversationDrawer {
 
 	// ---- thread ---------------------------------------------------------------------------
 
+	/** The messages are on screen: the server marks them read when the number is set to; a
+	 * receipt that fails never touches the drawer. */
+	mark_shown_messages_read(rows) {
+		if (!this.api.mark_read || !(rows || []).some((r) => r.direction === "Inbound")) return;
+		const args = { key: this.key };
+		if (this.opts.device) args.device = this.opts.device;
+		whatsapp.ui.call(this.api.mark_read, args, { silent: true }).catch(() => {});
+	}
+
 	fetch_page(before) {
 		const args = { key: this.key, limit: this.opts.page_length };
 		if (this.opts.device) args.device = this.opts.device;
@@ -329,6 +340,7 @@ whatsapp.ui.ConversationDrawer = class ConversationDrawer {
 					empty_text: __("No messages yet"),
 					empty_description: __("Messages exchanged with this number will appear here."),
 				});
+				this.mark_shown_messages_read(rows);
 				ui.announce(
 					rows.length
 						? ui.plural(rows.length, { one: __("{0} message loaded."), other: __("{0} messages loaded.") })

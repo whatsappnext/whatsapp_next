@@ -112,6 +112,48 @@ def update_device(device: str, device_name: str | None = None, phone: str | None
 	return _get_device_row(device)
 
 
+@api_endpoint(roles=MANAGER, methods=("GET", "POST"))
+def get_number_behaviour(device: str) -> dict[str, Any]:
+	"""The device's own read receipts, «typing…» and wait before a reply, or «Same as Settings»."""
+	from whatsapp_next.services import number_behaviour
+
+	_get_device_row(device)  # exists, or not found
+	return number_behaviour.get_device_choices(device)
+
+
+@api_endpoint(
+	roles=MANAGER,
+	schema={
+		"number_behaviour": {"enum": ["Same as Settings", "Own settings"]},
+		"mark_read_mode": {"enum": ["Do not mark as read", "When the chat is opened", "When a command replies", "Every received message"]},
+		"reply_delay_min_seconds": {"min": 0, "max": 60},
+		"reply_delay_max_seconds": {"min": 0, "max": 60},
+	},
+)
+def set_number_behaviour(
+	device: str,
+	number_behaviour: str,
+	mark_read_mode: str | None = None,
+	typing_indicator: bool | None = None,
+	typing_lasts_by_reply_length: bool | None = None,
+	reply_delay_min_seconds: int | None = None,
+	reply_delay_max_seconds: int | None = None,
+) -> dict[str, Any]:
+	"""Save what this number shows the people who write to it (owner, 2026-11-19)."""
+	from whatsapp_next.services import number_behaviour as behaviour
+
+	_get_device_row(device)
+	values = {
+		"number_behaviour": number_behaviour,
+		"mark_read_mode": mark_read_mode,
+		"typing_indicator": typing_indicator,
+		"typing_lasts_by_reply_length": typing_lasts_by_reply_length,
+		"reply_delay_min_seconds": reply_delay_min_seconds,
+		"reply_delay_max_seconds": reply_delay_max_seconds,
+	}
+	return behaviour.save_device_choices(device, {k: v for k, v in values.items() if v is not None})
+
+
 @api_endpoint(roles=MANAGER)
 def set_default(device: str) -> dict[str, Any]:
 	"""Make `device` the default device (Settings.default_device follows)."""

@@ -110,6 +110,7 @@ class SettingsView {
 			{ key: "webhook", group: "settings", label: __("Webhook"), icon: "hook", manager: true },
 			{ key: "queue", group: "settings", label: __("Queue"), icon: "queue", manager: true, keywords: __("rate retry pause") },
 			{ key: "commands", group: "settings", label: __("Commands"), icon: "bolt", manager: true },
+			{ key: "number_behaviour", group: "settings", label: __("Number behaviour"), icon: "shield", manager: true, keywords: __("read receipts blue ticks typing wait ban") },
 			{ key: "policy", group: "settings", label: __("Policy"), icon: "gear", manager: true, keywords: __("blacklist country device") },
 			{ key: "picker", group: "settings", label: __("Picker sources"), icon: "users", manager: true },
 			{ key: "retention", group: "settings", label: __("Retention"), icon: "clock", manager: true },
@@ -159,6 +160,7 @@ class SettingsView {
 			webhook: __("Without it no inbound message and no status update reaches this site."),
 			queue: __("How fast messages leave, how often a failure is retried, and whether sending is paused."),
 			commands: __("Replies to keywords arriving on WhatsApp, and the main menu offered with them."),
+			number_behaviour: __("What the people who write see from your number: read receipts, «typing…» and the wait before a reply. Answering like a person also protects the number from a ban. A device can keep its own choices."),
 			policy: __("The default device and country, the global blacklist and who may be messaged."),
 			picker: __("The system screens the contact picker may select recipients from."),
 			retention: __("How long messages, queue rows, webhook events and the audit log are kept."),
@@ -967,6 +969,10 @@ class SettingsView {
 				});
 			}
 		});
+	}
+
+	render_number_behaviour($el) {
+		return this.plain("number_behaviour", $el);
 	}
 
 	render_commands($el) {
