@@ -543,6 +543,10 @@
 						// no `on_row_click`: the simulator is a conversation, not a way into the message logs
 						empty_text: __("No messages yet"),
 					});
+					// the messages are shown: the number may mark them read («When the chat is opened»)
+					if (rows.some((r) => r.direction === "Inbound")) {
+						whatsapp.ui.call("messages.mark_conversation_read", { key: this.contact.phone_e164 }, { silent: true }).catch(() => {});
+					}
 				})
 				.catch((err) => {
 					if (seq !== this._thread_seq) return;
